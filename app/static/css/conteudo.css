@@ -1,0 +1,155 @@
+/* Estilos para a área de ações da página */
+.page-actions {
+    margin-bottom: 25px;
+}
+
+.btn-novo, .btn-cancel {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 5px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-novo {
+    background-color: #28a745;
+    color: white;
+}
+
+.btn-novo:hover {
+    background-color: #218838;
+}
+
+.btn-cancel {
+    background-color: #dc3545;
+    color: white;
+}
+
+.btn-cancel:hover {
+    background-color: #c82333;
+}
+
+.btn-novo i, .btn-cancel i {
+    margin-right: 8px;
+}
+
+/* Estilo do Formulário de Cadastro */
+#form-cadastro {
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 30px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.form-grid label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #555;
+}
+
+.form-grid input[type="date"], 
+.form-grid input[type="text"], 
+.form-grid input[type="url"], 
+.form-grid textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.resource-type-selector label {
+    font-weight: normal;
+    margin-bottom: 0;
+}
+
+#form-cadastro button[type="submit"] {
+    background-color: #007bff;
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+/* -- NOVO GRID PARA A LISTA DE CONTEÚDOS -- */
+.conteudo-list {
+    background-color: #fff;
+    border-radius: 8px;
+    overflow: hidden; /* Garante que os cantos arredondados sejam aplicados aos itens internos */
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.list-header, .conteudo-item {
+    display: grid;
+    grid-template-columns: 3fr 1fr 1fr; /* Assunto (3), Data (1), Ações (1) */
+    gap: 15px;
+    padding: 15px 20px;
+    align-items: center;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.list-header {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    color: #495057;
+}
+
+.conteudo-item:last-child {
+    border-bottom: none;
+}
+
+.assunto-title {
+    font-weight: bold;
+    color: #333;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.pergunta-snippet {
+    font-size: 0.9em;
+    color: #6c757d;
+}
+
+.cell-acoes {
+    text-align: right;
+}
+
+.action-btn {
+    color: #007bff;
+    text-decoration: none;
+    margin: 0 8px;
+    font-size: 1.1rem;
+}
+
+.action-btn.disabled {
+    color: #adb5bd;
+    cursor: not-allowed;
+}
+
+/* -- ESTILO PARA QUANDO A LISTA ESTIVER VAZIA -- */
+.empty-state {
+    text-align: center;
+    padding: 50px 20px;
+    color: #6c757d;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 15px;
+}
+
+.empty-state h4 {
+    margin-bottom: 10px;
+    font-size: 1.2rem;
+    color: #495057;
+}

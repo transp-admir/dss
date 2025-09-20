@@ -1,0 +1,33 @@
+{# app/templates/lista_conteudos.html #}
+{% extends "base.html" %}
+
+{% block title %}Conteúdos Disponíveis{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="content-area">
+    <h1>Conteúdos Informativos</h1>
+    <p>Aqui estão os comunicados e treinamentos mais recentes. Por favor, leia e assine cada um deles.</p>
+
+    <div class="conteudo-grid">
+        {% for conteudo in conteudos %}
+            <div class="conteudo-card">
+                <h3>{{ conteudo.assunto }}</h3>
+                <p class="data">Publicado em: {{ conteudo.data.strftime('%d/%m/%Y') }}</p>
+                <p>{{ conteudo.pergunta | truncate(100) }}</p>
+                
+                {% if conteudo.id in assinaturas_motorista %}
+                     <a href="{{ url_for('main.ver_conteudo', conteudo_id=conteudo.id) }}" class="btn-ver-mais" style="background-color: #28a745;">Ver Novamente (Assinado)</a>
+                {% else %}
+                     <a href="{{ url_for('main.ver_conteudo', conteudo_id=conteudo.id) }}" class="btn-ver-mais">Ler e Assinar</a>
+                {% endif %}
+            </div>
+        {% else %}
+            <p>Nenhum conteúdo disponível no momento.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

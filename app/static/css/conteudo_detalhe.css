@@ -1,0 +1,154 @@
+/* Estilos para o botão Voltar */
+.btn-back {
+    display: inline-block;
+    padding: 10px 15px;
+    background-color: #6c757d;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+    margin-bottom: 20px;
+}
+
+.btn-back:hover {
+    background-color: #5a6268;
+}
+
+.btn-back i {
+    margin-right: 8px;
+}
+
+/* Card com informações do conteúdo */
+.conteudo-info-card {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 25px;
+    margin-bottom: 30px;
+}
+
+.conteudo-info-card h2 {
+    margin-top: 0;
+    color: #0d47a1;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.conteudo-info-card p {
+    color: #495057;
+    line-height: 1.6;
+}
+
+/* Estilos para as tags de resposta e leitura */
+.tag-correct, .tag-incorrect, .tag-leitura {
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-family: monospace, sans-serif;
+    font-size: 0.9em;
+    font-weight: bold;
+}
+
+.tag-correct {
+    background-color: #d4edda; /* Verde claro */
+    color: #155724;      /* Verde escuro */
+}
+
+.tag-incorrect {
+    background-color: #f8d7da; /* Vermelho claro */
+    color: #721c24;      /* Vermelho escuro */
+}
+
+.tag-leitura {
+    background-color: #e2e3e5; /* Cinza claro */
+    color: #383d41;      /* Cinza escuro */
+}
+
+/* Container do Relatório de Visualizações */
+.report-container {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 25px;
+}
+
+.report-container h3 {
+    margin-top: 0;
+    color: #343a40;
+    margin-bottom: 20px;
+}
+
+/* Tabela do Relatório */
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+/* --- GRADE ATUALIZADA --- */
+.report-header, .report-row {
+    display: grid;
+    grid-template-columns: 2.5fr 1.5fr 1fr 1.5fr; /* Motorista, Data, Tempo, Resposta */
+    padding: 12px 15px;
+    border-bottom: 1px solid #eee;
+    align-items: center;
+    gap: 15px;
+}
+
+.report-header {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.report-row:last-child {
+    border-bottom: none;
+}
+
+.cpf-detail {
+    display: block;
+    font-size: 0.85em;
+    color: #6c757d;
+}
+
+.report-row.no-data {
+    text-align: center;
+    padding: 20px;
+    color: #6c757d;
+    grid-column: 1 / -1;
+    display: block;
+}
+
+/* Estilos de Responsividade para a Tabela */
+@media (max-width: 768px) {
+    .report-header {
+        display: none;
+    }
+
+    .report-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 15px;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .report-row .cell {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: right;
+    }
+
+    .report-row .cell::before {
+        content: attr(data-label);
+        font-weight: bold;
+        color: #495057;
+        padding-right: 15px;
+        text-align: left;
+    }
+
+    .cpf-detail {
+        display: none; /* Oculta o CPF na visualização móvel para simplicidade */
+    }
+}

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Painel Administrativo{% endblock %}</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+    <style>
+        :root {
+            --sidebar-width: 250px;
+            --header-height: 60px;
+            --primary-blue: #002D4E; /* Cor do novo layout */
+            --light-blue: #005A9C;
+            --logout-red: #d32f2f; /* Vermelho para o botão sair */
+            --logout-red-hover: #c62828;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: #f8f9fa;
+        }
+
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--primary-blue);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100%;
+            transition: transform 0.3s ease;
+            z-index: 100;
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            border-bottom: 1px solid var(--light-blue);
+        }
+        .sidebar-nav {
+            list-style-type: none;
+            padding: 0;
+            margin: 20px 0;
+            flex-grow: 1;
+        }
+        .sidebar-nav li a {
+            color: white;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px 20px;
+            transition: background-color 0.2s;
+        }
+        .sidebar-nav li a:hover {
+            background-color: var(--light-blue);
+        }
+        
+        /* Estilos específicos para o link de Sair */
+        .logout-link {
+            margin-top: auto; /* Empurra para o final */
+        }
+
+        .logout-link a {
+             background-color: var(--logout-red) !important; 
+        }
+        .logout-link a:hover {
+            background-color: var(--logout-red-hover) !important;
+        }
+
+        .main-content { 
+            margin-left: var(--sidebar-width);
+            padding: 20px;
+            width: calc(100% - var(--sidebar-width));
+        }
+        
+        .mobile-header {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content {
+                margin-left: 0;
+                width: 100%;
+            }
+            .mobile-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                background-color: var(--primary-blue);
+                color: white;
+                padding: 0 20px;
+                height: var(--header-height);
+            }
+            .menu-toggle {
+                background: none;
+                border: none;
+                color: white;
+                font-size: 24px;
+                cursor: pointer;
+            }
+        }
+
+    </style>
+
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            Transp
+        </div>
+        <ul class="sidebar-nav">
+            <li><a href="{{ url_for('admin.dashboard') }}"><i class="fas fa-home"></i> Boas-vindas</a></li>
+            <li><a href="{{ url_for('admin.motoristas') }}"><i class="fas fa-user-tie"></i> Motoristas</a></li>
+            <li><a href="{{ url_for('admin.conteudo') }}"><i class="fas fa-file-alt"></i> Conteúdo</a></li>
+            <li><a href="#"><i class="fas fa-chart-bar"></i> Relatórios</a></li>
+        </ul>
+        <!-- Link de Sair movido para o final -->
+        <ul class="sidebar-nav">
+             <li class="logout-link"><a href="{{ url_for('admin.logout') }}"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
+        </ul>
+    </nav>
+
+    <div class="mobile-header">
+        <span class="mobile-title">Transp</span>
+        <button class="menu-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    </div>
+
+    <main class="main-content" id="main-content">
+        {% if self.header()|trim %}
+        <header class="header">
+            <h1>{% block header %}{% endblock %}</h1>
+        </header>
+        {% endif %}
+
+        <section class="content">
+             {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-message {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </section>
+    </main>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('active');
+        }
+    </script>
+</body>
+</html>

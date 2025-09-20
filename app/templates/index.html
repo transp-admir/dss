@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Corporativo | Transp</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --secondary-color: #6c757d;
+            --dark-text: #212529;
+            --light-bg: #f8f9fa;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--light-bg);
+            /* Subtle pattern from Hero Patterns */
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4d4d4' fill-opacity='0.3'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            overflow: hidden;
+        }
+
+        .portal-wrapper {
+            display: flex;
+            background: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            max-width: 900px;
+            width: 90%;
+            animation: popIn 0.6s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
+        }
+
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .brand-side {
+            background-color: var(--primary-color);
+            padding: 3rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            border-radius: 10px 0 0 10px;
+            width: 150px; /* Fixed width for the brand bar */
+        }
+        
+        .brand-icon i {
+            font-size: 4rem;
+        }
+
+        .content-side {
+            padding: 4rem;
+            flex-grow: 1;
+            text-align: center;
+        }
+
+        .logo-main {
+            font-family: 'Teko', sans-serif;
+            font-size: 4.5rem;
+            line-height: 1;
+            color: var(--dark-text);
+            margin: 0;
+        }
+
+        .logo-sub {
+            font-family: 'Roboto', sans-serif;
+            font-weight: 500;
+            font-size: 1.25rem;
+            color: var(--dark-text); /* Same color for visual weight */
+            margin: 0 0 3rem 0;
+            letter-spacing: 0.5px;
+        }
+        
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 1rem;
+            text-decoration: none;
+            font-size: 1.1rem;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            justify-content: flex-start;
+        }
+        
+        .btn i {
+            font-size: 1.5rem;
+            width: 30px; /* Fixed width for icon alignment */
+            text-align: center;
+        }
+
+        .btn-admin {
+            background-color: #343a40;
+            color: #ffffff;
+        }
+        .btn-admin:hover { background-color: #212529; }
+        
+        .btn-motorista {
+            background-color: var(--primary-color);
+            color: #ffffff;
+        }
+        .btn-motorista:hover { background-color: #0b5ed7; }
+
+        @media (max-width: 768px) {
+            .portal-wrapper { flex-direction: column; }
+            .brand-side { display: none; /* Hide decorative bar on mobile */ }
+            .content-side { padding: 3rem 2rem; }
+            .logo-main { font-size: 3.5rem; }
+            .logo-sub { font-size: 1rem; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="portal-wrapper">
+        <div class="brand-side">
+            <div class="brand-icon"><i class="fas fa-road"></i></div>
+        </div>
+        <div class="content-side">
+            <h1 class="logo-main">TRANSP</h1>
+            <p class="logo-main">Grupo Ademir Transportes</p><br>
+
+            <div class="button-group">
+                <a href="{{ url_for('admin.login') }}" class="btn btn-admin">
+                    <i class="fas fa-user-shield"></i>
+                    <span>Acesso Administrativo</span>
+                </a>
+                <a href="{{ url_for('main.motorista_login') }}" class="btn btn-motorista">
+                    <i class="fas fa-truck"></i>
+                    <span>Acesso do Motorista</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

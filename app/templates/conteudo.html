@@ -1,0 +1,164 @@
+{% extends 'base_adm.html' %}
+
+{% block title %}Gerenciar Conteúdo - Painel Administrativo{% endblock %}
+
+{% block head %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/conteudo.css') }}">
+{% endblock %}
+
+{% block header %}
+    Gerenciar Conteúdo
+{% endblock %}
+
+{% block content %}
+
+<div class="page-actions">
+    <button class="btn-novo" onclick="toggleForm()"><i class="fas fa-plus"></i> Novo Conteúdo</button>
+    <button class="btn-cancel" onclick="toggleForm()" style="display: none;"><i class="fas fa-times"></i> Cancelar</button>
+</div>
+
+<!-- Formulário para cadastrar novo conteúdo (inicialmente oculto) -->
+<div id="form-cadastro" style="display: none;">
+    <form method="POST" action="{{ url_for('admin.add_conteudo') }}" enctype="multipart/form-data">
+        <div class="form-grid">
+            <div>
+                <label for="data">Data:</label>
+                <input type="date" id="data" name="data" required>
+            </div>
+            <div>
+                <label for="assunto">Assunto:</label>
+                <input type="text" id="assunto" name="assunto" placeholder="Ex: DSS - Segurança..." required>
+            </div>
+            <div>
+                <label for="pergunta">Pergunta:</label>
+                <input type="text" id="pergunta" name="pergunta" required>
+            </div>
+            <div>
+                <label for="respostas">Respostas (separadas por vírgula):</label>
+                <textarea id="respostas" name="respostas" rows="3" placeholder="Ex: Resposta A, Resposta B, Resposta C"></textarea>
+            </div>
+             <div>
+                <label for="resposta_correta">Resposta Correta:</label>
+                <input type="text" id="resposta_correta" name="resposta_correta" required>
+            </div>
+
+            <!-- Seletor de Tipo de Recurso -->
+            <div class="resource-type-selector">
+                <label>Tipo de Recurso:</label>
+                <div>
+                    <input type="radio" id="tipo_link" name="tipo_recurso" value="link" checked onchange="toggleResourceType()">
+                    <label for="tipo_link">Link (YouTube, etc.)</label>
+                </div>
+                <div>
+                    <input type="radio" id="tipo_arquivo" name="tipo_recurso" value="arquivo" onchange="toggleResourceType()">
+                    <label for="tipo_arquivo">Arquivo (PDF, Imagem)</label>
+                </div>
+            </div>
+
+            <!-- Campo para Link -->
+            <div id="resource_link_group" class="form-group">
+                <label for="link">Link do Recurso:</label>
+                <input type="url" id="link" name="link" placeholder="https://www.youtube.com/watch?v=...">
+            </div>
+
+            <!-- Campo para Arquivo -->
+            <div id="resource_file_group" class="form-group upload-area" style="display: none;">
+                <label for="arquivo">Arquivo:</label>
+                <div class="upload-box" onclick="document.getElementById('arquivo').click();">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>Clique ou arraste o arquivo aqui</p>
+                    <span id="file-name"></span>
+                </div>
+                <input type="file" id="arquivo" name="arquivo" style="display: none;" onchange="updateFileName()">
+            </div>
+        </div>
+        <br>
+        <button type="submit">Cadastrar Conteúdo</button>
+    </form>
+</div>
+
+<!-- Container da Lista de Conteúdos -->
+<div class="conteudo-list">
+
+    {% if conteudos %}
+        <div class="list-header">
+            <div class="cell-assunto">Assunto</div>
+            <div class="cell-data">Data de Publicação</div>
+            <div class="cell-acoes">Ações</div>
+        </div>
+
+        {% for item in conteudos %}
+        <div class="conteudo-item">
+            <div class="cell-assunto">
+                <span class="assunto-title">{{ item.assunto }}</span>
+                <span class="pergunta-snippet">{{ item.pergunta | truncate(80) }}</span>
+            </div>
+            <div class="cell-data">{{ item.data.strftime('%d/%m/%Y') }}</div>
+            <div class="cell-acoes">
+                <a href="{{ url_for('admin.conteudo_detalhe', conteudo_id=item.id) }}" class="action-btn" title="Ver Relatório"><i class="fas fa-chart-bar"></i></a>
+                <a href="#" class="action-btn disabled" title="Editar (em breve)"><i class="fas fa-edit"></i></a>
+                <a href="#" class="action-btn disabled" title="Excluir (em breve)"><i class="fas fa-trash-alt"></i></a>
+            </div>
+        </div>
+        {% endfor %}
+
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-folder-open"></i>
+            <h4>Nenhum conteúdo cadastrado ainda.</h4>
+            <p>Clique no botão "<i class="fas fa-plus"></i> Novo Conteúdo" acima para começar.</p>
+        </div>
+    {% endif %}
+
+</div>
+
+<script>
+    function toggleForm() {
+        const form = document.getElementById('form-cadastro');
+        const btnNovo = document.querySelector('.btn-novo');
+        const btnCancel = document.querySelector('.btn-cancel');
+
+        if (form.style.display === 'none' || form.style.display === '') {
+            form.style.display = 'block';
+            btnNovo.style.display = 'none';
+            btnCancel.style.display = 'inline-block';
+        } else {
+            form.style.display = 'none';
+            btnNovo.style.display = 'inline-block';
+            btnCancel.style.display = 'none';
+        }
+    }
+
+    function toggleResourceType() {
+        const type = document.querySelector('input[name="tipo_recurso"]:checked').value;
+        const linkGroup = document.getElementById('resource_link_group');
+        const fileGroup = document.getElementById('resource_file_group');
+
+        if (type === 'link') {
+            linkGroup.style.display = 'block';
+            fileGroup.style.display = 'none';
+        } else {
+            linkGroup.style.display = 'none';
+            fileGroup.style.display = 'block';
+        }
+    }
+
+    function updateFileName() {
+        const input = document.getElementById('arquivo');
+        const fileNameSpan = document.getElementById('file-name');
+        if (input.files.length > 0) {
+            fileNameSpan.textContent = input.files[0].name;
+        } else {
+            fileNameSpan.textContent = '';
+        }
+    }
+
+    // Garante que o estado inicial correto seja exibido ao carregar a página
+    document.addEventListener('DOMContentLoaded', function() {
+        toggleResourceType();
+        document.getElementById('form-cadastro').style.display = 'none';
+    });
+</script>
+
+{% endblock %}

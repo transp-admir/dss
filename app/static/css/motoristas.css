@@ -1,0 +1,170 @@
+/* Ações da Página (Botões Principais) */
+.page-actions {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.btn-novo, .btn-cancel, #form-cadastro button[type="submit"] {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.btn-novo, #form-cadastro button[type="submit"] {
+    background-color: #1565c0; /* Azul, tom mais claro que a sidebar */
+    color: white;
+}
+.btn-novo:hover, #form-cadastro button[type="submit"]:hover {
+    background-color: #1976d2; /* Azul um pouco mais claro no hover */
+}
+
+.btn-cancel {
+    background-color: #d32f2f; /* Vermelho para cancelar/fechar */
+    color: white;
+}
+.btn-cancel:hover {
+    background-color: #e53935;
+}
+
+/* Formulário de Cadastro */
+#form-cadastro {
+    display: none;
+    background-color: #ffffff;
+    padding: 25px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+}
+
+#form-cadastro .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+#form-cadastro label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #495057;
+}
+
+#form-cadastro input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    box-sizing: border-box; /* Garante que o padding não altere a largura total */
+}
+
+#form-cadastro button[type="submit"] {
+    grid-column: 1 / -1; /* Ocupa toda a largura */
+    width: 100%;
+}
+
+/* Lista de Motoristas */
+.motorista-list {
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden; /* Garante que os cantos arredondados sejam aplicados aos itens filhos */
+}
+
+.list-header {
+    background-color: #f8f9fa; /* Cinza bem claro para o cabeçalho da lista */
+    color: #495057;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    font-weight: bold;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.motorista-item {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.motorista-item:last-child {
+    border-bottom: none;
+}
+
+.motorista-info {
+    flex-grow: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 5px 15px;
+}
+
+.motorista-info span {
+    display: block;
+    color: #6c757d; /* Cinza para informações secundárias */
+}
+
+.motorista-info .nome {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #0d47a1; /* Azul principal para o nome, conectando ao tema */
+}
+
+.motorista-acoes {
+    display: flex;
+    gap: 15px;
+}
+
+.motorista-acoes a {
+    color: #6c757d; /* Cinza para os ícones */
+    text-decoration: none;
+    font-size: 1.2em;
+    transition: color 0.2s ease-in-out;
+}
+
+.motorista-acoes a:hover {
+    color: #1565c0; /* Azul no hover */
+}
+
+/* --- Media Queries para Responsividade --- */
+@media (max-width: 768px) {
+
+    /* Na lista de motoristas, muda o layout para vertical */
+    .motorista-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .motorista-info {
+        grid-template-columns: 1fr; /* Força uma única coluna */
+        gap: 8px;
+        width: 100%;
+    }
+
+    .motorista-acoes {
+        margin-top: 10px;
+        align-self: flex-end; /* Alinha as ações à direita */
+        padding-top: 10px;
+        border-top: 1px solid #eee;
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    /* Esconde o cabeçalho da lista que não faz mais sentido no mobile */
+    .list-header {
+        display: none;
+    }
+
+    /* Ajustes no formulário se necessário */
+    #form-cadastro .form-grid {
+        grid-template-columns: 1fr; /* Uma coluna para o formulário em telas pequenas */
+    }
+}

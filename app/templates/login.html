@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+</head>
+<body>
+    <div class="login-container">
+        <h2>DSS - DIÁLOGO SEMANAL DE SEGURANÇA</h2>
+        <p>Faça login para continuar.</p>
+        <p>Please log in to access this page.</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flashes">
+                {% for category, message in messages %}
+                    {% if category == 'error' %}
+                        <div class="flash-error">{{ message }}</div>
+                    {% endif %}
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <div class="form-group">
+                <label for="login">Usuário</label>
+                <input type="text" id="login" name="login" required>
+            </div>
+            <div class="form-group">
+                <label for="senha">Senha</label>
+                <input type="password" id="senha" name="senha" required>
+            </div>
+            <button type="submit">Entrar</button>
+        </form>
+        <p style="text-align: center; margin-top: 20px;"><a href="{{ url_for('main.index') }}">Voltar ao Portal</a></p>
+    </div>
+</body>
+</html>

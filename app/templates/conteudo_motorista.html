@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}{{ conteudo.assunto }}{% endblock %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        /* Estilos do container do recurso (vídeo, etc.) */
+        .recurso-container { margin: 2rem 0; padding: 1.5rem; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; }
+        .recurso-container h2 { margin-top: 0; color: #333; }
+        .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; background: #000; }
+        .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .btn-recurso { display: inline-block; padding: 0.8rem 1.5rem; background-color: #007bff; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold; }
+        .pdf-wrapper { height: 800px; border: 1px solid #ccc; }
+        .pdf-wrapper iframe { border: none; }
+
+        /* Estilos para o formulário de múltipla escolha */
+        .form-opcoes { margin: 2rem 0; }
+        .form-opcoes .opcao {
+            margin-bottom: 0.8rem;
+            background-color: #f0f0f0;
+            padding: 1rem;
+            border-radius: 5px;
+            display: block;
+            cursor: pointer;
+        }
+        .form-opcoes input[type="radio"] { margin-right: 10px; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="conteudo-body">
+    <h1>{{ conteudo.assunto }}</h1>
+    <p class="data">Publicado em: {{ conteudo.data.strftime('%d/%m/%Y') }}</p>
+
+    <hr>
+
+    <!-- Bloco para exibir o recurso -->
+    {% if conteudo.recurso_link %}
+    <div class="recurso-container">
+        <h2>Material de Apoio</h2>
+        {% if 'youtube.com' in conteudo.recurso_link or 'youtu.be' in conteudo.recurso_link %}
+            <div class="video-wrapper"><iframe src="https://www.youtube.com/embed/{{ conteudo.recurso_link | youtube_id }}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
+        {% elif conteudo.tipo_recurso == 'link' %}
+            <a href="{{ conteudo.recurso_link }}" target="_blank" class="btn-recurso">Acessar Link</a>
+        {% elif conteudo.tipo_recurso == 'arquivo' %}
+            {% if conteudo.recurso_link.lower().endswith('.pdf') %}
+                <div class="pdf-wrapper"><iframe src="{{ url_for('static', filename=conteudo.recurso_link) }}" width="100%" height="100%"><p>Seu navegador não suporta PDFs. <a href="{{ url_for('static', filename=conteudo.recurso_link) }}">Baixe o arquivo.</a></p></iframe></div>
+            {% else %}
+                 <img src="{{ url_for('static', filename=conteudo.recurso_link) }}" alt="Recurso do conteúdo" style="max-width: 100%; height: auto;">
+            {% endif %}
+        {% endif %}
+    </div>
+    <hr>
+    {% endif %}
+
+    <h2>Pergunta / Comunicado:</h2>
+    <p>{{ conteudo.pergunta | nl2br }}</p>
+
+    <hr>
+
+    {% if not assinatura %}
+    <form method="POST" class="form-assinatura" id="form-leitura">
+        <!-- Campo oculto para enviar o tempo de leitura -->
+        <input type="hidden" name="tempo_leitura" id="tempo_leitura">
+
+        <h2>Opções:</h2>
+        <div class="form-opcoes">
+            {% if conteudo.respostas %}
+                {% for opcao in conteudo.respostas.split(',') %}
+                    <label class="opcao"><input type="radio" name="resposta_usuario" value="{{ opcao.strip() }}" required> {{ opcao.strip() }}</label>
+                {% endfor %}
+            {% else %}
+                <p>Não há opções de resposta para este conteúdo.</p>
+            {% endif %}
+        </div>
+
+        <h3>Confirmação de Leitura</h3>
+        <div class="form-check">
+            <input type="checkbox" id="confirmacao" name="confirmacao" required>
+            <label for="confirmacao">Eu li, entendi o conteúdo e confirmo minha resposta acima.</label>
+        </div>
+        <button type="submit" class="btn-assinar">Assinar e Confirmar Leitura</button>
+    </form>
+    {% else %}
+        <div class="form-assinatura">
+            <h3>Leitura Confirmada</h3>
+            <p>Você assinou este conteúdo em {{ assinatura.data_assinatura.strftime('%d/%m/%Y às %H:%M') }}.</p>
+            <button class="btn-assinado" disabled>Assinado</button>
+        </div>
+    {% endif %}
+
+    <a href="{{ url_for('main.lista_conteudos') }}" style="display: inline-block; margin-top: 2rem;">Voltar para a Lista</a>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Apenas executa o script se o formulário de assinatura existir na página
+        const form = document.getElementById('form-leitura');
+        if (form) {
+            // Registra o tempo inicial quando a página carrega
+            const startTime = Date.now();
+
+            form.addEventListener('submit', function(event) {
+                // Calcula a duração em segundos
+                const durationInSeconds = Math.round((Date.now() - startTime) / 1000);
+                
+                // Adiciona o valor ao campo oculto
+                document.getElementById('tempo_leitura').value = durationInSeconds;
+            });
+        }
+    });
+</script>
+{% endblock %}

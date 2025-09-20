@@ -1,0 +1,77 @@
+{% extends 'base_adm.html' %}
+
+{% block title %}Detalhes do Conteúdo - {{ conteudo.assunto }}{% endblock %}
+
+{% block head %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/conteudo_detalhe.css') }}">
+{% endblock %}
+
+{% block header %}
+    Relatório de Assinaturas
+{% endblock %}
+
+{% block content %}
+
+<div class="page-actions">
+    <a href="{{ url_for('admin.conteudo') }}" class="btn-back"><i class="fas fa-arrow-left"></i> Voltar para a Lista</a>
+</div>
+
+<div class="conteudo-info-card">
+    <h2>{{ conteudo.assunto }}</h2>
+    <p><strong>Data de Publicação:</strong> {{ conteudo.data.strftime('%d/%m/%Y') }}</p>
+    <p><strong>Pergunta:</strong> {{ conteudo.pergunta }}</p>
+    <p><strong>Resposta Correta:</strong> <span class="tag-correct">{{ conteudo.resposta_correta }}</span></p>
+</div>
+
+<div class="report-container">
+    <h3>Motoristas que Assinaram</h3>
+
+    <div class="report-table">
+        <div class="report-header">
+            <div class="cell">Motorista</div>
+            <div class="cell">Data da Assinatura</div>
+            <div class="cell">Tempo de Leitura</div>
+            <div class="cell">Resposta Fornecida</div>
+        </div>
+
+        {% for assinatura in relatorio %}
+        <div class="report-row">
+            <div class="cell" data-label="Motorista">
+                {{ assinatura.motorista.nome }}
+                <span class="cpf-detail">CPF: {{ assinatura.motorista.cpf }}</span>
+            </div>
+            <div class="cell" data-label="Data da Assinatura">{{ assinatura.data_assinatura.strftime('%d/%m/%Y às %H:%M') }}</div>
+            <div class="cell" data-label="Tempo de Leitura">
+                {% if assinatura.tempo_leitura is not none %}
+                    {% set minutes = assinatura.tempo_leitura // 60 %}
+                    {% set seconds = assinatura.tempo_leitura % 60 %}
+                    {% if minutes > 0 %}
+                        {{ minutes }}m {{ seconds }}s
+                    {% else %}
+                        {{ seconds }}s
+                    {% endif %}
+                {% else %}
+                    -
+                {% endif %}
+            </div>
+            <div class="cell" data-label="Resposta Fornecida">
+                {% if assinatura.resposta_motorista %}
+                    {% set is_correct = assinatura.resposta_motorista.strip().lower() == conteudo.resposta_correta.strip().lower() %}
+                    <span class="tag-resposta {{ 'tag-correct' if is_correct else 'tag-incorrect' }}">
+                        {{ assinatura.resposta_motorista }}
+                    </span>
+                {% else %}
+                    <span class="tag-leitura">Leitura Confirmada</span>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="report-row no-data">
+            <p>Nenhum motorista assinou este conteúdo ainda.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% endblock %}

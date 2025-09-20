@@ -1,0 +1,103 @@
+
+{% extends 'base_adm.html' %}
+
+{% block title %}Gerenciar Motoristas - Painel Administrativo{% endblock %}
+
+{% block head %}
+    {{ super() }}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/motoristas.css') }}">
+{% endblock %}
+
+{# O título da página vai aqui, como texto simples, para dentro do H1 do template base #}
+{% block header %}
+    Gerenciar Motoristas
+{% endblock %}
+
+
+{% block content %}
+
+{# Controles da página (botões) ficam no início do bloco de conteúdo #}
+<div class="page-actions">
+    <button class="btn-novo" onclick="toggleForm()"><i class="fas fa-plus"></i> Novo motorista</button>
+    <button class="btn-cancel" onclick="toggleForm()" style="display: none;"><i class="fas fa-times"></i> Cancelar</button>
+</div>
+
+<!-- Formulário para cadastrar novo motorista -->
+<div id="form-cadastro">
+    <form method="POST" action="{{ url_for('admin.add_motorista') }}">
+        <div class="form-grid">
+            <div>
+                <label for="nome">Nome Completo:</label>
+                <input type="text" id="nome" name="nome" required>
+            </div>
+            <div>
+                <label for="cpf">CPF:</label>
+                <input type="text" id="cpf" name="cpf" required>
+            </div>
+            <div>
+                <label for="rg">RG:</label>
+                <input type="text" id="rg" name="rg">
+            </div>
+            <div>
+                <label for="cnh">CNH:</label>
+                <input type="text" id="cnh" name="cnh">
+            </div>
+            <div>
+                <label for="frota">Frota:</label>
+                <input type="text" id="frota" name="frota">
+            </div>
+        </div>
+        <br>
+        <button type="submit">Cadastrar Motorista</button>
+    </form>
+</div>
+
+<!-- Container da Lista de Motoristas -->
+<div class="motorista-list">
+    <div class="list-header">
+        <span>Dados dos motoristas</span>
+        <span>Ações</span>
+    </div>
+
+    {% for motorista in motoristas %}
+    <div class="motorista-item">
+        <div class="motorista-info">
+            <span class="nome">{{ motorista.nome }}</span>
+            <span>CPF: {{ motorista.cpf }}</span>
+            <span>RG: {{ motorista.rg }}</span>
+            <span>CNH: {{ motorista.cnh }}</span>
+            <span>Frota: {{ motorista.frota }}</span>
+        </div>
+        <div class="motorista-acoes">
+            <a href="#" title="Visualizar"><i class="fas fa-search"></i></a>
+            <a href="#" title="Editar"><i class="fas fa-edit"></i></a>
+            <a href="#" title="Excluir"><i class="fas fa-trash-alt"></i></a>
+        </div>
+    </div>
+    {% else %}
+    <div class="motorista-item">
+        <p>Nenhum motorista cadastrado ainda.</p>
+    </div>
+    {% endfor %}
+
+</div>
+
+<script>
+    function toggleForm() {
+        const form = document.getElementById('form-cadastro');
+        const btnNovo = document.querySelector('.btn-novo');
+        const btnCancel = document.querySelector('.btn-cancel');
+
+        if (form.style.display === 'none' || form.style.display === '') {
+            form.style.display = 'block';
+            btnNovo.style.display = 'none';
+            btnCancel.style.display = 'inline-block';
+        } else {
+            form.style.display = 'none';
+            btnNovo.style.display = 'inline-block';
+            btnCancel.style.display = 'none';
+        }
+    }
+</script>
+
+{% endblock %}

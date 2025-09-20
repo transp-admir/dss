@@ -1,0 +1,176 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+    margin: 0;
+}
+
+.container {
+    width: 90%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Navbar */
+.navbar {
+    background-color: #fff;
+    padding: 1rem 0;
+    border-bottom: 1px solid #ddd;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-bottom: 2rem;
+}
+
+.navbar .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #0056b3;
+    text-decoration: none;
+}
+
+.logout-button {
+    background-color: #dc3545;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.logout-button:hover {
+    background-color: #c82333;
+}
+
+/* Content Area */
+.content-area h1 {
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+.content-area > p {
+    color: #666;
+    margin-bottom: 2rem;
+}
+
+/* Grid for content */
+.conteudo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.conteudo-card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+}
+
+.conteudo-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.conteudo-card h3 {
+    margin-top: 0;
+    color: #0056b3;
+}
+
+.conteudo-card .data {
+    font-size: 0.85rem;
+    color: #888;
+    margin-bottom: 1rem;
+}
+
+.conteudo-card > p {
+    flex-grow: 1;
+    color: #555;
+}
+
+.btn-ver-mais {
+    display: inline-block;
+    margin-top: 1rem;
+    background-color: #007bff;
+    color: #fff;
+    padding: 0.6rem 1.2rem;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: background-color 0.2s;
+    text-align: center;
+}
+
+.btn-ver-mais:hover {
+    background-color: #0056b3;
+}
+
+/* Single Content Page */
+.conteudo-body {
+    background-color: #fff;
+    padding: 2.5rem;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.conteudo-body h2 {
+    color: #0056b3;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 0.5rem;
+    margin-top: 1.5rem;
+}
+
+.form-assinatura {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    border: 1px solid #28a745;
+    background-color: #f0fff4;
+    border-radius: 8px;
+}
+
+.form-check {
+    margin-bottom: 1.5rem;
+    font-size: 1.1rem;
+}
+
+.form-check input {
+    margin-right: 0.8rem;
+    transform: scale(1.2);
+}
+
+.btn-assinar {
+    width: 100%;
+    background-color: #28a745;
+    color: #fff;
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 5px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-assinar:hover {
+    background-color: #218838;
+}
+
+.btn-assinado {
+    width: 100%;
+    background-color: #6c757d;
+    color: #fff;
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 5px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: not-allowed;
+}
