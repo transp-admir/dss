@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal do Motorista</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f2f5;
+        }
+        .portal-container {
+            background: #fff;
+            padding: 3rem 4rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+        }
+        .welcome-message {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 1rem;
+        }
+        .welcome-message span {
+            font-weight: 700;
+        }
+        .portal-subtitle {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 3rem;
+        }
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        .option-card {
+            text-decoration: none;
+            color: #fff;
+            background-color: #007bff;
+            padding: 2rem;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .option-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 123, 255, 0.3);
+        }
+        .option-card.checklist {
+            background-color: #28a745; /* Green for checklist */
+        }
+        .option-card.checklist:hover {
+             box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
+        }
+        .option-card i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .option-card span {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+         .logout-link {
+            display: inline-block;
+            margin-top: 3rem;
+            color: #6c757d;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .logout-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="portal-container">
+        <h1 class="welcome-message">Bem-vindo, <span>{{ motorista.nome }}</span>!</h1>
+        <p class="portal-subtitle">Selecione uma das opções abaixo para continuar.</p>
+        
+        <div class="options-grid">
+            <a href="{{ url_for('main.lista_conteudos') }}" class="option-card">
+                <i class="fas fa-file-signature"></i>
+                <span>Acessar DSS</span>
+            </a>
+            <a href="#" class="option-card checklist"> <!-- Placeholder for checklist route -->
+                <i class="fas fa-clipboard-check"></i>
+                <span>Fazer Checklist</span>
+            </a>
+        </div>
+
+        <a href="{{ url_for('main.logout') }}" class="logout-link">Sair</a>
+    </div>
+</body>
+</html>

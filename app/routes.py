@@ -41,12 +41,24 @@ def motorista_login():
         if motorista_encontrado:
             session['motorista_id'] = motorista_encontrado.id
             flash(f'Bem-vindo, {motorista_encontrado.nome}!', 'success')
-            return redirect(url_for('main.lista_conteudos'))
+            return redirect(url_for('main.motorista_portal')) # Redireciona para o novo portal
         else:
             flash('Usuário ou senha inválidos. Tente novamente.', 'error')
             return redirect(url_for('main.motorista_login'))
 
     return render_template('login.html')
+
+@main_bp.route('/portal/motorista')
+def motorista_portal():
+    if 'motorista_id' not in session:
+        return redirect(url_for('main.motorista_login'))
+    
+    motorista = Motorista.query.get(session['motorista_id'])
+    if not motorista:
+        session.pop('motorista_id', None)
+        return redirect(url_for('main.motorista_login'))
+
+    return render_template('motorista_portal.html', motorista=motorista)
 
 @main_bp.route('/logout')
 def logout():
@@ -59,7 +71,7 @@ def lista_conteudos():
     if 'motorista_id' not in session:
         return redirect(url_for('main.motorista_login'))
     
-    motorista_id = session['motorista_id']
+    motorista_id = session['motorista_id'] # CORRIGIDO AQUI
     conteudos = Conteudo.query.order_by(Conteudo.data.desc()).all()
     
     assinaturas = Assinatura.query.filter_by(motorista_id=motorista_id).all()
@@ -106,6 +118,8 @@ def ver_conteudo(conteudo_id):
 
 # --- BLUEPRINT DA ÁREA ADMINISTRATIVA ---
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+# ... (o restante do código do admin permanece o mesmo)
 
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
