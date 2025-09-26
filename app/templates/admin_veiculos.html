@@ -1,0 +1,147 @@
+{% extends 'base_adm.html' %}
+
+{% block title %}Gerenciar Veículos e Placas{% endblock %}
+
+{% block header %}Gerenciar Veículos e Placas{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Coluna da Esquerda: Adicionar Placas e Veículos -->
+    <div class="col-md-5">
+        <!-- Formulário para Adicionar Placa -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>1. Adicionar Nova Placa</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('admin.adicionar_placa') }}" method="POST">
+                    <div class="mb-3">
+                        <label for="numero_placa" class="form-label">Número da Placa</label>
+                        <input type="text" class="form-control" id="numero_placa" name="numero_placa" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tipo_placa" class="form-label">Tipo</label>
+                        <select class="form-select" id="tipo_placa" name="tipo_placa">
+                            <option value="CAVALO">Cavalo</option>
+                            <option value="CARRETA">Carreta</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Adicionar Placa</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Formulário para Montar Conjunto/Veículo -->
+        <div class="card">
+            <div class="card-header">
+                <h5>2. Montar Conjunto (Veículo)</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('admin.montar_conjunto') }}" method="POST">
+                    <div class="mb-3">
+                        <label for="nome_conjunto" class="form-label">Nome do Conjunto</label>
+                        <input type="text" class="form-control" id="nome_conjunto" name="nome_conjunto" placeholder="Ex: Conjunto-01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="placa_cavalo" class="form-label">Placa do Cavalo</label>
+                        <select class="form-select" id="placa_cavalo" name="placa_cavalo_id" required>
+                            <option value="">Selecione...</option>
+                            {% for placa in placas_cavalo %}
+                                <option value="{{ placa.id }}">{{ placa.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="placa_carreta1" class="form-label">Placa da Carreta 1</label>
+                        <select class="form-select" id="placa_carreta1" name="placa_carreta1_id">
+                            <option value="">Selecione... (Opcional)</option>
+                            {% for placa in placas_carreta %}
+                                <option value="{{ placa.id }}">{{ placa.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                     <div class="mb-3">
+                        <label for="placa_carreta2" class="form-label">Placa da Carreta 2</label>
+                        <select class="form-select" id="placa_carreta2" name="placa_carreta2_id">
+                            <option value="">Selecione... (Opcional)</option>
+                            {% for placa in placas_carreta %}
+                                <option value="{{ placa.id }}">{{ placa.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="obs_veiculo" class="form-label">Observação</label>
+                        <textarea class="form-control" id="obs_veiculo" name="obs" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success">Montar Conjunto</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coluna da Direita: Listar Placas e Veículos -->
+    <div class="col-md-7">
+        <!-- Tabela de Veículos/Conjuntos -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Conjuntos Montados</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Cavalo</th>
+                            <th>Carreta 1</th>
+                            <th>Carreta 2</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for veiculo in veiculos %}
+                        <tr>
+                            <td>{{ veiculo.nome_conjunto }}</td>
+                            <td>{{ veiculo.placa_cavalo.numero if veiculo.placa_cavalo else '-' }}</td>
+                            <td>{{ veiculo.placa_carreta1.numero if veiculo.placa_carreta1 else '-' }}</td>
+                             <td>{{ veiculo.placa_carreta2.numero if veiculo.placa_carreta2 else '-' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center">Nenhum conjunto montado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tabela de Placas -->
+        <div class="card">
+            <div class="card-header">
+                <h5>Placas Cadastradas</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Número</th>
+                            <th>Tipo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for placa in placas %}
+                        <tr>
+                            <td>{{ placa.numero }}</td>
+                            <td>{{ placa.tipo }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="2" class="text-center">Nenhuma placa cadastrada.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

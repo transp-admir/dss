@@ -1,0 +1,133 @@
+/* Estilos para a página de gerenciamento de checklists */
+
+.checklist-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.checklist-card {
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.checklist-header {
+    padding: 1rem 1.25rem;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+}
+
+.checklist-title {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin: 0;
+    text-transform: capitalize;
+}
+
+.checklist-body {
+    padding: 1.25rem;
+}
+
+.category-group {
+    margin-bottom: 1.5rem;
+}
+
+.category-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+}
+
+.category-title i {
+    margin-right: 0.5rem;
+    color: #6c757d;
+}
+
+.checklist-item-list {
+    list-style: none;
+    padding-left: 0;
+}
+
+.checklist-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: 0.3rem;
+    transition: background-color 0.2s;
+}
+
+.checklist-item:nth-child(odd) {
+    background-color: #fdfdfd;
+}
+
+.checklist-item:hover {
+    background-color: #f1f3f5;
+}
+
+.item-text {
+    flex-grow: 1;
+    color: #212529;
+}
+
+.item-order {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #6c757d;
+    background-color: #e9ecef;
+    padding: 0.2rem 0.5rem;
+    border-radius: 1rem;
+    min-width: 30px;
+    text-align: center;
+    margin-right: 1rem;
+}
+
+.item-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.item-actions .action-btn {
+    color: #6c757d;
+    font-size: 1rem;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.item-actions .action-btn:hover {
+    color: #0d6efd;
+}
+
+.item-actions .action-btn.disabled {
+    color: #adb5bd;
+    pointer-events: none;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    color: #ced4da;
+    margin-bottom: 1rem;
+}
+
+.empty-state h4 {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+}

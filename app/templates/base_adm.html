@@ -6,15 +6,22 @@
     <title>{% block title %}Painel Administrativo{% endblock %}</title>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
         :root {
             --sidebar-width: 250px;
             --header-height: 60px;
-            --primary-blue: #002D4E; /* Cor do novo layout */
+            --primary-blue: #002D4E;
             --light-blue: #005A9C;
-            --logout-red: #d32f2f; /* Vermelho para o botão sair */
+            --logout-red: #d32f2f;
             --logout-red-hover: #c62828;
+            --flash-success: #d4edda;
+            --flash-success-text: #155724;
+            --flash-error: #f8d7da;
+            --flash-error-text: #721c24;
+            --flash-info: #cce5ff;
+            --flash-info-text: #004085;
         }
 
         body {
@@ -34,7 +41,7 @@
             left: 0;
             height: 100%;
             transition: transform 0.3s ease;
-            z-index: 100;
+            z-index: 1020;
         }
         .sidebar-header {
             padding: 20px;
@@ -62,9 +69,8 @@
             background-color: var(--light-blue);
         }
         
-        /* Estilos específicos para o link de Sair */
         .logout-link {
-            margin-top: auto; /* Empurra para o final */
+            margin-top: auto; 
         }
 
         .logout-link a {
@@ -82,6 +88,40 @@
         
         .mobile-header {
             display: none;
+        }
+
+        .header {
+            padding-bottom: 20px;
+            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            color: #343a40;
+        }
+
+        .flash-message {
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid transparent;
+            border-radius: .25rem;
+        }
+        .flash-message.success {
+            color: var(--flash-success-text);
+            background-color: var(--flash-success);
+            border-color: var(--flash-success);
+        }
+         .flash-message.error, .flash-message.danger {
+            color: var(--flash-error-text);
+            background-color: var(--flash-error);
+            border-color: var(--flash-error);
+        }
+        .flash-message.info {
+            color: var(--flash-info-text);
+            background-color: var(--flash-info);
+            border-color: var(--flash-info);
         }
 
         @media (max-width: 768px) {
@@ -103,6 +143,14 @@
                 color: white;
                 padding: 0 20px;
                 height: var(--header-height);
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 1010;
+            }
+            .main-content {
+                padding-top: var(--header-height);
             }
             .menu-toggle {
                 background: none;
@@ -126,11 +174,13 @@
             <li><a href="{{ url_for('admin.dashboard') }}"><i class="fas fa-home"></i> Boas-vindas</a></li>
             <li><a href="{{ url_for('admin.motoristas') }}"><i class="fas fa-user-tie"></i> Motoristas</a></li>
             <li><a href="{{ url_for('admin.conteudo') }}"><i class="fas fa-file-alt"></i> Conteúdo</a></li>
-            <li><a href="#"><i class="fas fa-chart-bar"></i> Relatórios</a></li>
+            <li><a href="{{ url_for('admin.gerenciar_checklists') }}"><i class="fas fa-tasks"></i> Gerenciar Checklist</a></li>
+            <li><a href="{{ url_for('admin.gerenciar_veiculos') }}"><i class="fas fa-truck"></i> Veículos e Placas</a></li>
+            <li><a href="{{ url_for('admin.acompanhamento_diario') }}"><i class="fas fa-chart-bar"></i> Relatório Diário</a></li>
+            <li><a href="{{ url_for('admin.relatorios_consolidados') }}"><i class="fas fa-file-invoice"></i> Relatórios Consolidados</a></li>
         </ul>
-        <!-- Link de Sair movido para o final -->
         <ul class="sidebar-nav">
-             <li class="logout-link"><a href="{{ url_for('admin.logout') }}"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
+             <li class="logout-link"><a href="{{ url_for('admin.admin_logout') }}"><i class="fas fa-sign-out-alt"></i> Sair</a></li>
         </ul>
     </nav>
 
@@ -150,7 +200,7 @@
              {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
-                        <div class="flash-message {{ category }}">{{ message }}</div>
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} mt-3">{{ message }}</div>
                     {% endfor %}
                 {% endif %}
             {% endwith %}
@@ -158,10 +208,12 @@
         </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('active');
         }
     </script>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

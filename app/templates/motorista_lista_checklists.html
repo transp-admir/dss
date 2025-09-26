@@ -1,0 +1,50 @@
+{% extends "base_motorista.html" %}
+
+{% block title %}Checklists Disponíveis{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Meus Checklists</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="list-group">
+        {% if checklists_info %}
+            {% for info in checklists_info %}
+                {% set checklist = info.checklist %}
+                {% set status = info.status %}
+                <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                    <div class="flex-grow-1">
+                        <h5 class="mb-1">
+                            {{ checklist.tipo }} - {{ checklist.codigo }}
+                            {% if status == 'Pendente' %}
+                                <span class="badge bg-danger ms-2">Pendente</span>
+                            {% elif status == 'Preenchido Hoje' %}
+                                <span class="badge bg-success ms-2">Preenchido Hoje</span>
+                            {% endif %}
+                        </h5>
+                        <small>Revisão: {{ checklist.revisao }} | Data do Modelo: {{ checklist.data.strftime('%d/%m/%Y') }}</small>
+                    </div>
+                    
+                    {% set is_preenchido = (status == 'Preenchido Hoje') %}
+                    <a href="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}" 
+                       class="btn btn-primary {{ 'disabled' if is_preenchido else '' }}" 
+                       aria-disabled="{{ 'true' if is_preenchido else 'false' }}">
+                        {% if is_preenchido %}Preenchido{% else %}Preencher{% endif %}
+                    </a>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="list-group-item">
+                <p class="text-center mb-0">Nenhum checklist disponível no momento.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

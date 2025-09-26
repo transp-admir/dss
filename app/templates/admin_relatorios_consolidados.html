@@ -1,0 +1,92 @@
+{% extends "base_adm.html" %}
+
+{% block title %}Relatórios Consolidados de Checklist{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">Gerador de Relatórios Consolidados</h2>
+
+    {# Formulário de Filtros #}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filtros do Relatório</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.relatorios_consolidados') }}">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="tipo_checklist" class="form-label">Tipo de Checklist</label>
+                        <select id="tipo_checklist" name="tipo_checklist" class="form-select">
+                            <option value="DIÁRIO" {% if filtros.tipo_checklist == 'DIÁRIO' %}selected{% endif %}>Diário</option>
+                            <option value="MENSAL" {% if filtros.tipo_checklist == 'MENSAL' %}selected{% endif %}>Mensal</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="motorista_id" class="form-label">Motorista</label>
+                        <select id="motorista_id" name="motorista_id" class="form-select">
+                            <option value="todos">Todos os Motoristas</option>
+                            {% for motorista in motoristas %}
+                                <option value="{{ motorista.id }}" {% if filtros.motorista_id == motorista.id|string %}selected{% endif %}>{{ motorista.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="data_inicio" class="form-label">Data de Início</label>
+                        <input type="date" id="data_inicio" name="data_inicio" class="form-control" value="{{ filtros.data_inicio }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="data_fim" class="form-label">Data de Fim</label>
+                        <input type="date" id="data_fim" name="data_fim" class="form-control" value="{{ filtros.data_fim }}">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Gerar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# Área de Resultados #}
+    {% if resultados is not none %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Resultados da Busca</h5>
+            </div>
+            <div class="card-body">
+                {% if resultados %}
+                    {% for nome_motorista, preenchimentos_por_data in resultados.items() %}
+                        <div class="dossie-motorista mb-4">
+                            <h4 class="border-bottom pb-2 mb-3">Motorista: {{ nome_motorista }}</h4>
+                            {% for data, preenchimentos in preenchimentos_por_data.items() %}
+                                {% for preenchido in preenchimentos %}
+                                <div class="checklist-preenchido card mb-3">
+                                    <div class="card-header bg-light d-flex justify-content-between">
+                                        <strong>Data: {{ data.strftime('%d/%m/%Y') }}</strong>
+                                        <span>Checklist: {{ preenchido.checklist.codigo }}</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-group list-group-flush">
+                                            {% for resposta in preenchido.respostas|sort(attribute='item.ordem') %}
+                                            <li class="list-group-item">
+                                                <div class="row">
+                                                    <div class="col-md-6"><strong>Item:</strong> {{ resposta.item.texto }}</div>
+                                                    <div class="col-md-3"><strong>Resposta:</strong> {{ resposta.resposta }}</div>
+                                                    <div class="col-md-3"><strong>Obs:</strong> {{ resposta.observacao or 'N/A' }}</div>
+                                                </div>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="alert alert-info">Nenhum registro encontrado para os filtros selecionados.</div>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

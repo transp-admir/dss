@@ -1,10 +1,49 @@
 {% extends 'base_adm.html' %}
 
-{% block title %}Dashboard - Painel Administrativo{% endblock %}
+{% block title %}Painel de Boas-vindas{% endblock %}
 
-{% block header %}Painel Principal{% endblock %}
+{% block header %}
+    Bem-vindo ao Painel Administrativo
+{% endblock %}
 
 {% block content %}
-    <p>Seja bem-vindo à área administrativa do Sistema de Assinaturas de Conteúdo.</p>
-    <p>Utilize o menu à esquerda para navegar pelas funcionalidades.</p>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Comece a Gerenciar</h5>
+                    <p class="card-text">Utilize o menu lateral para navegar pelas funcionalidades do sistema. Abaixo estão alguns atalhos para as principais seções:</p>
+                    
+                    <div class="list-group">
+                        <a href="{{ url_for('admin.motoristas') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-user-tie me-2"></i>
+                                <strong>Gerenciar Motoristas</strong>
+                                <small class="d-block text-muted">Cadastre, edite e vincule motoristas aos veículos.</small>
+                            </div>
+                            <i class="fas fa-arrow-right"></i>
+                        </a>
+                        <a href="{{ url_for('admin.gerenciar_checklists') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-tasks me-2"></i>
+                                <strong>Gerenciar Checklists</strong>
+                                <small class="d-block text-muted">Crie e organize os itens e categorias dos checklists.</small>
+                            </div>
+                            <i class="fas fa-arrow-right"></i>
+                        </a>
+                        <a href="{{ url_for('admin.acompanhamento_diario') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-chart-bar me-2"></i>
+                                <strong>Acompanhamento Diário</strong>
+                                <small class="d-block text-muted">Visualize o status de preenchimento dos checklists diários.</small>
+                            </div>
+                            <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

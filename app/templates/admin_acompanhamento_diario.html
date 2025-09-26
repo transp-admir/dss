@@ -1,0 +1,73 @@
+{% extends "base_adm.html" %}
+
+{% block title %}Acompanhamento Diário{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-3">Acompanhamento do Checklist Diário</h2>
+    <p class="lead mb-4">Status de preenchimento para a data: <strong>{{ data_hoje.strftime('%d/%m/%Y') }}</strong></p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} mb-4">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {# Painel de Ação Imediata para Pendências #}
+    {% if checklist_diario %}
+        <div class="card border-danger mb-4">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">Pendências de Hoje</h5>
+            </div>
+            <div class="card-body">
+                {% if motoristas_pendentes %}
+                    <p>Os seguintes motoristas ainda não preencheram o checklist <strong>{{ checklist_diario.codigo }}</strong> hoje:</p>
+                    <ul class="list-group">
+                        {% for motorista in motoristas_pendentes %}
+                            <li class="list-group-item">{{ motorista.nome }}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="alert alert-success mb-0">
+                        <h5 class="alert-heading"><i class="fas fa-check-circle"></i> Missão Cumprida!</h5>
+                        <p class="mb-0">Parabéns! Todos os motoristas já preencheram o checklist diário de hoje.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Painel de Visão Geral #}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Status Geral dos Motoristas</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">Motorista</th>
+                            <th scope="col" class="text-center">Status do Checklist Diário</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for motorista in motoristas_status %}
+                            <tr>
+                                <td>{{ motorista.nome }}</td>
+                                <td class="text-center">
+                                    {% if motorista.status == 'Preenchido' %}
+                                        <span class="badge bg-success rounded-pill px-3 py-2">Preenchido</span>
+                                    {% else %}
+                                        <span class="badge bg-danger rounded-pill px-3 py-2">Pendente</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

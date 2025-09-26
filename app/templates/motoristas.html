@@ -1,4 +1,3 @@
-
 {% extends 'base_adm.html' %}
 
 {% block title %}Gerenciar Motoristas - Painel Administrativo{% endblock %}
@@ -8,15 +7,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/motoristas.css') }}">
 {% endblock %}
 
-{# O título da página vai aqui, como texto simples, para dentro do H1 do template base #}
-{% block header %}
-    Gerenciar Motoristas
-{% endblock %}
-
+{% block header %}Gerenciar Motoristas{% endblock %}
 
 {% block content %}
 
-{# Controles da página (botões) ficam no início do bloco de conteúdo #}
 <div class="page-actions">
     <button class="btn-novo" onclick="toggleForm()"><i class="fas fa-plus"></i> Novo motorista</button>
     <button class="btn-cancel" onclick="toggleForm()" style="display: none;"><i class="fas fa-times"></i> Cancelar</button>
@@ -46,6 +40,15 @@
                 <label for="frota">Frota:</label>
                 <input type="text" id="frota" name="frota">
             </div>
+            <div>
+                <label for="veiculo_id">Conjunto Vinculado:</label>
+                <select id="veiculo_id" name="veiculo_id">
+                    <option value="">-- Nenhum --</option>
+                    {% for veiculo in veiculos %}
+                        <option value="{{ veiculo.id }}">{{ veiculo.nome_conjunto }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
         <br>
         <button type="submit">Cadastrar Motorista</button>
@@ -67,6 +70,14 @@
             <span>RG: {{ motorista.rg }}</span>
             <span>CNH: {{ motorista.cnh }}</span>
             <span>Frota: {{ motorista.frota }}</span>
+            {# Exibe o conjunto vinculado, se houver #}
+            <span class="conjunto">Conjunto: 
+                {% if motorista.veiculo %}
+                    <strong>{{ motorista.veiculo.nome_conjunto }}</strong>
+                {% else %}
+                    <span style="color: #777;">Nenhum</span>
+                {% endif %}
+            </span>
         </div>
         <div class="motorista-acoes">
             <a href="#" title="Visualizar"><i class="fas fa-search"></i></a>
