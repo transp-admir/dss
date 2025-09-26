@@ -171,30 +171,39 @@ def preencher_checklist(checklist_id):
         )
         db.session.add(novo_preenchimento)
         
-        sub_itens_ids = request.form.getlist('sub_item_id')
-        for sub_item_id in sub_itens_ids:
-            resposta = request.form.get(f'resposta-{sub_item_id}')
-            observacao = request.form.get(f'obs-{sub_item_id}')
+        # --- LÓGICA DE SALVAMENTO CORRIGIDA ---
+        # Itera sobre todos os itens que foram enviados no formulário
+        for key in request.form:
+            if key.startswith('resposta-'):
+                item_id = key.split('-')[1]
+                resposta = request.form.get(key)
+                observacao = request.form.get(f'obs-{item_id}', '') # Pega a observação correspondente
 
-            nova_resposta = ChecklistResposta(
-                preenchimento=novo_preenchimento, 
-                item_id=sub_item_id,
-                resposta=resposta,
-                observacao=observacao
-            )
-            db.session.add(nova_resposta)
+                nova_resposta = ChecklistResposta(
+                    preenchimento=novo_preenchimento, 
+                    item_id=item_id,
+                    resposta=resposta,
+                    observacao=observacao
+                )
+                db.session.add(nova_resposta)
         
         db.session.commit()
         flash('Checklist enviado com sucesso!', 'success')
         return redirect(url_for('main.lista_checklists_motorista'))
 
+    # --- LÓGICA DE AGRUPAMENTO CORRIGIDA ---
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+    itens_agrupados = {}
+    for item in itens_principais:
+        sub_itens = item.sub_itens.order_by(ChecklistItem.ordem).all()
+        if sub_itens:
+            itens_agrupados[item.texto] = sub_itens
 
     return render_template(
         'motorista_preencher_checklist.html',
         checklist=checklist,
         veiculo=veiculo_do_motorista, 
-        itens_principais=itens_principais
+        itens_agrupados=itens_agrupados # Passa a variável correta para o template
     )
 
 
