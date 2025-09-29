@@ -610,6 +610,7 @@ def conteudo():
 def add_conteudo():
     if 'admin_user' not in session:
         return redirect(url_for('admin.login'))
+        
     data_str = request.form['data']
     assunto = request.form['assunto']
     pergunta = request.form['pergunta']
@@ -617,31 +618,51 @@ def add_conteudo():
     resposta_correta = request.form['resposta_correta']
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
 
-    tipo_recurso = request.form['tipo_recurso']
+    tipo_recurso = request.form.get('tipo_recurso')
     recurso_link = None
 
     if tipo_recurso == 'link':
         recurso_link = request.form.get('link')
     elif tipo_recurso == 'arquivo':
+        # Verifica se a parte do arquivo está na requisição
         if 'arquivo' not in request.files:
-            flash('Nenhum arquivo enviado', 'error')
-            return redirect(request.url)
+            flash('Nenhum campo de arquivo encontrado no formulário.', 'error')
+            return redirect(url_for('admin.conteudo')) # CORRIGIDO
+
         file = request.files['arquivo']
+        
+        # Verifica se um arquivo foi realmente selecionado
         if file.filename == '':
-            flash('Nenhum arquivo selecionado', 'error')
-            return redirect(request.url)
+            flash('Nenhum arquivo selecionado. Por favor, escolha um arquivo para enviar.', 'error')
+            return redirect(url_for('admin.conteudo')) # CORRIGIDO
+
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             if not os.path.exists(UPLOAD_FOLDER):
                 os.makedirs(UPLOAD_FOLDER)
             file.save(os.path.join(UPLOAD_FOLDER, filename))
-            recurso_link = os.path.join('uploads', filename).replace('\\\\', '/')
+            # Armazena o caminho relativo para ser usado no template
+            recurso_link = os.path.join('uploads', filename).replace('\\', '/')
+        else:
+            flash('Tipo de arquivo não permitido.', 'danger')
+            return redirect(url_for('admin.conteudo')) # CORRIGIDO
 
-    novo_conteudo = Conteudo(data=data_obj, assunto=assunto, pergunta=pergunta, respostas=respostas, resposta_correta=resposta_correta, tipo_recurso=tipo_recurso, recurso_link=recurso_link)
+    # Cria o novo conteúdo se tudo estiver OK
+    novo_conteudo = Conteudo(
+        data=data_obj, 
+        assunto=assunto, 
+        pergunta=pergunta, 
+        respostas=respostas, 
+        resposta_correta=resposta_correta, 
+        tipo_recurso=tipo_recurso, 
+        recurso_link=recurso_link
+    )
     db.session.add(novo_conteudo)
     db.session.commit()
+    
     flash('Conteúdo adicionado com sucesso!', 'success')
     return redirect(url_for('admin.conteudo'))
+
 
 @admin_bp.route('/conteudo/<int:conteudo_id>')
 def conteudo_detalhe(conteudo_id):
