@@ -80,15 +80,35 @@ def lista_documentos_motorista():
     return render_template('motorista_documentos.html', documentos=documentos)
 
 
-@main_bp.route('/documentos/download/<path:filename>')
-def download_documento(filename):
-    if 'motorista_id' not in session:
-        return redirect(url_for('main.motorista_login'))
+#-----------------------------------------------------------------------
+# ROTA PARA ACESSAR DOCUMENTOS FIXOS (MOTORISTA E ADMIN)
+#-----------------------------------------------------------------------
+from flask import send_from_directory
+
+@main_bp.route('/documentos/acessar/<int:documento_id>')
+def acessar_documento(documento_id):
+    # Verifica se o usuário (motorista ou admin) está logado
+    if 'motorista_id' not in session and 'admin_user' not in session:
+        flash('Acesso negado. Por favor, faça login.', 'danger')
+        return redirect(url_for('main.index'))
         
-    # Garante que o caminho seja absoluto para a função de download
+    # Busca o documento no banco de dados de forma segura
+    documento = DocumentoFixo.query.get_or_404(documento_id)
     directory = os.path.abspath(DOCUMENTOS_UPLOAD_FOLDER)
     
-    return send_from_directory(directory, filename, as_attachment=True)
+    # Pega a ação da URL (?action=view ou ?action=download)
+    action = request.args.get('action', 'view') # 'view' (visualizar) é o padrão
+    
+    # Define se o arquivo deve ser forçado como download ou não
+    as_attachment = (action == 'download')
+
+    # Envia o arquivo para o usuário
+    return send_from_directory(
+        directory=directory, 
+        path=documento.nome_arquivo, 
+        as_attachment=as_attachment
+    )
+#-----------------------------------------------------------------------
 
 #-----------------------------------------------------------------------
 
