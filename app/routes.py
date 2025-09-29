@@ -1,9 +1,10 @@
 from flask import (Blueprint, render_template, request, 
                    redirect, url_for, session, flash, jsonify)
-from .extensions import db
 from .models import (Motorista, Conteudo, Assinatura, Checklist, 
                    ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
-                   ChecklistResposta, Pendencia) # Adicionado Pendencia
+                   ChecklistResposta, Pendencia, DocumentoFixo) # Adicionado DocumentoFixo
+
+from .extensions import db
 from datetime import datetime, date
 import re
 import os
@@ -63,6 +64,34 @@ def motorista_portal():
         return redirect(url_for('main.motorista_login'))
 
     return render_template('motorista_portal.html', motorista=motorista)
+
+#-----------------------------------------------------------------------
+# ROTA PARA LISTAR E BAIXAR DOCUMENTOS FIXOS (MOTORISTA)
+#-----------------------------------------------------------------------
+from flask import send_from_directory
+
+@main_bp.route('/documentos')
+def lista_documentos_motorista():
+    if 'motorista_id' not in session:
+        return redirect(url_for('main.motorista_login'))
+    
+    documentos = DocumentoFixo.query.order_by(DocumentoFixo.titulo).all()
+    
+    return render_template('motorista_documentos.html', documentos=documentos)
+
+
+@main_bp.route('/documentos/download/<path:filename>')
+def download_documento(filename):
+    if 'motorista_id' not in session:
+        return redirect(url_for('main.motorista_login'))
+        
+    # Garante que o caminho seja absoluto para a função de download
+    directory = os.path.abspath(DOCUMENTOS_UPLOAD_FOLDER)
+    
+    return send_from_directory(directory, filename, as_attachment=True)
+
+#-----------------------------------------------------------------------
+
 
 @main_bp.route('/logout')
 def logout():
@@ -282,6 +311,91 @@ def dashboard():
     if 'admin_user' not in session:
         return redirect(url_for('admin.login'))
     return render_template('adm.html')
+
+#-----------------------------------------------------------------------
+# ROTA PARA GERENCIAR DOCUMENTOS FIXOS (ADMIN)
+#-----------------------------------------------------------------------
+
+# Defina esta constante no início do arquivo, junto com as outras configurações
+DOCUMENTOS_UPLOAD_FOLDER = 'app/static/uploads/documentos_fixos'
+DOCUMENTOS_ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'png'}
+
+def allowed_document_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in DOCUMENTOS_ALLOWED_EXTENSIONS
+
+@admin_bp.route('/documentos', methods=['GET', 'POST'])
+def gerenciar_documentos():
+    if 'admin_user' not in session:
+        return redirect(url_for('admin.login'))
+
+    if request.method == 'POST':
+        titulo = request.form.get('titulo')
+        descricao = request.form.get('descricao')
+
+        if not titulo or 'arquivo' not in request.files:
+            flash('Título e arquivo são obrigatórios.', 'danger')
+            return redirect(request.url)
+
+        file = request.files['arquivo']
+
+        if file.filename == '':
+            flash('Nenhum arquivo selecionado.', 'danger')
+            return redirect(request.url)
+
+        if file and allowed_document_file(file.filename):
+            # Cria um nome de arquivo seguro e único para evitar conflitos
+            original_filename = secure_filename(file.filename)
+            unique_filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{original_filename}"
+            
+            # Cria o diretório se ele não existir
+            if not os.path.exists(DOCUMENTOS_UPLOAD_FOLDER):
+                os.makedirs(DOCUMENTOS_UPLOAD_FOLDER)
+            
+            # Salva o arquivo
+            file.path = os.path.join(DOCUMENTOS_UPLOAD_FOLDER, unique_filename)
+            file.save(file.path)
+
+            # Salva no banco de dados
+            novo_documento = DocumentoFixo(
+                titulo=titulo,
+                descricao=descricao,
+                nome_arquivo=unique_filename
+            )
+            db.session.add(novo_documento)
+            db.session.commit()
+
+            flash('Documento enviado com sucesso!', 'success')
+            return redirect(url_for('admin.gerenciar_documentos'))
+        else:
+            flash('Tipo de arquivo não permitido.', 'danger')
+
+    documentos = DocumentoFixo.query.order_by(DocumentoFixo.data_upload.desc()).all()
+    return render_template('admin_documentos.html', documentos=documentos)
+
+
+@admin_bp.route('/documentos/excluir/<int:documento_id>', methods=['POST'])
+def excluir_documento(documento_id):
+    if 'admin_user' not in session:
+        return redirect(url_for('admin.login'))
+
+    documento = DocumentoFixo.query.get_or_404(documento_id)
+    
+    # Tenta excluir o arquivo físico
+    try:
+        os.remove(os.path.join(DOCUMENTOS_UPLOAD_FOLDER, documento.nome_arquivo))
+    except OSError as e:
+        flash(f'Erro ao excluir o arquivo físico: {e}', 'danger')
+
+    # Exclui o registro do banco de dados
+    db.session.delete(documento)
+    db.session.commit()
+
+    flash('Documento excluído com sucesso.', 'success')
+    return redirect(url_for('admin.gerenciar_documentos'))
+
+#-----------------------------------------------------------------------
+
 
 # --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (NOVAS) ---
 @admin_bp.route('/pendencias', methods=['GET'])

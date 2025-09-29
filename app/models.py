@@ -92,7 +92,7 @@ class ChecklistPreenchido(db.Model):
     outros_problemas = db.Column(db.Text, nullable=True)
     solucoes_adotadas = db.Column(db.Text, nullable=True)
     pendencias_gerais = db.Column(db.Text, nullable=True)
-    # --- FIM DOS NOVOS CAMPOS ---
+    # --- FIM DOS NOVOS CAMPOS --
 
     respostas = db.relationship('ChecklistResposta', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
 
@@ -127,3 +127,12 @@ class Pendencia(db.Model):
     item = db.relationship('ChecklistItem')
     veiculo = db.relationship('Veiculo')
     resposta_abertura = db.relationship('ChecklistResposta')
+
+# --- ESTRUTURA PARA DOCUMENTOS FIXOS ---
+
+class DocumentoFixo(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text, nullable=True)
+    nome_arquivo = db.Column(db.String(255), nullable=False)
+    data_upload = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
