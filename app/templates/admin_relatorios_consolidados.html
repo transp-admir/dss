@@ -7,7 +7,7 @@
     <h2 class="mb-4">Gerador de Relatórios Consolidados</h2>
 
     {# Formulário de Filtros #}
-    <div class="card mb-4">
+    <div class="card mb-4 shadow-sm">
         <div class="card-header">
             <h5 class="mb-0">Filtros do Relatório</h5>
         </div>
@@ -48,7 +48,7 @@
 
     {# Área de Resultados #}
     {% if resultados is not none %}
-        <div class="card">
+        <div class="card shadow-sm">
             <div class="card-header">
                 <h5 class="mb-0">Resultados da Busca</h5>
             </div>
@@ -64,19 +64,35 @@
                                         <strong>Data: {{ data.strftime('%d/%m/%Y') }}</strong>
                                         <span>Checklist: {{ preenchido.checklist.codigo }}</span>
                                     </div>
-                                    <div class="card-body">
+                                    <div class="card-body pb-0">
                                         <ul class="list-group list-group-flush">
                                             {% for resposta in preenchido.respostas|sort(attribute='item.ordem') %}
-                                            <li class="list-group-item">
+                                            <li class="list-group-item px-0">
                                                 <div class="row">
                                                     <div class="col-md-6"><strong>Item:</strong> {{ resposta.item.texto }}</div>
-                                                    <div class="col-md-3"><strong>Resposta:</strong> {{ resposta.resposta }}</div>
-                                                    <div class="col-md-3"><strong>Obs:</strong> {{ resposta.observacao or 'N/A' }}</div>
+                                                    <div class="col-md-2"><strong>Resposta:</strong> {{ resposta.resposta }}</div>
+                                                    <div class="col-md-4"><strong>Obs:</strong> {{ resposta.observacao or 'N/A' }}</div>
                                                 </div>
                                             </li>
                                             {% endfor %}
                                         </ul>
                                     </div>
+                                    <!-- ========= EXIBIÇÃO DOS NOVOS CAMPOS ========= -->
+                                    {% if preenchido.outros_problemas or preenchido.solucoes_adotadas or preenchido.pendencias_gerais %}
+                                    <div class="card-footer bg-white">
+                                        <h6 class="card-title">Observações Gerais do Motorista:</h6>
+                                        {% if preenchido.outros_problemas %}
+                                            <p class="mb-1"><strong>Outros Problemas:</strong><br>{{ preenchido.outros_problemas|nl2br }}</p>
+                                        {% endif %}
+                                        {% if preenchido.solucoes_adotadas %}
+                                            <p class="mb-1"><strong>Soluções Adotadas:</strong><br>{{ preenchido.solucoes_adotadas|nl2br }}</p>
+                                        {% endif %}
+                                        {% if preenchido.pendencias_gerais %}
+                                            <p class="mb-0"><strong>Pendências para Manutenção:</strong><br>{{ preenchido.pendencias_gerais|nl2br }}</p>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <!-- =============================================== -->
                                 </div>
                                 {% endfor %}
                             {% endfor %}

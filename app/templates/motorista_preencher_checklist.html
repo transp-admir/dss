@@ -14,7 +14,6 @@
 
     <form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}">
         
-        {# Informação do Veículo Vinculado #}
         <div class="card p-3 mb-4 {% if not veiculo %}border-danger{% endif %}">
             <h5 class="card-title">1. Veículo do Checklist</h5>
             {% if veiculo %}
@@ -27,7 +26,6 @@
             {% endif %}
         </div>
 
-        {# Itens do Checklist #}
         <h5 class="mb-3">2. Itens de Verificação</h5>
         
         {% for categoria, itens in itens_agrupados.items() %}
@@ -35,7 +33,7 @@
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="heading-{{ loop.index }}">
                         <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}" aria-expanded="true" aria-controls="collapse-{{ loop.index }}">
-                            <strong>{{ categoria }}</strong>
+                            <strong>{{ categoria.texto }}</strong>
                         </button>
                     </h2>
                     <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse show" aria-labelledby="heading-{{ loop.index }}">
@@ -45,7 +43,12 @@
                                     <li class="list-group-item">
                                         <div class="row align-items-center">
                                             <div class="col-md-4">
-                                                <label for="resposta_{{ item.id }}" class="form-label">{{ item.texto }}</label>
+                                                <label for="resposta_{{ item.id }}" class="form-label">
+                                                    {{ item.texto }}
+                                                    {% if item.id in pendencias_abertas %}
+                                                        <span class="badge bg-warning text-dark" title="Este item já foi reportado e está pendente de resolução.">⚠️</span>
+                                                    {% endif %}
+                                                </label>
                                             </div>
                                             <div class="col-md-4">
                                                 <div class="btn-group" role="group">
@@ -72,8 +75,26 @@
             </div>
         {% endfor %}
 
+        <!-- ========= NOVOS CAMPOS DE TEXTO LIVRE ========= -->
+        <h5 class="mt-4 mb-3">3. Observações Gerais</h5>
+
+        <div class="card p-3">
+            <div class="mb-3">
+                <label for="outros_problemas" class="form-label"><strong>Outros Problemas Encontrados:</strong></label>
+                <textarea class="form-control" id="outros_problemas" name="outros_problemas" rows="3" placeholder="Descreva aqui qualquer outro problema que não estava nos itens do checklist."></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="solucoes_adotadas" class="form-label"><strong>Soluções Adotadas na Partida:</strong></label>
+                <textarea class="form-control" id="solucoes_adotadas" name="solucoes_adotadas" rows="3" placeholder="Informe aqui quaisquer ações ou soluções que você já tomou para os problemas apontados."></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="pendencias_gerais" class="form-label"><strong>Pendências para a Manutenção:</strong></label>
+                <textarea class="form-control" id="pendencias_gerais" name="pendencias_gerais" rows="3" placeholder="Liste aqui os itens gerais que precisam de atenção da equipe de manutenção."></textarea>
+            </div>
+        </div>
+        <!-- =============================================== -->
+
         <div class="d-grid gap-2 mt-4">
-            {# Desabilita o botão se não houver veículo vinculado #}
             <button type="submit" class="btn btn-primary btn-lg" {% if not veiculo %}disabled{% endif %}>Salvar Checklist</button>
         </div>
     </form>

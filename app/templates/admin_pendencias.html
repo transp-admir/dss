@@ -1,0 +1,170 @@
+{% extends "base_adm.html" %}
+
+{% block title %}Gerenciar Pendências{% endblock %}
+
+{% block header %}Gerenciamento de Pendências de Checklist{% endblock %}
+
+{% block content %}
+<style>
+    .accordion-button {
+        font-weight: 500;
+    }
+    .badge {
+        font-size: 0.9em;
+    }
+    .table-sm th, .table-sm td {
+        padding: 0.5rem;
+        vertical-align: middle;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 50px 20px;
+        color: #6c757d;
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        color: #28a745;
+    }
+    .alert-secondary h6 {
+        color: #383d41;
+    }
+</style>
+
+<!-- Filtro por Veículo -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('admin.gerenciar_pendencias') }}">
+            <div class="row align-items-end">
+                <div class="col-md-5">
+                    <label for="veiculo_id" class="form-label">Filtrar por Veículo</label>
+                    <select name="veiculo_id" id="veiculo_id" class="form-select">
+                        <option value="">Todos os Veículos com Pendências</option>
+                        {% for v in todos_veiculos %}
+                            <option value="{{ v.id }}" {% if v.id == veiculo_selecionado_id %}selected{% endif %}>
+                                {{ v.nome_conjunto }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary">Filtrar</button>
+                    <a href="{{ url_for('admin.gerenciar_pendencias') }}" class="btn btn-secondary">Limpar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+{% if not pendencias_agrupadas %}
+    <div class="empty-state">
+        <i class="fas fa-check-circle"></i>
+        <h4>Tudo em ordem!</h4>
+        <p>Nenhuma pendência de checklist em aberto no momento.</p>
+    </div>
+{% else %}
+    <div class="accordion" id="pendenciasAccordion">
+        {% for veiculo, pendencias in pendencias_agrupadas.items() %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading-{{ veiculo.id }}">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ veiculo.id }}" aria-expanded="true" aria-controls="collapse-{{ veiculo.id }}">
+                        <strong>{{ veiculo.nome_conjunto }}</strong>
+                        <span class="ms-3 badge bg-danger">{{ pendencias|length }} Pendência(s)</span>
+                    </button>
+                </h2>
+                <div id="collapse-{{ veiculo.id }}" class="accordion-collapse collapse show" aria-labelledby="heading-{{ veiculo.id }}" data-bs-parent="#pendenciasAccordion">
+                    <div class="accordion-body">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Item do Checklist</th>
+                                    <th>Observação (Item)</th>
+                                    <th>Reportado por</th>
+                                    <th class="text-center">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pendencia in pendencias %}
+                                    <tr>
+                                        <td>{{ pendencia.data_criacao.strftime('%d/%m/%Y %H:%M') }}</td>
+                                        <td>{{ pendencia.item.texto }}</td>
+                                        <td><em>"{{ pendencia.resposta_abertura.observacao or 'N/A' }}"</em></td>
+                                        <td>{{ pendencia.resposta_abertura.preenchimento.motorista.nome }}</td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#resolverModal-{{ pendencia.id }}">
+                                                <i class="fas fa-edit"></i> Resolver
+                                            </button>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Modal para Resolver Pendência -->
+                                    <div class="modal fade" id="resolverModal-{{ pendencia.id }}" tabindex="-1" aria-labelledby="resolverModalLabel-{{ pendencia.id }}" aria-hidden="true">
+                                        <div class="modal-dialog modal-lg"> {# Aumentado para modal-lg #}
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title" id="resolverModalLabel-{{ pendencia.id }}">Resolver Pendência: {{ pendencia.item.texto }}</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
+                                                <form action="{{ url_for('admin.resolver_pendencia') }}" method="POST">
+                                                    <div class="modal-body">
+                                                        <input type="hidden" name="pendencia_id" value="{{ pendencia.id }}">
+                                                        <p><strong>Veículo:</strong> {{ veiculo.nome_conjunto }}</p>
+                                                        <p><strong>Observação do Motorista (para este item):</strong> {{ pendencia.resposta_abertura.observacao or 'N/A' }}</p>
+                                                        
+                                                        <!-- Contexto do Checklist Original -->
+                                                        <hr>
+                                                        <div class="alert alert-secondary p-2">
+                                                            <h6 class="alert-heading">Contexto: Observações Gerais do Checklist Original</h6>
+                                                            {% set preenchimento = pendencia.resposta_abertura.preenchimento %}
+                                                            {% if preenchimento.outros_problemas or preenchimento.solucoes_adotadas or preenchimento.pendencias_gerais %}
+                                                                {% if preenchimento.outros_problemas %}
+                                                                    <p class="mb-1 small"><strong>Outros Problemas:</strong><br>{{ preenchimento.outros_problemas|nl2br }}</p>
+                                                                {% endif %}
+                                                                {% if preenchimento.solucoes_adotadas %}
+                                                                    <p class="mb-1 small"><strong>Soluções Adotadas:</strong><br>{{ preenchimento.solucoes_adotadas|nl2br }}</p>
+                                                                {% endif %}
+                                                                {% if preenchimento.pendencias_gerais %}
+                                                                    <p class="mb-0 small"><strong>Pendências para Manutenção:</strong><br>{{ preenchimento.pendencias_gerais|nl2br }}</p>
+                                                                {% endif %}
+                                                            {% else %}
+                                                                <p class="mb-0 small"><em>Nenhuma observação geral foi registrada neste checklist.</em></p>
+                                                            {% endif %}
+                                                        </div>
+                                                        <hr>
+
+                                                        <div class="mb-3">
+                                                            <label for="status-{{ pendencia.id }}" class="form-label"><strong>Alterar Status para:</strong></label>
+                                                            <select name="status" id="status-{{ pendencia.id }}" class="form-select" required>
+                                                                <option value="RESOLVIDO">RESOLVIDO</option>
+                                                                <option value="EM_ANDAMENTO">EM ANDAMENTO</option>
+                                                                <option value="NAO_PROCEDE">NÃO PROCEDE</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label for="observacao_admin-{{ pendencia.id }}" class="form-label"><strong>Observação do Administrador:</strong></label>
+                                                            <textarea name="observacao_admin" id="observacao_admin-{{ pendencia.id }}" class="form-control" rows="3"></textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                        <button type="submit" class="btn btn-primary">Salvar Alteração</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}

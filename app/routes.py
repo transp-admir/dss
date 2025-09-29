@@ -2,7 +2,8 @@ from flask import (Blueprint, render_template, request,
                    redirect, url_for, session, flash, jsonify)
 from .extensions import db
 from .models import (Motorista, Conteudo, Assinatura, Checklist, 
-                   ChecklistItem, Placa, Veiculo, ChecklistPreenchido, ChecklistResposta)
+                   ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
+                   ChecklistResposta, Pendencia) # Adicionado Pendencia
 from datetime import datetime, date
 import re
 import os
@@ -164,47 +165,91 @@ def preencher_checklist(checklist_id):
             flash('Você não está vinculado a um veículo. Contate o administrador.', 'danger')
             return redirect(url_for('main.lista_checklists_motorista'))
 
+        # Captura os dados dos novos campos de texto livre
+        outros_problemas = request.form.get('outros_problemas')
+        solucoes_adotadas = request.form.get('solucoes_adotadas')
+        pendencias_gerais = request.form.get('pendencias_gerais')
+
+        # Cria o objeto ChecklistPreenchido com os novos campos
         novo_preenchimento = ChecklistPreenchido(
             motorista_id=motorista.id,
             veiculo_id=veiculo_do_motorista.id,
-            checklist_id=checklist.id
+            checklist_id=checklist.id,
+            outros_problemas=outros_problemas,
+            solucoes_adotadas=solucoes_adotadas,
+            pendencias_gerais=pendencias_gerais
         )
         db.session.add(novo_preenchimento)
         
-        # --- LÓGICA DE SALVAMENTO CORRIGIDA ---
-        # Itera sobre todos os itens que foram enviados no formulário
+        respostas_adicionadas = []
+
         for key in request.form:
             if key.startswith('resposta-'):
-                item_id = key.split('-')[1]
-                resposta = request.form.get(key)
-                observacao = request.form.get(f'obs-{item_id}', '') # Pega a observação correspondente
+                # O split agora precisa lidar com 'resposta-1' e 'resposta-None-1'
+                parts = key.split('-')
+                item_id = int(parts[-1])
+                
+                resposta_texto = request.form.get(key)
+                observacao = request.form.get(f'obs-{item_id}', '')
 
                 nova_resposta = ChecklistResposta(
                     preenchimento=novo_preenchimento, 
                     item_id=item_id,
-                    resposta=resposta,
+                    resposta=resposta_texto,
                     observacao=observacao
                 )
                 db.session.add(nova_resposta)
+                respostas_adicionadas.append(nova_resposta)
+
+        db.session.flush()
+
+        for resposta in respostas_adicionadas:
+            if resposta.resposta == 'NAO CONFORME':
+                pendencia_existente = Pendencia.query.filter_by(
+                    item_id=resposta.item_id,
+                    veiculo_id=veiculo_do_motorista.id,
+                    status='PENDENTE'
+                ).first()
+
+                if not pendencia_existente:
+                    nova_pendencia = Pendencia(
+                        item_id=resposta.item_id,
+                        veiculo_id=veiculo_do_motorista.id,
+                        resposta_abertura_id=resposta.id
+                    )
+                    db.session.add(nova_pendencia)
         
         db.session.commit()
         flash('Checklist enviado com sucesso!', 'success')
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    # --- LÓGICA DE AGRUPAMENTO CORRIGIDA ---
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
     itens_agrupados = {}
+    pendencias_abertas = set()
+
+    if veiculo_do_motorista:
+        lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
+        pendencias_abertas = {p.item_id for p in lista_pendencias}
+
     for item in itens_principais:
         sub_itens = item.sub_itens.order_by(ChecklistItem.ordem).all()
+        # Se não houver sub-itens, o próprio item principal será tratado no template
         if sub_itens:
-            itens_agrupados[item.texto] = sub_itens
+            itens_agrupados[item] = sub_itens
+        else:
+            # Garante que itens principais sem sub-itens ainda possam ser exibidos
+            itens_agrupados[item] = []
+
 
     return render_template(
         'motorista_preencher_checklist.html',
         checklist=checklist,
         veiculo=veiculo_do_motorista, 
-        itens_agrupados=itens_agrupados # Passa a variável correta para o template
+        itens_agrupados=itens_agrupados, 
+        itens_principais=itens_principais,
+        pendencias_abertas=pendencias_abertas
     )
+
 
 
 # --- BLUEPRINT DA ÁREA ADMINISTRATIVA ---
@@ -237,6 +282,72 @@ def dashboard():
     if 'admin_user' not in session:
         return redirect(url_for('admin.login'))
     return render_template('adm.html')
+
+# --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (NOVAS) ---
+@admin_bp.route('/pendencias', methods=['GET'])
+def gerenciar_pendencias():
+    if 'admin_user' not in session:
+        return redirect(url_for('admin.login'))
+
+    # Dicionário para agrupar as pendências
+    pendencias_agrupadas = defaultdict(list)
+    
+    # Query base para buscar todas as pendências com status 'PENDENTE'
+    query = Pendencia.query.filter_by(status='PENDENTE').order_by(Pendencia.data_criacao.desc())
+    
+    # Filtra por um veículo específico, se solicitado
+    veiculo_id_str = request.args.get('veiculo_id')
+    veiculo_id = int(veiculo_id_str) if veiculo_id_str else None
+    if veiculo_id:
+        query = query.filter_by(veiculo_id=veiculo_id)
+
+    # Executa a query
+    pendencias = query.all()
+
+    # Agrupa as pendências encontradas pelo objeto do veículo
+    for pendencia in pendencias:
+        pendencias_agrupadas[pendencia.veiculo].append(pendencia)
+
+    # Busca todos os veículos para popular o filtro
+    todos_veiculos = Veiculo.query.order_by(Veiculo.nome_conjunto).all()
+
+    return render_template(
+        'admin_pendencias.html',
+        pendencias_agrupadas=pendencias_agrupadas,
+        todos_veiculos=todos_veiculos,
+        veiculo_selecionado_id=veiculo_id
+    )
+
+
+@admin_bp.route('/pendencias/resolver', methods=['POST'])
+def resolver_pendencia():
+    if 'admin_user' not in session:
+        return redirect(url_for('admin.login'))
+
+    pendencia_id = request.form.get('pendencia_id')
+    novo_status = request.form.get('status')
+    observacao = request.form.get('observacao_admin')
+
+    pendencia = Pendencia.query.get(pendencia_id)
+
+    if not pendencia:
+        flash('Pendência não encontrada.', 'danger')
+        return redirect(url_for('admin.gerenciar_pendencias'))
+
+    if pendencia.status != 'PENDENTE':
+        flash('Esta pendência já foi resolvida ou finalizada.', 'warning')
+        return redirect(url_for('admin.gerenciar_pendencias'))
+
+    pendencia.status = novo_status
+    pendencia.observacao_admin = observacao
+    pendencia.data_resolucao = datetime.utcnow()
+    
+    db.session.commit()
+
+    flash(f'Pendência do item "{pendencia.item.texto}" atualizada para {novo_status.replace("_", " ")}.', 'success')
+    return redirect(url_for('admin.gerenciar_pendencias'))
+# --- FIM DAS NOVAS ROTAS ---
+
 
 @admin_bp.route('/acompanhamento_diario')
 def acompanhamento_diario():
