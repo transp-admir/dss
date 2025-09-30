@@ -142,32 +142,53 @@ def ver_conteudo(conteudo_id):
 
     motorista_id = session['motorista_id']
     conteudo = Conteudo.query.get_or_404(conteudo_id)
+    # Verifica se já existe uma assinatura para este motorista e conteúdo
     assinatura = Assinatura.query.filter_by(motorista_id=motorista_id, conteudo_id=conteudo_id).first()
 
+    # Se a requisição for POST (envio do formulário)
     if request.method == 'POST':
+        # E se ainda não houver uma assinatura registrada
         if not assinatura:
+            # Captura todos os dados do formulário
             resposta_usuario = request.form.get('resposta_usuario')
             tempo_leitura_segundos = request.form.get('tempo_leitura', 0, type=int)
+            assinatura_imagem_data = request.form.get('assinatura_imagem')
 
+            # Validação para garantir que a resposta e a assinatura foram enviadas
+            if not resposta_usuario or not assinatura_imagem_data:
+                flash('É obrigatório selecionar uma resposta e assinar para confirmar.', 'danger')
+                return redirect(url_for('main.ver_conteudo', conteudo_id=conteudo_id))
+
+            # Cria o novo registro de assinatura com todos os dados
             nova_assinatura = Assinatura(
                 motorista_id=motorista_id,
                 conteudo_id=conteudo_id,
                 tempo_leitura=tempo_leitura_segundos,
-                resposta_motorista=resposta_usuario
+                resposta_motorista=resposta_usuario,
+                assinatura_imagem=assinatura_imagem_data  # Incluindo a assinatura
             )
             db.session.add(nova_assinatura)
             db.session.commit()
 
-            if resposta_usuario and resposta_usuario.strip().lower() == conteudo.resposta_correta.strip().lower():
+            # LÓGICA ANTIGA RESTAURADA: Verifica se a resposta está correta e envia a mensagem
+            if resposta_usuario.strip().lower() == conteudo.resposta_correta.strip().lower():
                 flash('Conteúdo assinado! Sua resposta está correta.', 'success')
             else:
                 flash('Conteúdo assinado. Sua resposta está incorreta, revise o material.', 'warning')
             
             return redirect(url_for('main.lista_conteudos'))
     
+    # Se a requisição for GET, apenas exibe a página
     return render_template('conteudo_motorista.html', 
                            conteudo=conteudo, 
                            assinatura=assinatura)
+
+    
+    # A parte 'GET' permanece a mesma
+    return render_template('conteudo_motorista.html', 
+                           conteudo=conteudo, 
+                           assinatura=assinatura)
+
 
 @main_bp.route('/checklists_motorista')
 def lista_checklists_motorista():
@@ -214,27 +235,37 @@ def preencher_checklist(checklist_id):
             flash('Você não está vinculado a um veículo. Contate o administrador.', 'danger')
             return redirect(url_for('main.lista_checklists_motorista'))
 
-        # Captura os dados dos novos campos de texto livre
+        # Captura a assinatura do formulário
+        assinatura_data = request.form.get('assinatura_motorista')
+
+        # Captura os outros campos de texto
         outros_problemas = request.form.get('outros_problemas')
         solucoes_adotadas = request.form.get('solucoes_adotadas')
         pendencias_gerais = request.form.get('pendencias_gerais')
 
-        # Cria o objeto ChecklistPreenchido com os novos campos
+        # Validação simples para garantir que a assinatura não está vazia
+        if not assinatura_data:
+            flash('A assinatura do motorista é obrigatória para enviar o checklist.', 'danger')
+            # Precisamos reenviar os dados para o template para que o usuário não perca o que já preencheu
+            # (Esta parte pode ser otimizada depois, mas por agora redireciona)
+            return redirect(url_for('main.preencher_checklist', checklist_id=checklist_id))
+
+        # Cria o objeto ChecklistPreenchido, agora incluindo a assinatura
         novo_preenchimento = ChecklistPreenchido(
             motorista_id=motorista.id,
             veiculo_id=veiculo_do_motorista.id,
             checklist_id=checklist.id,
+            assinatura_motorista=assinatura_data,  # NOVO CAMPO SALVO
             outros_problemas=outros_problemas,
             solucoes_adotadas=solucoes_adotadas,
             pendencias_gerais=pendencias_gerais
         )
         db.session.add(novo_preenchimento)
         
+        # O resto da lógica para salvar as respostas permanece igual...
         respostas_adicionadas = []
-
         for key in request.form:
             if key.startswith('resposta-'):
-                # O split agora precisa lidar com 'resposta-1' e 'resposta-None-1'
                 parts = key.split('-')
                 item_id = int(parts[-1])
                 
@@ -252,6 +283,7 @@ def preencher_checklist(checklist_id):
 
         db.session.flush()
 
+        # Lógica para criar pendências
         for resposta in respostas_adicionadas:
             if resposta.resposta == 'NAO CONFORME':
                 pendencia_existente = Pendencia.query.filter_by(
@@ -271,6 +303,31 @@ def preencher_checklist(checklist_id):
         db.session.commit()
         flash('Checklist enviado com sucesso!', 'success')
         return redirect(url_for('main.lista_checklists_motorista'))
+
+    # A parte 'GET' da função permanece a mesma
+    itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+    itens_agrupados = {}
+    pendencias_abertas = set()
+
+    if veiculo_do_motorista:
+        lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
+        pendencias_abertas = {p.item_id for p in lista_pendencias}
+
+    for item in itens_principais:
+        sub_itens = item.sub_itens.order_by(ChecklistItem.ordem).all()
+        if sub_itens:
+            itens_agrupados[item] = sub_itens
+        else:
+            itens_agrupados[item] = []
+
+    return render_template(
+        'motorista_preencher_checklist.html',
+        checklist=checklist,
+        veiculo=veiculo_do_motorista, 
+        itens_agrupados=itens_agrupados, 
+        itens_principais=itens_principais,
+        pendencias_abertas=pendencias_abertas
+    )
 
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
     itens_agrupados = {}

@@ -36,6 +36,7 @@ class Assinatura(db.Model):
     data_assinatura = db.Column(db.DateTime, default=datetime.utcnow)
     tempo_leitura = db.Column(db.Integer) # Tempo em segundos
     resposta_motorista = db.Column(db.String(100))
+    assinatura_imagem = db.Column(db.Text, nullable=True) # NOVO CAMPO PARA ASSINATURA DSS
 
 # --- ESTRUTURA PARA VEÍCULOS ---
 
@@ -87,12 +88,14 @@ class ChecklistPreenchido(db.Model):
     veiculo_id = db.Column(db.Integer, db.ForeignKey('veiculo.id'), nullable=False)
     checklist_id = db.Column(db.Integer, db.ForeignKey('checklist.id'), nullable=False)
     data_preenchimento = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # --- NOVO CAMPO DE ASSINATURA ---
+    assinatura_motorista = db.Column(db.Text, nullable=True)
 
-    # --- NOVOS CAMPOS DE TEXTO LIVRE ---
+    # --- CAMPOS DE TEXTO LIVRE ---
     outros_problemas = db.Column(db.Text, nullable=True)
     solucoes_adotadas = db.Column(db.Text, nullable=True)
     pendencias_gerais = db.Column(db.Text, nullable=True)
-    # --- FIM DOS NOVOS CAMPOS --
 
     respostas = db.relationship('ChecklistResposta', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
 
@@ -109,21 +112,14 @@ class ChecklistResposta(db.Model):
 
 class Pendencia(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-
-    # Foreign Keys para identificar unicamente a pendência
     item_id = db.Column(db.Integer, db.ForeignKey('checklist_item.id'), nullable=False)
     veiculo_id = db.Column(db.Integer, db.ForeignKey('veiculo.id'), nullable=False)
-
-    # Foreign Key para a primeira resposta que abriu esta pendência
     resposta_abertura_id = db.Column(db.Integer, db.ForeignKey('checklist_resposta.id'), nullable=False)
-
-    # Controle de status e ciclo de vida
-    status = db.Column(db.String(50), nullable=False, default='PENDENTE')  # PENDENTE, RESOLVIDO, NAO_PROCEDE, EM_ANDAMENTO
+    status = db.Column(db.String(50), nullable=False, default='PENDENTE')
     data_criacao = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     data_resolucao = db.Column(db.DateTime, nullable=True)
     observacao_admin = db.Column(db.Text, nullable=True)
 
-    # Relacionamentos para facilitar o acesso aos dados
     item = db.relationship('ChecklistItem')
     veiculo = db.relationship('Veiculo')
     resposta_abertura = db.relationship('ChecklistResposta')

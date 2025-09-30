@@ -2,101 +2,149 @@
 
 {% block title %}Preencher Checklist{% endblock %}
 
+{% block header %}
+    {{ checklist.codigo }} - {{ checklist.tipo }}
+    <small class="d-block text-muted fw-normal">Revisão: {{ checklist.revisao }} | Data: {{ checklist.data.strftime('%d/%m/%Y') }}</small>
+{% endblock %}
+
 {% block content %}
-<div class="container my-4">
-    <h2 class="mb-3">Preencher Checklist</h2>
+<form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}">
 
-    <div class="card bg-light p-3 mb-4">
-        <h4 class="card-title">{{ checklist.tipo }} - {{ checklist.codigo }}</h4>
-        <p class="card-text mb-0"><strong>Revisão:</strong> {{ checklist.revisao }}</p>
-        <p class="card-text"><strong>Data do Modelo:</strong> {{ checklist.data.strftime('%d/%m/%Y') }}</p>
-    </div>
-
-    <form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}">
-        
-        <div class="card p-3 mb-4 {% if not veiculo %}border-danger{% endif %}">
-            <h5 class="card-title">1. Veículo do Checklist</h5>
-            {% if veiculo %}
-                <p class="card-text mb-1"><strong>Conjunto:</strong> {{ veiculo.nome_conjunto }}</p>
-            {% else %}
-                <div class="alert alert-danger mb-0">
-                    <p><strong>Atenção:</strong> Você não está vinculado a nenhum veículo.</p>
-                    <p class="mb-0">Por favor, contate o setor administrativo para que um conjunto seja atribuído a você no sistema.</p>
-                </div>
-            {% endif %}
+    {% if not veiculo %}
+        <div class="alert alert-danger" role="alert">
+            <strong>Atenção!</strong> Você não está vinculado a nenhum veículo. Por favor, contate o administrador.
+        </div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            Preenchendo checklist para o veículo: <strong>{{ veiculo.nome_conjunto }}</strong>
         </div>
 
-        <h5 class="mb-3">2. Itens de Verificação</h5>
-        
-        {% for categoria, itens in itens_agrupados.items() %}
-            <div class="accordion mb-3" id="accordion-{{ loop.index }}">
-                <div class="accordion-item">
-                    <h2 class="accordion-header" id="heading-{{ loop.index }}">
-                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}" aria-expanded="true" aria-controls="collapse-{{ loop.index }}">
-                            <strong>{{ categoria.texto }}</strong>
-                        </button>
-                    </h2>
-                    <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse show" aria-labelledby="heading-{{ loop.index }}">
-                        <div class="accordion-body">
-                            <ul class="list-group">
-                                {% for item in itens %}
-                                    <li class="list-group-item">
-                                        <div class="row align-items-center">
-                                            <div class="col-md-4">
-                                                <label for="resposta_{{ item.id }}" class="form-label">
-                                                    {{ item.texto }}
-                                                    {% if item.id in pendencias_abertas %}
-                                                        <span class="badge bg-warning text-dark" title="Este item já foi reportado e está pendente de resolução.">⚠️</span>
-                                                    {% endif %}
-                                                </label>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="btn-group" role="group">
-                                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conf-{{ item.id }}" value="CONFORME" required>
-                                                    <label class="btn btn-outline-success" for="conf-{{ item.id }}">C</label>
-
-                                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="nconf-{{ item.id }}" value="NAO CONFORME" required>
-                                                    <label class="btn btn-outline-danger" for="nconf-{{ item.id }}">NC</label>
-
-                                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="na-{{ item.id }}" value="N/A" required>
-                                                    <label class="btn btn-outline-secondary" for="na-{{ item.id }}">N/A</label>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <input type="text" name="obs-{{ item.id }}" class="form-control form-control-sm" placeholder="Observação (se necessário)">
-                                            </div>
-                                        </div>
-                                    </li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    </div>
+        {% for item, sub_itens in itens_agrupados.items() %}
+            <div class="card mb-3">
+                <div class="card-header fw-bold {% if item.id in pendencias_abertas %}bg-warning text-dark{% endif %}">
+                    {{ item.ordem }}. {{ item.texto }}
+                    {% if item.id in pendencias_abertas %}
+                        <span class="badge bg-danger ms-2">Item com pendência aberta</span>
+                    {% endif %}
                 </div>
+                <ul class="list-group list-group-flush">
+                    {% if sub_itens %}
+                        {% for sub_item in sub_itens %}
+                            <li class="list-group-item {% if sub_item.id in pendencias_abertas %}list-group-item-warning{% endif %}">
+                                <div class="mb-2">{{ sub_item.texto }} {% if sub_item.id in pendencias_abertas %}<span class="badge bg-danger ms-1">Pendência</span>{% endif %}</div>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off" required>
+                                    <label class="btn btn-outline-success" for="conforme-{{ sub_item.id }}">Conforme</label>
+
+                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="nao-conforme-{{ sub_item.id }}" value="NAO CONFORME" autocomplete="off">
+                                    <label class="btn btn-outline-danger" for="nao-conforme-{{ sub_item.id }}">Não Conforme</label>
+
+                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="na-{{ sub_item.id }}" value="N/A" autocomplete="off">
+                                    <label class="btn btn-outline-secondary" for="na-{{ sub_item.id }}">N/A</label>
+                                </div>
+                                <textarea class="form-control mt-2" name="obs-{{ sub_item.id }}" placeholder="Observação (opcional)"></textarea>
+                            </li>
+                        {% endfor %}
+                    {% else %}
+                        <li class="list-group-item">
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conforme-{{ item.id }}" value="CONFORME" autocomplete="off" required>
+                                <label class="btn btn-outline-success" for="conforme-{{ item.id }}">Conforme</label>
+
+                                <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="nao-conforme-{{ item.id }}" value="NAO CONFORME" autocomplete="off">
+                                <label class="btn btn-outline-danger" for="nao-conforme-{{ item.id }}">Não Conforme</label>
+
+                                <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="na-{{ item.id }}" value="N/A" autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="na-{{ item.id }}">N/A</label>
+                            </div>
+                            <textarea class="form-control mt-2" name="obs-{{ item.id }}" placeholder="Observação (opcional)"></textarea>
+                        </li>
+                    {% endif %}
+                </ul>
             </div>
         {% endfor %}
-
-        <!-- ========= NOVOS CAMPOS DE TEXTO LIVRE ========= -->
-        <h5 class="mt-4 mb-3">3. Observações Gerais</h5>
-
-        <div class="card p-3">
-            <div class="mb-3">
-                <label for="outros_problemas" class="form-label"><strong>Outros Problemas Encontrados:</strong></label>
-                <textarea class="form-control" id="outros_problemas" name="outros_problemas" rows="3" placeholder="Descreva aqui qualquer outro problema que não estava nos itens do checklist."></textarea>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>Observações Gerais</h5>
             </div>
-            <div class="mb-3">
-                <label for="solucoes_adotadas" class="form-label"><strong>Soluções Adotadas na Partida:</strong></label>
-                <textarea class="form-control" id="solucoes_adotadas" name="solucoes_adotadas" rows="3" placeholder="Informe aqui quaisquer ações ou soluções que você já tomou para os problemas apontados."></textarea>
-            </div>
-            <div class="mb-3">
-                <label for="pendencias_gerais" class="form-label"><strong>Pendências para a Manutenção:</strong></label>
-                <textarea class="form-control" id="pendencias_gerais" name="pendencias_gerais" rows="3" placeholder="Liste aqui os itens gerais que precisam de atenção da equipe de manutenção."></textarea>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="outros_problemas" class="form-label">Outros problemas encontrados:</label>
+                    <textarea class="form-control" id="outros_problemas" name="outros_problemas" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="solucoes_adotadas" class="form-label">Soluções adotadas:</label>
+                    <textarea class="form-control" id="solucoes_adotadas" name="solucoes_adotadas" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="pendencias_gerais" class="form-label">Pendências gerais:</label>
+                    <textarea class="form-control" id="pendencias_gerais" name="pendencias_gerais" rows="3"></textarea>
+                </div>
             </div>
         </div>
-        <!-- =============================================== -->
 
-        <div class="d-grid gap-2 mt-4">
-            <button type="submit" class="btn btn-primary btn-lg" {% if not veiculo %}disabled{% endif %}>Salvar Checklist</button>
+        <!-- Seção de Assinatura -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>Assinatura do Motorista</h5>
+            </div>
+            <div class="card-body text-center">
+                <div id="signature-pad-container" style="border: 1px solid #ced4da; border-radius: .25rem; position: relative; height: 200px; margin: 0 auto; max-width: 500px;">
+                    <canvas id="signature-canvas" style="width: 100%; height: 100%;"></canvas>
+                </div>
+                <input type="hidden" name="assinatura_motorista" id="assinatura_motorista_input">
+                <div class="mt-2">
+                    <button type="button" id="clear-signature" class="btn btn-sm btn-outline-secondary">Limpar Assinatura</button>
+                </div>
+                <small class="form-text text-muted">Por favor, assine no campo acima antes de enviar.</small>
+            </div>
         </div>
-    </form>
-</div>
+
+        <div class="mt-4 d-grid gap-2">
+            <button type="submit" class="btn btn-primary btn-lg">Enviar Checklist</button>
+            <a href="{{ url_for('main.lista_checklists_motorista') }}" class="btn btn-secondary">Cancelar</a>
+        </div>
+    {% endif %}
+</form>
+
+{% if veiculo %}
+<!-- Adiciona a biblioteca e o script da assinatura no final -->
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const canvas = document.getElementById('signature-canvas');
+        const signaturePad = new SignaturePad(canvas, {
+            backgroundColor: 'rgb(255, 255, 255)'
+        });
+
+        function resizeCanvas() {
+            const ratio =  Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+            signaturePad.clear();
+        }
+
+        window.addEventListener("resize", resizeCanvas);
+        resizeCanvas();
+
+        document.getElementById('clear-signature').addEventListener('click', function () {
+            signaturePad.clear();
+        });
+
+        const form = canvas.closest('form');
+        form.addEventListener('submit', function (event) {
+            if (signaturePad.isEmpty()) {
+                alert("A assinatura do motorista é obrigatória.");
+                event.preventDefault(); // Impede o envio do formulário
+            } else {
+                const signatureInput = document.getElementById('assinatura_motorista_input');
+                signatureInput.value = signaturePad.toDataURL('image/png');
+            }
+        });
+    });
+</script>
+{% endif %}
+
 {% endblock %}
