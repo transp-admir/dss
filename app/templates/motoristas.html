@@ -34,10 +34,6 @@
                         <input type="text" class="form-control" id="cnh" name="cnh">
                     </div>
                     <div class="col-md-3">
-                        <label for="frota" class="form-label">Frota</label>
-                        <input type="text" class="form-control" id="frota" name="frota">
-                    </div>
-                     <div class="col-md-3">
                         <label for="unidade" class="form-label">Unidade</label>
                         {% if session.role == 'admin' %}
                             <input type="text" class="form-control" id="unidade" name="unidade" list="unidades_list" placeholder="Digite ou selecione" required>
@@ -51,6 +47,16 @@
                         {% endif %}
                     </div>
                     <div class="col-md-3">
+                        <label for="operacao" class="form-label">Operação</label>
+                        <input type="text" class="form-control" id="operacao" name="operacao">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="frota" class="form-label">Frota</label>
+                        <input type="text" class="form-control" id="frota" name="frota">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-12">
                         <label for="veiculo_id" class="form-label">Conjunto Vinculado</label>
                         <select id="veiculo_id" name="veiculo_id" class="form-select">
                             <option value="">-- Nenhum --</option>
@@ -78,6 +84,7 @@
                             <th>Nome</th>
                             <th>CPF</th>
                             <th>Unidade</th>
+                            <th>Operação</th>
                             <th>Conjunto</th>
                             <th>Ações</th>
                         </tr>
@@ -88,6 +95,7 @@
                             <td>{{ motorista.nome }}</td>
                             <td>{{ motorista.cpf }}</td>
                             <td>{{ motorista.unidade }}</td>
+                            <td>{{ motorista.operacao or 'N/A' }}</td>
                             <td>{{ motorista.veiculo.nome_conjunto if motorista.veiculo else 'N/A' }}</td>
                             <td>
                                 <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal-{{ motorista.id }}">
@@ -139,11 +147,7 @@
                         </div>
                     </div>
                     <div class="row mb-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Frota</label>
-                            <input type="text" class="form-control" name="frota" value="{{ motorista.frota or '' }}">
-                        </div>
-                        <div class="col-md-4">
+                         <div class="col-md-6">
                             <label class="form-label">Unidade</label>
                             {% if session.role == 'admin' %}
                                 <input type="text" class="form-control" name="unidade" value="{{ motorista.unidade }}" list="unidades_list" required>
@@ -151,7 +155,17 @@
                                 <input type="text" class="form-control" name="unidade" value="{{ motorista.unidade }}" readonly>
                             {% endif %}
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Operação</label>
+                            <input type="text" class="form-control" name="operacao" value="{{ motorista.operacao or '' }}">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Frota</label>
+                            <input type="text" class="form-control" name="frota" value="{{ motorista.frota or '' }}">
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label">Conjunto Vinculado</label>
                             <select name="veiculo_id" class="form-select">
                                 <option value="">-- Nenhum --</option>

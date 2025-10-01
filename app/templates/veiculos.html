@@ -17,52 +17,32 @@
                 </div>
                 <div class="card-body">
                     <form action="{{ url_for('admin.add_veiculo') }}" method="POST">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
+                        <div class="row align-items-end">
+                            <div class="col-md-5 mb-3">
                                 <label for="nome_conjunto" class="form-label">Nome do Conjunto</label>
                                 <input type="text" class="form-control" id="nome_conjunto" name="nome_conjunto" required>
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-3 mb-3">
                                 <label for="unidade" class="form-label">Unidade</label>
                                 {% if session.role == 'admin' %}
-                                    <input type="text" class="form-control" id="unidade" name="unidade" list="unidades_list" placeholder="Digite ou selecione" required>
+                                    <input type="text" class="form-control" name="unidade" list="unidades_list" placeholder="Digite ou selecione" required>
                                     <datalist id="unidades_list">
-                                        {% for u in unidades_disponiveis %}<option value="{{ u }}">{% endfor %}
+                                        {% for u in unidades_disponiveis %}
+                                            <option value="{{ u }}">
+                                        {% endfor %}
                                     </datalist>
                                 {% else %}
-                                    <input type="text" class="form-control" id="unidade" name="unidade" value="{{ session.unidade }}" readonly>
+                                    <input type="text" class="form-control" name="unidade" value="{{ session.unidade }}" readonly>
                                 {% endif %}
                             </div>
-                        </div>
-
-                        <div class="row">
-                             <div class="col-md-4 mb-3">
-                                <label for="placa_cavalo_id" class="form-label">Placa Cavalo <span class="text-danger">*</span></label>
-                                <select class="form-select" id="placa_cavalo_id" name="placa_cavalo_id" required>
-                                    <option value="">Selecione...</option>
-                                    {% for placa in placas %}{% if placa.tipo == 'CAVALO' %}<option value="{{ placa.id }}">{{ placa.numero }}</option>{% endif %}{% endfor %}
-                                </select>
+                             <div class="col-md-3 mb-3">
+                                <label for="operacao" class="form-label">Operação</label>
+                                <input type="text" class="form-control" id="operacao" name="operacao">
                             </div>
-                             <div class="col-md-4 mb-3">
-                                <label for="placa_carreta1_id" class="form-label">Placa Carreta 1</label>
-                                <select class="form-select" id="placa_carreta1_id" name="placa_carreta1_id">
-                                    <option value="">Nenhuma</option>
-                                    {% for placa in placas %}{% if placa.tipo == 'CARRETA' %}<option value="{{ placa.id }}">{{ placa.numero }}</option>{% endif %}{% endfor %}
-                                </select>
-                            </div>
-                             <div class="col-md-4 mb-3">
-                                <label for="placa_carreta2_id" class="form-label">Placa Carreta 2</label>
-                                <select class="form-select" id="placa_carreta2_id" name="placa_carreta2_id">
-                                    <option value="">Nenhuma</option>
-                                    {% for placa in placas %}{% if placa.tipo == 'CARRETA' %}<option value="{{ placa.id }}">{{ placa.numero }}</option>{% endif %}{% endfor %}
-                                </select>
+                            <div class="col-md-1 mb-3">
+                                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus"></i></button>
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="obs" class="form-label">Observações</label>
-                            <textarea class="form-control" id="obs" name="obs" rows="2"></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Salvar Conjunto</button>
                     </form>
                 </div>
             </div>
@@ -77,9 +57,10 @@
                         <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
                             <thead>
                                 <tr>
-                                    <th>Conjunto</th>
+                                    <th>Nome do Conjunto</th>
                                     <th>Unidade</th>
-                                    <th>Placas Vinculadas</th>
+                                    <th>Operação</th>
+                                    <th>Placas</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
@@ -88,10 +69,11 @@
                                 <tr>
                                     <td>{{ veiculo.nome_conjunto }}</td>
                                     <td>{{ veiculo.unidade }}</td>
+                                    <td>{{ veiculo.operacao or 'N/A' }}</td>
                                     <td>
-                                        {% if veiculo.placa_cavalo %}<span class="badge bg-primary text-white">{{ veiculo.placa_cavalo.numero }}</span>{% endif %}
-                                        {% if veiculo.placa_carreta1 %}<span class="badge bg-info text-dark">{{ veiculo.placa_carreta1.numero }}</span>{% endif %}
-                                        {% if veiculo.placa_carreta2 %}<span class="badge bg-info text-dark">{{ veiculo.placa_carreta2.numero }}</span>{% endif %}
+                                        {% if veiculo.placa_cavalo %}<span class="badge bg-primary">{{ veiculo.placa_cavalo.numero }}</span>{% endif %}
+                                        {% if veiculo.placa_carreta1 %}<span class="badge bg-secondary">{{ veiculo.placa_carreta1.numero }}</span>{% endif %}
+                                        {% if veiculo.placa_carreta2 %}<span class="badge bg-secondary">{{ veiculo.placa_carreta2.numero }}</span>{% endif %}
                                     </td>
                                     <td>
                                         <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editVeiculoModal-{{ veiculo.id }}">
@@ -121,22 +103,27 @@
                     <form action="{{ url_for('admin.add_placa') }}" method="POST">
                         <div class="mb-3">
                             <label for="placa_numero" class="form-label">Número da Placa</label>
-                            <input type="text" class="form-control" id="placa_numero" name="placa_numero" style="text-transform:uppercase" required>
+                            <input type="text" class="form-control" id="placa_numero" name="numero" style="text-transform:uppercase" required>
                         </div>
                         <div class="mb-3">
                             <label for="placa_tipo" class="form-label">Tipo de Placa</label>
-                            <select id="placa_tipo" name="placa_tipo" class="form-select" required>
-                                <option value="" disabled selected>Selecione o tipo...</option>
+                            <select id="placa_tipo" name="tipo" class="form-select" required>
                                 <option value="CAVALO">Cavalo</option>
                                 <option value="CARRETA">Carreta</option>
                             </select>
                         </div>
-                        {% if session.role == 'admin' %}
                         <div class="mb-3">
-                            <label for="unidade_placa" class="form-label">Unidade</label>
-                            <input type="text" class="form-control" id="unidade_placa" name="unidade" list="unidades_list" required>
+                            <label for="placa_unidade" class="form-label">Unidade</label>
+                            {% if session.role == 'admin' %}
+                                <input type="text" class="form-control" id="placa_unidade" name="unidade" list="unidades_list" placeholder="Digite ou selecione" required>
+                            {% else %}
+                                <input type="text" class="form-control" id="placa_unidade" name="unidade" value="{{ session.unidade }}" readonly>
+                            {% endif %}
                         </div>
-                        {% endif %}
+                         <div class="mb-3">
+                            <label for="placa_operacao" class="form-label">Operação</label>
+                            <input type="text" class="form-control" id="placa_operacao" name="operacao">
+                        </div>
                         <button type="submit" class="btn btn-primary">Adicionar Placa</button>
                     </form>
                 </div>
@@ -152,23 +139,12 @@
                         {% for placa in placas|sort(attribute='numero') %}
                              <li class="list-group-item d-flex justify-content-between align-items-center">
                                 <div>
-                                    <!-- CORREÇÃO: Usa placa.numero -->
-                                    <strong>{{ placa.numero }}</strong> <small class="text-muted">({{ placa.tipo|capitalize }})</small><br>
-                                    <small>Vinculada a: 
-                                        <!-- CORREÇÃO: Usa o mapa de vínculos para achar o veículo -->
-                                        {% if placa.id in placa_veiculo_map %}
-                                            <span class="badge bg-secondary">{{ placa_veiculo_map[placa.id].nome_conjunto }}</span>
-                                        {% else %}
-                                            Ninguém
-                                        {% endif %}
-                                    </small>
+                                    <strong>{{ placa.numero }}</strong> <small class="text-muted">({{ placa.tipo }})</small><br>
+                                    <small class="text-muted">{{ placa.unidade }} / {{ placa.operacao or '-' }}</small>
                                 </div>
-                                <!-- CORREÇÃO: Verifica se a placa está vinculada antes de mostrar o botão de excluir -->
-                                {% if placa.id not in placa_veiculo_map %}
                                 <form action="{{ url_for('admin.delete_placa', placa_id=placa.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir a placa {{placa.numero}}?');">
-                                    <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-times"></i></button>
+                                    <button type="submit" class="btn btn-danger btn-sm py-0 px-1"><i class="fas fa-times"></i></button>
                                 </form>
-                                {% endif %}
                             </li>
                         {% else %}
                             <li class="list-group-item">Nenhuma placa cadastrada.</li>
@@ -184,7 +160,7 @@
 {% for veiculo in veiculos %}
 <!-- Modal de Edição de Veículo -->
 <div class="modal fade" id="editVeiculoModal-{{ veiculo.id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog">
         <div class="modal-content">
             <form action="{{ url_for('admin.edit_veiculo', veiculo_id=veiculo.id) }}" method="POST">
                 <div class="modal-header">
@@ -192,46 +168,60 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nome do Conjunto</label>
+                        <input type="text" class="form-control" name="nome_conjunto" value="{{ veiculo.nome_conjunto }}" required>
+                    </div>
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Nome do Conjunto</label>
-                            <input type="text" class="form-control" name="nome_conjunto_edit" value="{{ veiculo.nome_conjunto }}" required>
-                        </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Unidade</label>
                             {% if session.role == 'admin' %}
-                                <input type="text" class="form-control" name="unidade_edit" value="{{ veiculo.unidade }}" list="unidades_list" required>
+                                <input type="text" class="form-control" name="unidade" value="{{ veiculo.unidade }}" list="unidades_list" required>
                             {% else %}
-                                <input type="text" class="form-control" value="{{ veiculo.unidade }}" readonly>
+                                <input type="text" class="form-control" name="unidade" value="{{ veiculo.unidade }}" readonly>
                             {% endif %}
                         </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">Placa Cavalo</label>
-                            <select name="placa_cavalo_id_edit" class="form-select" required>
-                                {% for p in placas %}{% if p.tipo == 'CAVALO' %}<option value="{{ p.id }}" {% if veiculo.placa_cavalo_id == p.id %}selected{% endif %}>{{ p.numero }}</option>{% endif %}{% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                             <label class="form-label">Placa Carreta 1</label>
-                             <select name="placa_carreta1_id_edit" class="form-select">
-                                <option value="">Nenhuma</option>
-                                {% for p in placas %}{% if p.tipo == 'CARRETA' %}<option value="{{ p.id }}" {% if veiculo.placa_carreta1_id == p.id %}selected{% endif %}>{{ p.numero }}</option>{% endif %}{% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                             <label class="form-label">Placa Carreta 2</label>
-                             <select name="placa_carreta2_id_edit" class="form-select">
-                                <option value="">Nenhuma</option>
-                                {% for p in placas %}{% if p.tipo == 'CARRETA' %}<option value="{{ p.id }}" {% if veiculo.placa_carreta2_id == p.id %}selected{% endif %}>{{ p.numero }}</option>{% endif %}{% endfor %}
-                            </select>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Operação</label>
+                            <input type="text" class="form-control" name="operacao" value="{{ veiculo.operacao or '' }}">
                         </div>
                     </div>
+                    
                     <div class="mb-3">
-                        <label class="form-label">Observações</label>
-                        <textarea class="form-control" name="obs_edit" rows="2">{{ veiculo.obs or '' }}</textarea>
+                        <label class="form-label">Placa Cavalo</label>
+                        <select name="placa_cavalo_id" class="form-select" required>
+                            <option value="">-- Selecione --</option>
+                            {% for p in placas_disponiveis.CAVALO %}
+                                 <option value="{{ p.id }}" {% if veiculo.placa_cavalo_id == p.id %}selected{% endif %}>{{ p.numero }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Placa Carreta 1</label>
+                        <select name="placa_carreta1_id" class="form-select">
+                            <option value="">-- Nenhuma --</option>
+                            {% for p in placas_disponiveis.CARRETA %}
+                                 <option value="{{ p.id }}" {% if veiculo.placa_carreta1_id == p.id %}selected{% endif %}>{{ p.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                     <div class="mb-3">
+                        <label class="form-label">Placa Carreta 2</label>
+                        <select name="placa_carreta2_id" class="form-select">
+                            <option value="">-- Nenhuma --</option>
+                           {% for p in placas_disponiveis.CARRETA %}
+                                 <option value="{{ p.id }}" {% if veiculo.placa_carreta2_id == p.id %}selected{% endif %}>{{ p.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="obs" class="form-label">Observações</label>
+                        <textarea class="form-control" name="obs" rows="2">{{ veiculo.obs or '' }}</textarea>
+                    </div>
+
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -256,7 +246,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <form action="{{ url_for('admin.delete_veiculo', veiculo_id=veiculo.id) }}" method="POST">
+                <form action="{{ url_for('admin.delete_veiculo', veiculo_id=veiculo.id) }}" method="POST" style="display: inline;">
                     <button type="submit" class="btn btn-danger">Sim, Excluir</button>
                 </form>
             </div>

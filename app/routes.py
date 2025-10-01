@@ -130,43 +130,41 @@ def veiculos():
     veiculos_query = Veiculo.query
     placas_query = Placa.query
 
-    # Filtra os dados pela unidade do usuário, se ele não for um admin geral
     if user_role != 'admin':
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
         placas_query = placas_query.filter(Placa.unidade == user_unidade)
     
-    # Executa as queries para obter as listas de objetos
     lista_veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
     lista_placas = placas_query.order_by(Placa.numero).all()
     
-    # --- CORREÇÃO PRINCIPAL: CRIA UM MAPA DE VÍNCULOS ---
-    # Este dicionário vai mapear o ID de uma placa ao veículo que a utiliza.
-    placa_veiculo_map = {}
-    for veiculo in lista_veiculos:
-        if veiculo.placa_cavalo_id:
-            placa_veiculo_map[veiculo.placa_cavalo_id] = veiculo
-        if veiculo.placa_carreta1_id:
-            placa_veiculo_map[veiculo.placa_carreta1_id] = veiculo
-        if veiculo.placa_carreta2_id:
-            placa_veiculo_map[veiculo.placa_carreta2_id] = veiculo
+    # Prepara as placas disponíveis para os modais de edição
+    placas_disponiveis = {'CAVALO': [], 'CARRETA': []}
+    for p in lista_placas:
+        # Uma placa está disponível se não estiver vinculada a nenhum veículo.
+        # Adicionamos essa lógica porque o novo modal precisa dela.
+        veiculo_associado = Veiculo.query.filter(
+            (Veiculo.placa_cavalo_id == p.id) |
+            (Veiculo.placa_carreta1_id == p.id) |
+            (Veiculo.placa_carreta2_id == p.id)
+        ).first()
+        if not veiculo_associado:
+            if p.tipo == 'CAVALO':
+                placas_disponiveis['CAVALO'].append(p)
+            elif p.tipo == 'CARRETA':
+                placas_disponiveis['CARRETA'].append(p)
 
-    # Lógica para obter unidades disponíveis para o formulário (apenas para admin)
     unidades_disponiveis = []
     if user_role == 'admin':
-        # Pega todas as unidades distintas para o admin poder escolher
-        unidades_db = db.session.query(Placa.unidade).distinct().union(db.session.query(Veiculo.unidade).distinct()).all()
+        unidades_db = db.session.query(Usuario.unidade).distinct().all()
         unidades_disponiveis = sorted([u[0] for u in unidades_db if u[0]])
 
-    # Renderiza o template com todos os dados necessários
     return render_template(
         'veiculos.html',
         veiculos=lista_veiculos,
         placas=lista_placas,
-        placa_veiculo_map=placa_veiculo_map,  # Envia o mapa para o template
+        placas_disponiveis=placas_disponiveis,
         unidades_disponiveis=unidades_disponiveis
     )
-
-
 
 @admin_bp.route('/veiculos/add', methods=['POST'])
 @login_required()
@@ -176,13 +174,10 @@ def add_veiculo():
     
     nome_conjunto = request.form.get('nome_conjunto')
     unidade = request.form.get('unidade')
-    placa_cavalo_id = request.form.get('placa_cavalo_id')
-    placa_carreta1_id = request.form.get('placa_carreta1_id')
-    placa_carreta2_id = request.form.get('placa_carreta2_id')
-    obs = request.form.get('obs')
+    operacao = request.form.get('operacao') # NOVO CAMPO
 
-    if not nome_conjunto or not placa_cavalo_id:
-        flash('Nome do conjunto e Placa do Cavalo são obrigatórios.', 'danger')
+    if not nome_conjunto:
+        flash('O nome do conjunto é obrigatório.', 'danger')
         return redirect(url_for('admin.veiculos'))
 
     if user_role != 'admin':
@@ -192,17 +187,18 @@ def add_veiculo():
         flash('A unidade é obrigatória.', 'danger')
         return redirect(url_for('admin.veiculos'))
 
+    if Veiculo.query.filter_by(nome_conjunto=nome_conjunto).first():
+        flash(f'Já existe um conjunto com o nome "{nome_conjunto}".', 'danger')
+        return redirect(url_for('admin.veiculos'))
+
     novo_veiculo = Veiculo(
         nome_conjunto=nome_conjunto, 
         unidade=unidade,
-        placa_cavalo_id=int(placa_cavalo_id),
-        placa_carreta1_id=int(placa_carreta1_id) if placa_carreta1_id else None,
-        placa_carreta2_id=int(placa_carreta2_id) if placa_carreta2_id else None,
-        obs=obs
+        operacao=operacao # NOVO CAMPO
     )
     db.session.add(novo_veiculo)
     db.session.commit()
-    flash(f'Conjunto "{nome_conjunto}" adicionado com sucesso.', 'success')
+    flash(f'Conjunto "{nome_conjunto}" adicionado. Vincule as placas editando o conjunto.', 'success')
     return redirect(url_for('admin.veiculos'))
 
 
@@ -217,21 +213,63 @@ def edit_veiculo(veiculo_id):
         flash('Você não tem permissão para editar este veículo.', 'danger')
         return redirect(url_for('admin.veiculos'))
 
-    # Atualiza os campos do formulário
-    veiculo.nome_conjunto = request.form.get('nome_conjunto_edit')
-    veiculo.placa_cavalo_id = int(request.form.get('placa_cavalo_id_edit'))
-    placa_carreta1_id = request.form.get('placa_carreta1_id_edit')
-    veiculo.placa_carreta1_id = int(placa_carreta1_id) if placa_carreta1_id else None
-    placa_carreta2_id = request.form.get('placa_carreta2_id_edit')
-    veiculo.placa_carreta2_id = int(placa_carreta2_id) if placa_carreta2_id else None
-    veiculo.obs = request.form.get('obs_edit')
+    # Atualiza campos de texto
+    veiculo.nome_conjunto = request.form.get('nome_conjunto')
+    veiculo.operacao = request.form.get('operacao') # NOVO CAMPO
+    veiculo.obs = request.form.get('obs')
     
+    # Atualiza Unidade (se for admin)
     if user_role == 'admin':
-        veiculo.unidade = request.form.get('unidade_edit')
+        veiculo.unidade = request.form.get('unidade')
 
+    # Atualiza Placas
+    veiculo.placa_cavalo_id = int(request.form.get('placa_cavalo_id')) if request.form.get('placa_cavalo_id') else None
+    veiculo.placa_carreta1_id = int(request.form.get('placa_carreta1_id')) if request.form.get('placa_carreta1_id') else None
+    veiculo.placa_carreta2_id = int(request.form.get('placa_carreta2_id')) if request.form.get('placa_carreta2_id') else None
+    
     db.session.commit()
     flash(f'Conjunto "{veiculo.nome_conjunto}" atualizado com sucesso.', 'success')
     return redirect(url_for('admin.veiculos'))
+
+
+@admin_bp.route('/placas/add', methods=['POST'])
+@login_required()
+def add_placa():
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+    
+    numero_placa = request.form.get('numero') # Corrigido para 'numero'
+    tipo = request.form.get('tipo')           # Corrigido para 'tipo'
+    unidade = request.form.get('unidade')
+    operacao = request.form.get('operacao')   # NOVO CAMPO
+
+    if not numero_placa or not tipo:
+        flash('Número da placa e tipo são obrigatórios.', 'danger')
+        return redirect(url_for('admin.veiculos'))
+
+    if user_role != 'admin':
+        unidade = user_unidade
+    
+    if not unidade:
+        flash('A unidade é obrigatória para cadastrar a placa.', 'danger')
+        return redirect(url_for('admin.veiculos'))
+
+    if Placa.query.filter_by(numero=numero_placa.upper()).first():
+        flash(f'A placa {numero_placa.upper()} já está cadastrada.', 'warning')
+        return redirect(url_for('admin.veiculos'))
+
+    nova_placa = Placa(
+        numero=numero_placa.upper(), 
+        tipo=tipo,
+        unidade=unidade,
+        operacao=operacao # NOVO CAMPO
+    )
+    db.session.add(nova_placa)
+    db.session.commit()
+    
+    flash(f'Placa {numero_placa.upper()} adicionada com sucesso.', 'success')
+    return redirect(url_for('admin.veiculos'))
+
 
 
 @admin_bp.route('/veiculos/delete/<int:veiculo_id>', methods=['POST'])
@@ -252,41 +290,7 @@ def delete_veiculo(veiculo_id):
     flash(f'Conjunto "{veiculo.nome_conjunto}" foi excluído.', 'info')
     return redirect(url_for('admin.veiculos'))
 
-@admin_bp.route('/placas/add', methods=['POST'])
-@login_required()
-def add_placa():
-    user_role = session.get('role')
-    user_unidade = session.get('unidade')
-    
-    numero_placa = request.form.get('placa_numero')
-    tipo = request.form.get('placa_tipo')
-    unidade = request.form.get('unidade')
 
-    if not numero_placa or not tipo:
-        flash('Número da placa e tipo são obrigatórios.', 'danger')
-        return redirect(url_for('admin.veiculos'))
-
-    if user_role != 'admin':
-        unidade = user_unidade
-    
-    if not unidade:
-        flash('A unidade é obrigatória para cadastrar a placa.', 'danger')
-        return redirect(url_for('admin.veiculos'))
-
-    if Placa.query.filter_by(numero=numero_placa.upper()).first():
-        flash(f'A placa {numero_placa.upper()} já está cadastrada.', 'warning')
-        return redirect(url_for('admin.veiculos'))
-
-    nova_placa = Placa(
-        numero=numero_placa.upper(), 
-        tipo=tipo,
-        unidade=unidade
-    )
-    db.session.add(nova_placa)
-    db.session.commit()
-    
-    flash(f'Placa {numero_placa.upper()} adicionada com sucesso.', 'success')
-    return redirect(url_for('admin.veiculos'))
 
 @admin_bp.route('/placas/delete/<int:placa_id>', methods=['POST'])
 @login_required()
@@ -1640,7 +1644,6 @@ def importacao_pagina():
 @admin_bp.route('/importacao/<string:tipo>', methods=['POST'])
 @login_required(required_role=["admin"])
 def importar_dados(tipo):
-    """Processa o upload de arquivos para importação em massa."""
     if 'arquivo' not in request.files:
         flash('Nenhum arquivo enviado.', 'danger')
         return redirect(url_for('admin.importacao_pagina'))
@@ -1655,28 +1658,21 @@ def importar_dados(tipo):
         return redirect(url_for('admin.importacao_pagina'))
 
     try:
-        # Lê o arquivo em memória
         in_memory_file = io.BytesIO(arquivo.read())
         
-        # Carrega os dados com pandas
         if arquivo.filename.endswith('.csv'):
-            df = pd.read_csv(in_memory_file, sep=';', dtype=str) # Assumindo ';' como separador para CSVs brasileiros
+            df = pd.read_csv(in_memory_file, sep=';', dtype=str)
         else:
             df = pd.read_excel(in_memory_file, dtype=str)
         
-        # Remove espaços em branco dos nomes das colunas
         df.columns = df.columns.str.strip()
-        # Converte todos os dados para string e remove espaços em branco
         df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
-        # Preenche valores nulos (NaN) com uma string vazia
         df.fillna('', inplace=True)
-
 
         adicionados = 0
         ignorados = 0
         erros = []
 
-        # --- LÓGICA DE IMPORTAÇÃO ---
         if tipo == 'motoristas':
             required_cols = ['nome', 'cpf', 'unidade']
             if not all(col in df.columns for col in required_cols):
@@ -1696,6 +1692,7 @@ def importar_dados(tipo):
                         nome=row['nome'],
                         cpf=row['cpf'],
                         unidade=row['unidade'],
+                        operacao=row.get('operacao', None), # NOVO CAMPO
                         rg=row.get('rg', None),
                         cnh=row.get('cnh', None),
                         frota=row.get('frota', None)
@@ -1727,17 +1724,17 @@ def importar_dados(tipo):
                     nova_placa = Placa(
                         numero=row['numero'].upper(),
                         tipo=tipo_placa,
-                        unidade=row['unidade']
+                        unidade=row['unidade'],
+                        operacao=row.get('operacao', None) # NOVO CAMPO
                     )
                     db.session.add(nova_placa)
                     adicionados += 1
 
         db.session.commit()
 
-        # Mensagens de resultado
         flash(f'Importação de {tipo} concluída! Adicionados: {adicionados}, Ignorados (duplicados/inválidos): {ignorados}.', 'success')
         if erros:
-            for erro in erros[:5]: # Mostra até 5 erros para não poluir a tela
+            for erro in erros[:5]:
                 flash(erro, 'warning')
 
     except Exception as e:

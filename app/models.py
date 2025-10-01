@@ -6,7 +6,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 class Motorista(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
+    unidade = db.Column(db.String(100), nullable=True)
+    operacao = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     nome = db.Column(db.String(150), nullable=False)
     cpf = db.Column(db.String(14), unique=True, nullable=False)
     rg = db.Column(db.String(20))
@@ -45,13 +46,15 @@ class Assinatura(db.Model):
 
 class Placa(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
+    unidade = db.Column(db.String(100), nullable=True)
+    operacao = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     numero = db.Column(db.String(8), unique=True, nullable=False)
     tipo = db.Column(db.String(20), nullable=False) # Ex: CAVALO, CARRETA
 
 class Veiculo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
+    unidade = db.Column(db.String(100), nullable=True)
+    operacao = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     nome_conjunto = db.Column(db.String(100), unique=True, nullable=False)
     placa_cavalo_id = db.Column(db.Integer, db.ForeignKey('placa.id'), nullable=False)
     placa_carreta1_id = db.Column(db.Integer, db.ForeignKey('placa.id'), nullable=True)
