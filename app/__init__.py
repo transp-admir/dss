@@ -1,9 +1,9 @@
 from flask import Flask
 from dotenv import load_dotenv
 import os
-import re # Importa o módulo de expressões regulares
+import re
 from markupsafe import Markup
-
+from flask_migrate import Migrate
 from .extensions import db
 
 def nl2br(value):
@@ -15,6 +15,8 @@ def youtube_id(url):
     regex = r"(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]+)"
     match = re.search(regex, url)
     return match.group(1) if match else url
+
+migrate = Migrate()
 
 def create_app():
     """Função que cria e configura a aplicação Flask (Application Factory)."""
@@ -34,20 +36,17 @@ def create_app():
 
     # --- INICIALIZAÇÃO DE EXTENSÕES ---
     db.init_app(app)
+    migrate.init_app(app, db)
 
     # --- REGISTRO DE FILTROS JINJA ---
     app.jinja_env.filters['nl2br'] = nl2br
-    app.jinja_env.filters['youtube_id'] = youtube_id # Novo filtro
+    app.jinja_env.filters['youtube_id'] = youtube_id
 
-    # --- REGISTRO DE BLUEPRINTS E CRIAÇÃO DO BANCO ---
+    # --- REGISTRO DE BLUEPRINTS E MODELOS ---
     with app.app_context():
         from . import models
-        
-        # Importa e registra os blueprints
         from . import routes
-        app.register_blueprint(routes.admin_bp) # Blueprint da área administrativa
-        app.register_blueprint(routes.main_bp)   # Novo blueprint da área pública
-
-        db.create_all()
+        app.register_blueprint(routes.admin_bp)
+        app.register_blueprint(routes.main_bp)
 
     return app
