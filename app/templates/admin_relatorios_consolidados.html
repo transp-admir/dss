@@ -1,108 +1,131 @@
 {% extends "base_adm.html" %}
 
-{% block title %}Relatórios Consolidados de Checklist{% endblock %}
+{% block title %}Relatórios Consolidados de Checklists{% endblock %}
+
+{% block header %}Relatórios Consolidados de Checklists{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h2 class="mb-4">Gerador de Relatórios Consolidados</h2>
+<div class="card shadow-sm mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Filtrar Relatórios</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" id="filtro-form">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label for="tipo_checklist" class="form-label">Tipo de Checklist</label>
+                    <select class="form-select" id="tipo_checklist" name="tipo_checklist">
+                        <option value="">Todos</option>
+                        <option value="DIÁRIO" {% if filtros.get('tipo_checklist') == 'DIÁRIO' %}selected{% endif %}>DIÁRIO</option>
+                        <option value="SEMANAL" {% if filtros.get('tipo_checklist') == 'SEMANAL' %}selected{% endif %}>SEMANAL</option>
+                        <option value="MENSAL" {% if filtros.get('tipo_checklist') == 'MENSAL' %}selected{% endif %}>MENSAL</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="veiculo_id" class="form-label">Veículo</label>
+                    <select class="form-select" id="veiculo_id" name="veiculo_id">
+                        <option value="todos">Todos os Veículos</option>
+                        {% for v in veiculos %}
+                            <option value="{{ v.id }}" {% if filtros.get('veiculo_id')|string == v.id|string %}selected{% endif %}>{{ v.nome_conjunto }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="data_inicio" class="form-label">Data de Início</label>
+                    <input type="date" class="form-control" id="data_inicio" name="data_inicio" value="{{ filtros.get('data_inicio', '') }}">
+                </div>
+                <div class="col-md-2">
+                    <label for="data_fim" class="form-label">Data de Fim</label>
+                    <input type="date" class="form-control" id="data_fim" name="data_fim" value="{{ filtros.get('data_fim', '') }}">
+                </div>
+                <div class="col-md-2 d-flex">
+                    <button type="submit" class="btn btn-primary w-100 me-2">Buscar</button>
+                    <button type="button" id="export-pdf-btn" class="btn btn-danger w-100">PDF</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 
-    {# Formulário de Filtros #}
-    <div class="card mb-4 shadow-sm">
+{% if resultados is not none %}
+    <div class="card shadow-sm">
         <div class="card-header">
-            <h5 class="mb-0">Filtros do Relatório</h5>
+            <h5 class="mb-0">Resultados da Busca</h5>
         </div>
         <div class="card-body">
-            <form method="POST" action="{{ url_for('admin.relatorios_consolidados') }}">
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <label for="tipo_checklist" class="form-label">Tipo de Checklist</label>
-                        <select id="tipo_checklist" name="tipo_checklist" class="form-select">
-                            <option value="DIÁRIO" {% if filtros.tipo_checklist == 'DIÁRIO' %}selected{% endif %}>Diário</option>
-                            <option value="MENSAL" {% if filtros.tipo_checklist == 'MENSAL' %}selected{% endif %}>Mensal</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="motorista_id" class="form-label">Motorista</label>
-                        <select id="motorista_id" name="motorista_id" class="form-select">
-                            <option value="todos">Todos os Motoristas</option>
-                            {% for motorista in motoristas %}
-                                <option value="{{ motorista.id }}" {% if filtros.motorista_id == motorista.id|string %}selected{% endif %}>{{ motorista.nome }}</option>
+            {% if resultados %}
+                {% for veiculo_nome, datas in resultados.items() %}
+                    <h4 class="mt-4 border-bottom pb-2">{{ veiculo_nome }}</h4>
+                    {% for data, preenchimentos in datas.items() %}
+                        <h5 class="text-muted ms-3 mt-3">{{ data.strftime('%d/%m/%Y') }}</h5>
+                        <ul class="list-group ms-3">
+                            {% for p in preenchimentos %}
+                                <li class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span>
+                                            <strong>{{ p.checklist.codigo }}</strong> ({{ p.checklist.tipo }}) - Preenchido por <strong>{{ p.motorista.nome }}</strong> às {{ p.data_preenchimento.strftime('%H:%M') }}
+                                        </span>
+                                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ p.id }}" aria-expanded="false" aria-controls="collapse-{{ p.id }}">
+                                            Ver Detalhes
+                                        </button>
+                                    </div>
+                                    <div class="collapse mt-3" id="collapse-{{ p.id }}">
+                                        <div class="card card-body">
+                                            <h6>Respostas do Checklist:</h6>
+                                            <ul class="list-unstyled">
+                                                {% for r in p.respostas %}
+                                                    <li>
+                                                        <strong>{{ r.item.texto }}:</strong> 
+                                                        <span class="badge {% if r.resposta == 'CONFORME' %}bg-success{% elif r.resposta == 'NAO CONFORME' %}bg-danger{% else %}bg-secondary{% endif %}">{{ r.resposta }}</span>
+                                                        {% if r.observacao %}<small class="text-muted ms-2">- "{{ r.observacao }}"</small>{% endif %}
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                            <hr>
+                                            <h6>Observações Gerais:</h6>
+                                            <p><strong>Outros problemas:</strong> {{ p.outros_problemas or 'Nenhum' }}</p>
+                                            <p><strong>Soluções adotadas:</strong> {{ p.solucoes_adotadas or 'Nenhuma' }}</p>
+                                            <p><strong>Pendências gerais:</strong> {{ p.pendencias_gerais or 'Nenhuma' }}</p>
+                                        </div>
+                                    </div>
+                                </li>
                             {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label for="data_inicio" class="form-label">Data de Início</label>
-                        <input type="date" id="data_inicio" name="data_inicio" class="form-control" value="{{ filtros.data_inicio }}">
-                    </div>
-                    <div class="col-md-2">
-                        <label for="data_fim" class="form-label">Data de Fim</label>
-                        <input type="date" id="data_fim" name="data_fim" class="form-control" value="{{ filtros.data_fim }}">
-                    </div>
-                    <div class="col-md-1 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Gerar</button>
-                    </div>
-                </div>
-            </form>
+                        </ul>
+                    {% endfor %}
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-info">Nenhum registro encontrado para os filtros selecionados.</div>
+            {% endif %}
         </div>
     </div>
+{% endif %}
 
-    {# Área de Resultados #}
-    {% if resultados is not none %}
-        <div class="card shadow-sm">
-            <div class="card-header">
-                <h5 class="mb-0">Resultados da Busca</h5>
-            </div>
-            <div class="card-body">
-                {% if resultados %}
-                    {% for nome_motorista, preenchimentos_por_data in resultados.items() %}
-                        <div class="dossie-motorista mb-4">
-                            <h4 class="border-bottom pb-2 mb-3">Motorista: {{ nome_motorista }}</h4>
-                            {% for data, preenchimentos in preenchimentos_por_data.items() %}
-                                {% for preenchido in preenchimentos %}
-                                <div class="checklist-preenchido card mb-3">
-                                    <div class="card-header bg-light d-flex justify-content-between">
-                                        <strong>Data: {{ data.strftime('%d/%m/%Y') }}</strong>
-                                        <span>Checklist: {{ preenchido.checklist.codigo }}</span>
-                                    </div>
-                                    <div class="card-body pb-0">
-                                        <ul class="list-group list-group-flush">
-                                            {% for resposta in preenchido.respostas|sort(attribute='item.ordem') %}
-                                            <li class="list-group-item px-0">
-                                                <div class="row">
-                                                    <div class="col-md-6"><strong>Item:</strong> {{ resposta.item.texto }}</div>
-                                                    <div class="col-md-2"><strong>Resposta:</strong> {{ resposta.resposta }}</div>
-                                                    <div class="col-md-4"><strong>Obs:</strong> {{ resposta.observacao or 'N/A' }}</div>
-                                                </div>
-                                            </li>
-                                            {% endfor %}
-                                        </ul>
-                                    </div>
-                                    <!-- ========= EXIBIÇÃO DOS NOVOS CAMPOS ========= -->
-                                    {% if preenchido.outros_problemas or preenchido.solucoes_adotadas or preenchido.pendencias_gerais %}
-                                    <div class="card-footer bg-white">
-                                        <h6 class="card-title">Observações Gerais do Motorista:</h6>
-                                        {% if preenchido.outros_problemas %}
-                                            <p class="mb-1"><strong>Outros Problemas:</strong><br>{{ preenchido.outros_problemas|nl2br }}</p>
-                                        {% endif %}
-                                        {% if preenchido.solucoes_adotadas %}
-                                            <p class="mb-1"><strong>Soluções Adotadas:</strong><br>{{ preenchido.solucoes_adotadas|nl2br }}</p>
-                                        {% endif %}
-                                        {% if preenchido.pendencias_gerais %}
-                                            <p class="mb-0"><strong>Pendências para Manutenção:</strong><br>{{ preenchido.pendencias_gerais|nl2br }}</p>
-                                        {% endif %}
-                                    </div>
-                                    {% endif %}
-                                    <!-- =============================================== -->
-                                </div>
-                                {% endfor %}
-                            {% endfor %}
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="alert alert-info">Nenhum registro encontrado para os filtros selecionados.</div>
-                {% endif %}
-            </div>
-        </div>
-    {% endif %}
-</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const exportButton = document.getElementById('export-pdf-btn');
+
+    if (exportButton) {
+        exportButton.addEventListener('click', function() {
+            // Pega os valores dos filtros
+            const tipoChecklist = document.getElementById('tipo_checklist').value;
+            const veiculoId = document.getElementById('veiculo_id').value;
+            const dataInicio = document.getElementById('data_inicio').value;
+            const dataFim = document.getElementById('data_fim').value;
+
+            // Monta a URL para a rota de geração de PDF
+            const url = new URL("{{ url_for('admin.gerar_relatorio_pdf') }}", window.location.origin);
+            url.searchParams.set('tipo_checklist', tipoChecklist);
+            url.searchParams.set('veiculo_id', veiculoId);
+            url.searchParams.set('data_inicio', dataInicio);
+            url.searchParams.set('data_fim', dataFim);
+
+            // Redireciona para a URL, o que vai iniciar o download do PDF
+            window.location.href = url.toString();
+        });
+    }
+});
+</script>
 {% endblock %}

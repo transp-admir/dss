@@ -1,0 +1,195 @@
+{% extends "base_adm.html" %}
+
+{% block title %}Gerenciar Usuários - Admin{% endblock %}
+
+{% block header %}Gerenciamento de Usuários{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Card para Adicionar Novo Usuário -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Adicionar Novo Usuário</h6>
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('admin.add_usuario') }}" method="POST">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="nome" class="form-label">Nome de Usuário (para login)</label>
+                        <input type="text" class="form-control" id="nome" name="nome" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="cpf" class="form-label">CPF</label>
+                        <input type="text" class="form-control" id="cpf" name="cpf" required>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="setor" class="form-label">Setor</label>
+                        <input type="text" class="form-control" id="setor" name="setor">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="unidade_usuario" class="form-label">Unidade</label>
+                        {% if session.role == 'admin' %}
+                            <input type="text" class="form-control" id="unidade_usuario" name="unidade_usuario" list="unidades_list" placeholder="Digite ou selecione uma unidade">
+                            <datalist id="unidades_list">
+                                {% for unidade in unidades_disponiveis %}
+                                    <option value="{{ unidade }}">
+                                {% endfor %}
+                            </datalist>
+                        {% else %}
+                            <input type="text" class="form-control" id="unidade_usuario" name="unidade_usuario" value="{{ session.unidade }}" readonly>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="password" class="form-label">Senha</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="role" class="form-label">Nível de Acesso</label>
+                        <select class="form-select" id="role" name="role" required>
+                            <option value="comum" selected>Comum</option>
+                            <option value="master">Master</option>
+                            {% if session.role == 'admin' %}
+                                <option value="admin">Admin</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Adicionar Usuário</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela de Usuários Existentes -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Usuários Cadastrados</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>CPF</th>
+                            <th>Setor</th>
+                            <th>Unidade</th>
+                            <th>Nível</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for usuario in usuarios %}
+                        <tr>
+                            <td>{{ usuario.nome }}</td>
+                            <td>{{ usuario.cpf }}</td>
+                            <td>{{ usuario.setor }}</td>
+                            <td>{{ usuario.unidade }}</td>
+                            <td>
+                                {% if usuario.role == 'admin' %}
+                                    <span class="badge bg-danger">Admin</span>
+                                {% elif usuario.role == 'master' %}
+                                    <span class="badge bg-success">Master</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Comum</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal-{{ usuario.id }}">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ usuario.id }}">
+                                    <i class="fas fa-trash"></i> Excluir
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modais de Edição e Exclusão -->
+{% for usuario in usuarios %}
+<!-- Modal de Edição -->
+<div class="modal fade" id="editModal-{{ usuario.id }}" tabindex="-1" aria-labelledby="editModalLabel-{{ usuario.id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('admin.edit_usuario', usuario_id=usuario.id) }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editModalLabel-{{ usuario.id }}">Editar Usuário: {{ usuario.nome }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit-nome-{{ usuario.id }}" class="form-label">Nome de Usuário</label>
+                        <input type="text" class="form-control" id="edit-nome-{{ usuario.id }}" name="nome" value="{{ usuario.nome }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-cpf-{{ usuario.id }}" class="form-label">CPF</label>
+                        <input type="text" class="form-control" id="edit-cpf-{{ usuario.id }}" name="cpf" value="{{ usuario.cpf }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-setor-{{ usuario.id }}" class="form-label">Setor</label>
+                        <input type="text" class="form-control" id="edit-setor-{{ usuario.id }}" name="setor" value="{{ usuario.setor }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-unidade-{{ usuario.id }}" class="form-label">Unidade</label>
+                        {% if session.role == 'admin' %}
+                            <input type="text" class="form-control" id="edit-unidade-{{ usuario.id }}" name="unidade_usuario" value="{{ usuario.unidade }}" list="unidades_list">
+                        {% else %}
+                             <input type="text" class="form-control" id="edit-unidade-{{ usuario.id }}" name="unidade_usuario" value="{{ usuario.unidade }}" readonly>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-password-{{ usuario.id }}" class="form-label">Nova Senha (deixe em branco para não alterar)</label>
+                        <input type="password" class="form-control" id="edit-password-{{ usuario.id }}" name="password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-role-{{ usuario.id }}" class="form-label">Nível de Acesso</label>
+                        <select class="form-select" id="edit-role-{{ usuario.id }}" name="role" required>
+                            <option value="comum" {% if usuario.role == 'comum' %}selected{% endif %}>Comum</option>
+                            <option value="master" {% if usuario.role == 'master' %}selected{% endif %}>Master</option>
+                            {% if session.role == 'admin' %}
+                                <option value="admin" {% if usuario.role == 'admin' %}selected{% endif %}>Admin</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Exclusão -->
+<div class="modal fade" id="deleteModal-{{ usuario.id }}" tabindex="-1" aria-labelledby="deleteModalLabel-{{ usuario.id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel-{{ usuario.id }}">Confirmar Exclusão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Tem certeza que deseja excluir o usuário <strong>{{ usuario.nome }}</strong>? Esta ação não pode ser desfeita.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form action="{{ url_for('admin.delete_usuario', usuario_id=usuario.id) }}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Sim, Excluir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}

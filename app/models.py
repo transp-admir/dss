@@ -1,10 +1,12 @@
 from .extensions import db
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # --- TABELAS PRINCIPAIS ---
 
 class Motorista(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     nome = db.Column(db.String(150), nullable=False)
     cpf = db.Column(db.String(14), unique=True, nullable=False)
     rg = db.Column(db.String(20))
@@ -17,6 +19,7 @@ class Motorista(db.Model):
 
 class Conteudo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     data = db.Column(db.Date, nullable=False)
     assunto = db.Column(db.String(200), nullable=False)
     pergunta = db.Column(db.String(500), nullable=False)
@@ -42,11 +45,13 @@ class Assinatura(db.Model):
 
 class Placa(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     numero = db.Column(db.String(8), unique=True, nullable=False)
     tipo = db.Column(db.String(20), nullable=False) # Ex: CAVALO, CARRETA
 
 class Veiculo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     nome_conjunto = db.Column(db.String(100), unique=True, nullable=False)
     placa_cavalo_id = db.Column(db.Integer, db.ForeignKey('placa.id'), nullable=False)
     placa_carreta1_id = db.Column(db.Integer, db.ForeignKey('placa.id'), nullable=True)
@@ -64,6 +69,7 @@ class Veiculo(db.Model):
 
 class Checklist(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     tipo = db.Column(db.String(50), nullable=False) # DIÁRIO, SEMANAL, etc.
     codigo = db.Column(db.String(50), nullable=False)
     revisao = db.Column(db.String(20), nullable=False)
@@ -132,3 +138,28 @@ class DocumentoFixo(db.Model):
     descricao = db.Column(db.Text, nullable=True)
     nome_arquivo = db.Column(db.String(255), nullable=False)
     data_upload = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+# --- ESTRUTURA PARA USUÁRIOS DO SISTEMA ---
+
+class Usuario(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(150), unique=True, nullable=False)
+    cpf = db.Column(db.String(14), unique=True, nullable=False)
+    setor = db.Column(db.String(100), nullable=True)
+    unidade = db.Column(db.String(100), nullable=True)
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(50), nullable=False, default='comum') # Pode ser 'admin', 'master', ou 'comum'
+
+    @property
+    def password(self):
+        raise AttributeError('A senha não é um atributo legível.')
+
+    @password.setter
+    def password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f'<Usuario {self.nome}>'

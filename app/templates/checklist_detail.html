@@ -1,0 +1,57 @@
+{% extends "base_adm.html" %}
+
+{% block title %}Detalhes do Checklist - {{ checklist.titulo }}{% endblock %}
+
+{% block header %}Itens do Checklist: <span class="text-primary">{{ checklist.titulo }}</span>{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Coluna para Adicionar Itens -->
+        <div class="col-lg-5">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Adicionar Novo Item</h6>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST">
+                        <div class="mb-3">
+                            <label for="item_texto" class="form-label">Texto do Item</label>
+                            <textarea class="form-control" id="item_texto" name="texto" rows="3" placeholder="Ex: Verificar nível de óleo do motor" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Adicionar Item</button>
+                        <a href="{{ url_for('admin.checklists') }}" class="btn btn-secondary">Voltar para a Lista</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna para Listar Itens -->
+        <div class="col-lg-7">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Itens Cadastrados no Checklist</h6>
+                </div>
+                <div class="card-body">
+                    {% if checklist.itens %}
+                        <ul class="list-group list-group-flush">
+                            {% for item in checklist.itens|sort(attribute='id') %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                {{ item.texto }}
+                                <form action="{{ url_for('admin.delete_checklist_item', item_id=item.id) }}" method="POST">
+                                    <button type-="submit" class="btn btn-danger btn-sm" title="Excluir item">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-center">Ainda não há itens neste checklist. Adicione um ao lado.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

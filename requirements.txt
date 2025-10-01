@@ -11,6 +11,7 @@ click==8.2.1
 colorama==0.4.6
 cryptography==45.0.4
 cssselect2==0.8.0
+defusedxml==0.7.1
 docutils==0.22
 dotenv==0.9.9
 filetype==1.2.0
@@ -22,6 +23,7 @@ Flask-SQLAlchemy==3.1.1
 Flask-WTF==1.2.2
 fonttools==4.59.2
 fpdf==1.7.2
+fpdf2==2.8.4
 greenlet==3.2.3
 html5lib==1.1
 idna==3.10

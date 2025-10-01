@@ -1,0 +1,70 @@
+{% extends "base_adm.html" %}
+
+{% block title %}Importação em Massa{% endblock %}
+
+{% block header %}Importação de Dados em Massa{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <div class="row">
+        <!-- Coluna para Importação de Motoristas -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Importar Motoristas</h6>
+                </div>
+                <div class="card-body">
+                    <p>Selecione um arquivo <strong>.xlsx</strong> ou <strong>.csv</strong> para importar motoristas em massa.</p>
+                    <div class="alert alert-info">
+                        <strong>Formato esperado:</strong>
+                        <ul>
+                            <li><strong>Colunas obrigatórias:</strong> <code>nome</code>, <code>cpf</code>, <code>unidade</code></li>
+                            <li><strong>Colunas opcionais:</strong> <code>rg</code>, <code>cnh</code>, <code>frota</code></li>
+                            <li>A primeira linha do arquivo deve conter exatamente esses nomes de cabeçalho.</li>
+                        </ul>
+                    </div>
+                    <form action="{{ url_for('admin.importar_dados', tipo='motoristas') }}" method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file_motoristas" class="form-label">Arquivo de Motoristas</label>
+                            <input class="form-control" type="file" id="file_motoristas" name="arquivo" accept=".xlsx, .csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-upload me-2"></i>Importar Motoristas
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna para Importação de Placas -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Importar Placas</h6>
+                </div>
+                <div class="card-body">
+                    <p>Selecione um arquivo <strong>.xlsx</strong> ou <strong>.csv</strong> para importar placas em massa.</p>
+                    <div class="alert alert-info">
+                        <strong>Formato esperado:</strong>
+                        <ul>
+                            <li><strong>Colunas obrigatórias:</strong> <code>numero</code>, <code>tipo</code>, <code>unidade</code></li>
+                            <li>O valor da coluna <code>tipo</code> deve ser 'CAVALO' ou 'CARRETA'.</li>
+                            <li>A primeira linha do arquivo deve conter exatamente esses nomes de cabeçalho.</li>
+                        </ul>
+                    </div>
+                    <form action="{{ url_for('admin.importar_dados', tipo='placas') }}" method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file_placas" class="form-label">Arquivo de Placas</label>
+                            <input class="form-control" type="file" id="file_placas" name="arquivo" accept=".xlsx, .csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-upload me-2"></i>Importar Placas
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

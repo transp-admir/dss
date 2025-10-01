@@ -1,0 +1,268 @@
+{% extends "base_adm.html" %}
+
+{% block title %}Gerenciar Veículos e Placas{% endblock %}
+
+{% block header %}Gerenciamento de Veículos e Placas{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+
+        <!-- Coluna para Gerenciamento de Conjuntos (Veículos) -->
+        <div class="col-lg-8">
+            <!-- Card para Adicionar Novo Conjunto -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Adicionar Novo Conjunto</h6>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('admin.add_veiculo') }}" method="POST">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="nome_conjunto" class="form-label">Nome do Conjunto</label>
+                                <input type="text" class="form-control" id="nome_conjunto" name="nome_conjunto" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="unidade" class="form-label">Unidade</label>
+                                {% if session.role == 'admin' %}
+                                    <input type="text" class="form-control" id="unidade" name="unidade" list="unidades_list" placeholder="Digite ou selecione" required>
+                                    <datalist id="unidades_list">
+                                        {% for u in unidades_disponiveis %}<option value="{{ u }}">{% endfor %}
+                                    </datalist>
+                                {% else %}
+                                    <input type="text" class="form-control" id="unidade" name="unidade" value="{{ session.unidade }}" readonly>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                             <div class="col-md-4 mb-3">
+                                <label for="placa_cavalo_id" class="form-label">Placa Cavalo <span class="text-danger">*</span></label>
+                                <select class="form-select" id="placa_cavalo_id" name="placa_cavalo_id" required>
+                                    <option value="">Selecione...</option>
+                                    {% for placa in placas %}{% if placa.tipo == 'CAVALO' %}<option value="{{ placa.id }}">{{ placa.numero }}</option>{% endif %}{% endfor %}
+                                </select>
+                            </div>
+                             <div class="col-md-4 mb-3">
+                                <label for="placa_carreta1_id" class="form-label">Placa Carreta 1</label>
+                                <select class="form-select" id="placa_carreta1_id" name="placa_carreta1_id">
+                                    <option value="">Nenhuma</option>
+                                    {% for placa in placas %}{% if placa.tipo == 'CARRETA' %}<option value="{{ placa.id }}">{{ placa.numero }}</option>{% endif %}{% endfor %}
+                                </select>
+                            </div>
+                             <div class="col-md-4 mb-3">
+                                <label for="placa_carreta2_id" class="form-label">Placa Carreta 2</label>
+                                <select class="form-select" id="placa_carreta2_id" name="placa_carreta2_id">
+                                    <option value="">Nenhuma</option>
+                                    {% for placa in placas %}{% if placa.tipo == 'CARRETA' %}<option value="{{ placa.id }}">{{ placa.numero }}</option>{% endif %}{% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="obs" class="form-label">Observações</label>
+                            <textarea class="form-control" id="obs" name="obs" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Salvar Conjunto</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Tabela de Conjuntos Existentes -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Conjuntos Cadastrados</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Conjunto</th>
+                                    <th>Unidade</th>
+                                    <th>Placas Vinculadas</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for veiculo in veiculos %}
+                                <tr>
+                                    <td>{{ veiculo.nome_conjunto }}</td>
+                                    <td>{{ veiculo.unidade }}</td>
+                                    <td>
+                                        {% if veiculo.placa_cavalo %}<span class="badge bg-primary text-white">{{ veiculo.placa_cavalo.numero }}</span>{% endif %}
+                                        {% if veiculo.placa_carreta1 %}<span class="badge bg-info text-dark">{{ veiculo.placa_carreta1.numero }}</span>{% endif %}
+                                        {% if veiculo.placa_carreta2 %}<span class="badge bg-info text-dark">{{ veiculo.placa_carreta2.numero }}</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editVeiculoModal-{{ veiculo.id }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteVeiculoModal-{{ veiculo.id }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna para Gerenciamento de Placas -->
+        <div class="col-lg-4">
+            <!-- Card para Adicionar Nova Placa -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Adicionar Nova Placa</h6>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('admin.add_placa') }}" method="POST">
+                        <div class="mb-3">
+                            <label for="placa_numero" class="form-label">Número da Placa</label>
+                            <input type="text" class="form-control" id="placa_numero" name="placa_numero" style="text-transform:uppercase" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="placa_tipo" class="form-label">Tipo de Placa</label>
+                            <select id="placa_tipo" name="placa_tipo" class="form-select" required>
+                                <option value="" disabled selected>Selecione o tipo...</option>
+                                <option value="CAVALO">Cavalo</option>
+                                <option value="CARRETA">Carreta</option>
+                            </select>
+                        </div>
+                        {% if session.role == 'admin' %}
+                        <div class="mb-3">
+                            <label for="unidade_placa" class="form-label">Unidade</label>
+                            <input type="text" class="form-control" id="unidade_placa" name="unidade" list="unidades_list" required>
+                        </div>
+                        {% endif %}
+                        <button type="submit" class="btn btn-primary">Adicionar Placa</button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Card para Listar Placas -->
+            <div class="card shadow mb-4">
+                 <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Placas Cadastradas</h6>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush">
+                        {% for placa in placas|sort(attribute='numero') %}
+                             <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <!-- CORREÇÃO: Usa placa.numero -->
+                                    <strong>{{ placa.numero }}</strong> <small class="text-muted">({{ placa.tipo|capitalize }})</small><br>
+                                    <small>Vinculada a: 
+                                        <!-- CORREÇÃO: Usa o mapa de vínculos para achar o veículo -->
+                                        {% if placa.id in placa_veiculo_map %}
+                                            <span class="badge bg-secondary">{{ placa_veiculo_map[placa.id].nome_conjunto }}</span>
+                                        {% else %}
+                                            Ninguém
+                                        {% endif %}
+                                    </small>
+                                </div>
+                                <!-- CORREÇÃO: Verifica se a placa está vinculada antes de mostrar o botão de excluir -->
+                                {% if placa.id not in placa_veiculo_map %}
+                                <form action="{{ url_for('admin.delete_placa', placa_id=placa.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir a placa {{placa.numero}}?');">
+                                    <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-times"></i></button>
+                                </form>
+                                {% endif %}
+                            </li>
+                        {% else %}
+                            <li class="list-group-item">Nenhuma placa cadastrada.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modais de Edição e Exclusão para Veículos -->
+{% for veiculo in veiculos %}
+<!-- Modal de Edição de Veículo -->
+<div class="modal fade" id="editVeiculoModal-{{ veiculo.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form action="{{ url_for('admin.edit_veiculo', veiculo_id=veiculo.id) }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Conjunto: {{ veiculo.nome_conjunto }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nome do Conjunto</label>
+                            <input type="text" class="form-control" name="nome_conjunto_edit" value="{{ veiculo.nome_conjunto }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Unidade</label>
+                            {% if session.role == 'admin' %}
+                                <input type="text" class="form-control" name="unidade_edit" value="{{ veiculo.unidade }}" list="unidades_list" required>
+                            {% else %}
+                                <input type="text" class="form-control" value="{{ veiculo.unidade }}" readonly>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Placa Cavalo</label>
+                            <select name="placa_cavalo_id_edit" class="form-select" required>
+                                {% for p in placas %}{% if p.tipo == 'CAVALO' %}<option value="{{ p.id }}" {% if veiculo.placa_cavalo_id == p.id %}selected{% endif %}>{{ p.numero }}</option>{% endif %}{% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                             <label class="form-label">Placa Carreta 1</label>
+                             <select name="placa_carreta1_id_edit" class="form-select">
+                                <option value="">Nenhuma</option>
+                                {% for p in placas %}{% if p.tipo == 'CARRETA' %}<option value="{{ p.id }}" {% if veiculo.placa_carreta1_id == p.id %}selected{% endif %}>{{ p.numero }}</option>{% endif %}{% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                             <label class="form-label">Placa Carreta 2</label>
+                             <select name="placa_carreta2_id_edit" class="form-select">
+                                <option value="">Nenhuma</option>
+                                {% for p in placas %}{% if p.tipo == 'CARRETA' %}<option value="{{ p.id }}" {% if veiculo.placa_carreta2_id == p.id %}selected{% endif %}>{{ p.numero }}</option>{% endif %}{% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observações</label>
+                        <textarea class="form-control" name="obs_edit" rows="2">{{ veiculo.obs or '' }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Exclusão de Veículo -->
+<div class="modal fade" id="deleteVeiculoModal-{{ veiculo.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Exclusão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir o conjunto <strong>{{ veiculo.nome_conjunto }}</strong>?</p>
+                <p class="text-danger">Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form action="{{ url_for('admin.delete_veiculo', veiculo_id=veiculo.id) }}" method="POST">
+                    <button type="submit" class="btn btn-danger">Sim, Excluir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}

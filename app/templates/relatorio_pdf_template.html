@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Checklist</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 18pt;
+        }
+        .header p {
+            margin: 5px 0;
+            font-size: 11pt;
+            color: #555;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background-color: #E0E0E0;
+            font-weight: bold;
+            font-size: 11pt;
+        }
+        .sub-item-header td {
+            background-color: #F0F0F0;
+            font-weight: bold;
+            font-style: italic;
+            border-top-width: 2px;
+        }
+        .item-principal td:first-child {
+            font-weight: bold;
+            width: 5%;
+            text-align: center;
+        }
+        .item-principal td:nth-child(2) {
+            width: 70%;
+        }
+        .item-principal td:last-child {
+            width: 25%;
+            text-align: center;
+        }
+        .sub-item td:first-child {
+            padding-left: 20px;
+        }
+        .resposta {
+            font-weight: bold;
+        }
+        .conforme { color: green; }
+        .nao-conforme { color: red; }
+        .na { color: grey; }
+        .observacao {
+            font-style: italic;
+            color: #444;
+            font-size: 9pt;
+        }
+        .footer {
+            position: fixed;
+            bottom: -30px;
+            left: 0;
+            right: 0;
+            height: 50px;
+            text-align: center;
+            font-size: 9pt;
+        }
+        .page-number:before {
+            content: "Página " counter(page);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Relatório de Checklist - {{ veiculo_nome }}</h1>
+        <p><strong>Período:</strong> {{ data_inicio }} a {{ data_fim }}</p>
+        <p><strong>Checklist:</strong> {{ checklist_tipo }}</p>
+    </div>
+
+    <div class="footer">
+        <div class="page-number"></div>
+    </div>
+
+    {% for data, preenchimentos in dados.items() %}
+        <h2 style="font-size: 14pt; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 30px;">
+            Data: {{ data.strftime('%d/%m/%Y') }}
+        </h2>
+        {% for p in preenchimentos %}
+            <p style="font-size: 11pt;">Preenchido por: <strong>{{ p.motorista.nome }}</strong> às {{ p.data_preenchimento.strftime('%H:%M') }}</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Descrição</th>
+                        <th>Resposta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item_principal in itens_checklist %}
+                        {% if item_principal.sub_itens|length > 0 %}
+                            <tr class="sub-item-header">
+                                <td colspan="3">{{ item_principal.texto }}</td>
+                            </tr>
+                            {% for sub_item in item_principal.sub_itens %}
+                                {% set resposta_obj = p.respostas|selectattr('item_id', '==', sub_item.id)|first %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ sub_item.texto }}</td>
+                                    <td>
+                                        {% if resposta_obj %}
+                                            <span class="resposta {% if resposta_obj.resposta == 'CONFORME' %}conforme{% elif resposta_obj.resposta == 'NAO CONFORME' %}nao-conforme{% else %}na{% endif %}">
+                                                {{ resposta_obj.resposta }}
+                                            </span>
+                                            {% if resposta_obj.observacao %}
+                                                <br><span class="observacao">Obs: {{ resposta_obj.observacao }}</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="resposta na">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            {% set resposta_obj = p.respostas|selectattr('item_id', '==', item_principal.id)|first %}
+                            <tr class="item-principal">
+                                <td>{{ item_principal.ordem }}</td>
+                                <td>{{ item_principal.texto }}</td>
+                                <td>
+                                    {% if resposta_obj %}
+                                        <span class="resposta {% if resposta_obj.resposta == 'CONFORME' %}conforme{% elif resposta_obj.resposta == 'NAO CONFORME' %}nao-conforme{% else %}na{% endif %}">
+                                            {{ resposta_obj.resposta }}
+                                        </span>
+                                        {% if resposta_obj.observacao %}
+                                            <br><span class="observacao">Obs: {{ resposta_obj.observacao }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="resposta na">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endfor %}
+    {% endfor %}
+
+</body>
+</html>
