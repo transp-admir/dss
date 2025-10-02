@@ -2,6 +2,42 @@
 
 {% block title %}Preencher Checklist{% endblock %}
 
+{% block head %}
+<style>
+    /* Estilos para o bloco de extintores responsivo */
+    .extintor-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+    }
+    .extintor-header {
+        background-color: #f8f9fa;
+        padding: 0.75rem 1.25rem;
+        font-weight: bold;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .extintor-body {
+        padding: 1.25rem;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    /* Em telas maiores, mostra os campos lado a lado */
+    @media (min-width: 768px) {
+        .extintor-body {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            align-items: end;
+        }
+    }
+    .form-group-radio .btn-group {
+        width: 100%;
+    }
+    .form-group-radio label {
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+</style>
+{% endblock %}
+
 {% block header %}
     {{ checklist.codigo }} - {{ checklist.tipo }}
     <small class="d-block text-muted fw-normal">Revisão: {{ checklist.revisao }} | Data: {{ checklist.data.strftime('%d/%m/%Y') }}</small>
@@ -19,58 +55,53 @@
             Preenchendo checklist para o veículo: <strong>{{ veiculo.nome_conjunto }}</strong>
         </div>
 
-        <!-- Loop principal simplificado usando itens_principais -->
         {% for item in itens_principais %}
-
-            <!-- LINHA DE DEBUG -->
-            <div class="alert alert-warning">DEBUG: Texto do item recebido: <strong>{{ item.texto }}</strong></div>
-            
             {# Lógica para renderizar o bloco de extintores #}
             {% if item.texto == '__BLOCO_EXTINTORES__' %}
                 <div class="card mt-4 mb-3">
                     <div class="card-header">
                         <h5>Controle de Extintores</h5>
                     </div>
-                    <div class="card-body table-responsive">
-                        <!-- Input escondido para que o backend saiba que este bloco está presente -->
+                    <div class="card-body">
                         <input type="hidden" name="item_textos_especiais" value="__BLOCO_EXTINTORES__">
 
-                        <table class="table table-bordered align-middle text-center">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width: 15%;">Local</th>
-                                    <th style="width: 15%;">Tipo</th>
-                                    <th style="width: 15%;">Peso</th>
-                                    <th style="width: 20%;">Vencimento</th>
-                                    <th style="width: 15%;">Trocado?</th>
-                                    <th>Motivo da Troca</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% set locais = ['CABINE', '1° CARRETA L.D', '1° CARRETA L.E', '2° CARRETA L.D', '2° CARRETA L.E'] %}
-                                {% for i in range(5) %}
-                                <tr>
-                                    <td>
-                                        {{ locais[i] }}
-                                        <input type="hidden" name="extintor-{{ i }}-local" value="{{ locais[i] }}">
-                                    </td>
-                                    <td><input type="text" class="form-control" name="extintor-{{ i }}-tipo"></td>
-                                    <td><input type="text" class="form-control" name="extintor-{{ i }}-peso"></td>
-                                    <td><input type="date" class="form-control" name="extintor-{{ i }}-vencimento"></td>
-                                    <td>
-                                        <div class="btn-group w-100" role="group">
-                                            <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="trocado-sim-{{ i }}" value="Sim" autocomplete="off">
-                                            <label class="btn btn-outline-primary btn-sm" for="trocado-sim-{{ i }}">Sim</label>
+                        {% set locais = ['CABINE', '1° CARRETA L.D', '1° CARRETA L.E', '2° CARRETA L.D', '2° CARRETA L.E'] %}
+                        {% for i in range(5) %}
+                        <div class="extintor-card mb-3">
+                            <div class="extintor-header">
+                                {{ locais[i] }}
+                                <input type="hidden" name="extintor-{{ i }}-local" value="{{ locais[i] }}">
+                            </div>
+                            <div class="extintor-body">
+                                <div class="form-group">
+                                    <label for="extintor-{{ i }}-tipo">Tipo</label>
+                                    <input type="text" class="form-control" id="extintor-{{ i }}-tipo" name="extintor-{{ i }}-tipo" value="ABC">
+                                </div>
+                                <div class="form-group">
+                                    <label for="extintor-{{ i }}-peso">Peso (KG)</label>
+                                    <input type="text" inputmode="decimal" class="form-control" id="extintor-{{ i }}-peso" name="extintor-{{ i }}-peso" placeholder="Ex: 2.5">
+                                </div>
+                                <div class="form-group">
+                                    <label for="extintor-{{ i }}-vencimento">Vencimento</label>
+                                    <input type="text" class="form-control date-mask" id="extintor-{{ i }}-vencimento" name="extintor-{{ i }}-vencimento" placeholder="DD/MM/AAAA">
+                                </div>
+                                <div class="form-group-radio">
+                                     <label>Trocado?</label>
+                                    <div class="btn-group" role="group">
+                                        <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="trocado-sim-{{ i }}" value="Sim" autocomplete="off">
+                                        <label class="btn btn-outline-primary btn-sm" for="trocado-sim-{{ i }}">Sim</label>
 
-                                            <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="trocado-nao-{{ i }}" value="Não" autocomplete="off" checked>
-                                            <label class="btn btn-outline-secondary btn-sm" for="trocado-nao-{{ i }}">Não</label>
-                                        </div>
-                                    </td>
-                                    <td><input type="text" class="form-control" name="extintor-{{ i }}-motivo"></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                        <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="trocado-nao-{{ i }}" value="Não" autocomplete="off" checked>
+                                        <label class="btn btn-outline-secondary btn-sm" for="trocado-nao-{{ i }}">Não</label>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="extintor-{{ i }}-motivo">Motivo da Troca</label>
+                                    <input type="text" class="form-control" id="extintor-{{ i }}-motivo" name="extintor-{{ i }}-motivo">
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
 
@@ -121,8 +152,6 @@
             {% endif %}
         {% endfor %}
 
-        <!-- O resto do formulário (Observações, Termo, Assinaturas) permanece o mesmo -->
-
         <!-- Observações Gerais -->
         <div class="card mt-4">
             <div class="card-header">
@@ -164,7 +193,7 @@
             <div class="col-md-6 mb-3 mb-md-0">
                 <div class="card h-100">
                     <div class="card-header text-center">
-                        <h5>Assinatura do Motorista</h5>
+                        <h5>Assinatura do Motorista (Obrigatória)</h5>
                     </div>
                     <div class="card-body text-center">
                         <div style="border: 1px solid #ced4da; border-radius: .25rem; position: relative; height: 200px; margin: 0 auto; max-width: 400px;">
@@ -180,7 +209,7 @@
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-header text-center">
-                        <h5>Assinatura do Responsável</h5>
+                        <h5>Assinatura do Responsável (Opcional)</h5>
                     </div>
                     <div class="card-body text-center">
                         <div style="border: 1px solid #ced4da; border-radius: .25rem; position: relative; height: 200px; margin: 0 auto; max-width: 400px;">
@@ -206,6 +235,7 @@
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Configuração dos pads de assinatura
         const canvasMotorista = document.getElementById('signature-canvas-motorista');
         const signaturePadMotorista = new SignaturePad(canvasMotorista, { backgroundColor: 'rgb(255, 255, 255)' });
 
@@ -231,23 +261,32 @@
         document.getElementById('clear-signature-motorista').addEventListener('click', () => signaturePadMotorista.clear());
         document.getElementById('clear-signature-responsavel').addEventListener('click', () => signaturePadResponsavel.clear());
 
-        document.querySelector('form').addEventListener('submit', function (event) {
-            let motoristaAssinou = !signaturePadMotorista.isEmpty();
-            let responsavelAssinou = !signaturePadResponsavel.isEmpty();
+        // Máscara de data para os campos de vencimento
+        document.querySelectorAll('.date-mask').forEach(input => {
+            input.addEventListener('input', function (e) {
+                let v = e.target.value.replace(/\D/g, '');
+                v = v.replace(/(\d{2})(\d)/, '$1/$2');
+                v = v.replace(/(\d{2})\/(\d{2})(\d)/, '$1/$2/$3');
+                e.target.value = v.slice(0, 10);
+            });
+        });
 
-            if (!motoristaAssinou) {
+        // Validação no envio do formulário
+        document.querySelector('form').addEventListener('submit', function (event) {
+            // Assinatura do motorista é OBRIGATÓRIA
+            if (signaturePadMotorista.isEmpty()) {
                 alert("A assinatura do Motorista é obrigatória.");
                 event.preventDefault();
                 return;
             }
-            if (!responsavelAssinou) {
-                alert("A assinatura do Responsável é obrigatória.");
-                event.preventDefault();
-                return;
-            }
-            
             document.getElementById('assinatura_motorista_input').value = signaturePadMotorista.toDataURL('image/png');
-            document.getElementById('assinatura_responsavel_input').value = signaturePadResponsavel.toDataURL('image/png');
+
+            // Assinatura do responsável é OPCIONAL
+            if (!signaturePadResponsavel.isEmpty()) {
+                document.getElementById('assinatura_responsavel_input').value = signaturePadResponsavel.toDataURL('image/png');
+            } else {
+                document.getElementById('assinatura_responsavel_input').value = '';
+            }
         });
     });
 </script>

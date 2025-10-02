@@ -402,6 +402,12 @@ def ver_conteudo(conteudo_id):
 
 
 
+# Adicione esta importação no topo do seu arquivo app/routes.py,
+# junto com as outras importações de models.
+from .models import ExtintorCheck 
+
+# ... (restante do seu código)
+
 @main_bp.route('/checklist/preencher/<int:checklist_id>', methods=['GET', 'POST'])
 def preencher_checklist(checklist_id):
     if 'motorista_id' not in session:
@@ -411,53 +417,36 @@ def preencher_checklist(checklist_id):
     motorista = Motorista.query.get(session['motorista_id'])
     veiculo_do_motorista = motorista.veiculo
 
-    # --- LÓGICA DE SALVAMENTO (POST) ---
     if request.method == 'POST':
         if not veiculo_do_motorista:
             flash('Você não está vinculado a um veículo. Contate o administrador.', 'danger')
             return redirect(url_for('main.lista_checklists_motorista'))
 
+        # Captura as assinaturas e outros campos
         assinatura_motorista_data = request.form.get('assinatura_motorista')
         assinatura_responsavel_data = request.form.get('assinatura_responsavel')
         outros_problemas = request.form.get('outros_problemas')
         solucoes_adotadas = request.form.get('solucoes_adotadas')
         pendencias_gerais = request.form.get('pendencias_gerais')
 
-        if not assinatura_motorista_data or not assinatura_responsavel_data:
-            flash('As assinaturas do Motorista e do Responsável são obrigatórias.', 'danger')
+        # Validação da assinatura obrigatória do motorista
+        if not assinatura_motorista_data:
+            flash('A assinatura do motorista é obrigatória.', 'danger')
             return redirect(url_for('main.preencher_checklist', checklist_id=checklist_id))
 
+        # Cria o objeto ChecklistPreenchido
         novo_preenchimento = ChecklistPreenchido(
             motorista_id=motorista.id,
             veiculo_id=veiculo_do_motorista.id,
             checklist_id=checklist.id,
             assinatura_motorista=assinatura_motorista_data,
-            assinatura_responsavel=assinatura_responsavel_data,
+            assinatura_responsavel=assinatura_responsavel_data, # Salva a assinatura opcional
             outros_problemas=outros_problemas,
             solucoes_adotadas=solucoes_adotadas,
             pendencias_gerais=pendencias_gerais
         )
         db.session.add(novo_preenchimento)
 
-        # Salva os dados dos extintores, se houver
-        if '__BLOCO_EXTINTORES__' in request.form.getlist('item_textos_especiais', []):
-            for i in range(5):
-                local = request.form.get(f'extintor-{i}-local')
-                tipo = request.form.get(f'extintor-{i}-tipo')
-                peso = request.form.get(f'extintor-{i}-peso')
-                vencimento_str = request.form.get(f'extintor-{i}-vencimento')
-                trocado = request.form.get(f'extintor-{i}-trocado')
-                motivo = request.form.get(f'extintor-{i}-motivo')
-
-                if tipo or peso or vencimento_str:
-                    vencimento = datetime.strptime(vencimento_str, '%Y-%m-%d').date() if vencimento_str else None
-                    novo_extintor = ExtintorCheck(
-                        preenchimento=novo_preenchimento,
-                        local=local, tipo=tipo, peso=peso, vencimento=vencimento,
-                        trocado=trocado, motivo_troca=motivo
-                    )
-                    db.session.add(novo_extintor)
-        
         # Salva as respostas dos itens normais
         respostas_adicionadas = []
         for key in request.form:
@@ -467,23 +456,60 @@ def preencher_checklist(checklist_id):
                 observacao = request.form.get(f'obs-{item_id}', '')
 
                 nova_resposta = ChecklistResposta(
-                    preenchimento=novo_preenchimento, item_id=item_id,
-                    resposta=resposta_texto, observacao=observacao
+                    preenchimento=novo_preenchimento,
+                    item_id=item_id,
+                    resposta=resposta_texto,
+                    observacao=observacao
                 )
                 db.session.add(nova_resposta)
                 respostas_adicionadas.append(nova_resposta)
 
+        # --- NOVA LÓGICA PARA SALVAR DADOS DOS EXTINTORES ---
+        for i in range(5): # Loop para os 5 blocos de extintores
+            local = request.form.get(f'extintor-{i}-local')
+            tipo = request.form.get(f'extintor-{i}-tipo')
+            peso = request.form.get(f'extintor-{i}-peso')
+            vencimento_str = request.form.get(f'extintor-{i}-vencimento')
+            trocado = request.form.get(f'extintor-{i}-trocado')
+            motivo_troca = request.form.get(f'extintor-{i}-motivo')
+
+            # Só salva se houver algum dado preenchido (além do tipo padrão)
+            if peso or vencimento_str or motivo_troca:
+                vencimento_data = None
+                if vencimento_str:
+                    try:
+                        # Converte a data do formato DD/MM/AAAA para o formato do banco
+                        vencimento_data = datetime.strptime(vencimento_str, '%d/%m/%Y').date()
+                    except ValueError:
+                        # Ignora data inválida, mas continua salvando o resto
+                        pass
+
+                novo_extintor = ExtintorCheck(
+                    preenchimento=novo_preenchimento,
+                    local=local,
+                    tipo=tipo,
+                    peso=peso,
+                    vencimento=vencimento_data,
+                    trocado=trocado,
+                    motivo_troca=motivo_troca
+                )
+                db.session.add(novo_extintor)
+
         db.session.flush()
 
-        # Cria pendências para respostas "NAO CONFORME"
+        # Lógica para criar pendências (permanece a mesma)
         for resposta in respostas_adicionadas:
             if resposta.resposta == 'NAO CONFORME':
                 pendencia_existente = Pendencia.query.filter_by(
-                    item_id=resposta.item_id, veiculo_id=veiculo_do_motorista.id, status='PENDENTE'
+                    item_id=resposta.item_id,
+                    veiculo_id=veiculo_do_motorista.id,
+                    status='PENDENTE'
                 ).first()
                 if not pendencia_existente:
                     nova_pendencia = Pendencia(
-                        item_id=resposta.item_id, veiculo_id=veiculo_do_motorista.id, resposta_abertura_id=resposta.id
+                        item_id=resposta.item_id,
+                        veiculo_id=veiculo_do_motorista.id,
+                        resposta_abertura_id=resposta.id
                     )
                     db.session.add(nova_pendencia)
         
@@ -491,11 +517,9 @@ def preencher_checklist(checklist_id):
         flash('Checklist enviado com sucesso!', 'success')
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    # --- LÓGICA DE EXIBIÇÃO (GET) ---
-    # Busca os itens principais ordenados. Simples e direto.
+    # A parte 'GET' da função permanece a mesma
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
     pendencias_abertas = set()
-
     if veiculo_do_motorista:
         lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
         pendencias_abertas = {p.item_id for p in lista_pendencias}
@@ -503,29 +527,8 @@ def preencher_checklist(checklist_id):
     return render_template(
         'motorista_preencher_checklist.html',
         checklist=checklist,
-        veiculo=veiculo_do_motorista, 
-        itens_principais=itens_principais,  # Enviando a lista ordenada diretamente
-        pendencias_abertas=pendencias_abertas
-    )
-
-    # A parte 'GET' da função (que exibe o formulário) permanece a mesma
-    itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
-    itens_agrupados = {}
-    pendencias_abertas = set()
-
-    if veiculo_do_motorista:
-        lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
-        pendencias_abertas = {p.item_id for p in lista_pendencias}
-
-    for item in itens_principais:
-        sub_itens = item.sub_itens.order_by(ChecklistItem.ordem).all()
-        itens_agrupados[item] = sub_itens if sub_itens else []
-
-    return render_template(
-        'motorista_preencher_checklist.html',
-        checklist=checklist,
-        veiculo=veiculo_do_motorista, 
-        itens_agrupados=itens_agrupados, 
+        veiculo=veiculo_do_motorista,
+        itens_principais=itens_principais,
         pendencias_abertas=pendencias_abertas
     )
 
