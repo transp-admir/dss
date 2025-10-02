@@ -13,10 +13,29 @@ class Motorista(db.Model):
     rg = db.Column(db.String(20))
     cnh = db.Column(db.String(20))
     frota = db.Column(db.String(50))
+    password_hash = db.Column(db.String(256), nullable=True)
     veiculo_id = db.Column(db.Integer, db.ForeignKey('veiculo.id'), nullable=True)
     
     assinaturas = db.relationship('Assinatura', backref='motorista', lazy=True)
     checklists_preenchidos = db.relationship('ChecklistPreenchido', backref='motorista', lazy=True)
+
+    def set_password(self, password):
+        if password:
+            self.password_hash = generate_password_hash(password)
+        else:
+            # Se nenhuma senha for fornecida, use os 6 primeiros dígitos do CPF como padrão.
+            if self.cpf:
+                self.password_hash = generate_password_hash(self.cpf[:6])
+
+    def check_password(self, password):
+        # Se o hash da senha existir no banco, use a verificação segura.
+        if self.password_hash:
+            return check_password_hash(self.password_hash, password)
+        # Fallback para motoristas antigos: se não houver hash, compare diretamente.
+        elif self.cpf:
+            return password == self.cpf[:6]
+        # Se não houver nem hash nem CPF, a senha é inválida.
+        return False
 
 class Conteudo(db.Model):
     id = db.Column(db.Integer, primary_key=True)

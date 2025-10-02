@@ -9,27 +9,27 @@
 
     <div class="row">
         <!-- Coluna para Importação de Motoristas -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Importar Motoristas</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">1. Importar Motoristas</h6>
                 </div>
                 <div class="card-body">
-                    <p>Selecione um arquivo <strong>.xlsx</strong> ou <strong>.csv</strong> para importar motoristas em massa.</p>
-                    <div class="alert alert-info">
+                    <p>Importe motoristas a partir de um arquivo <strong>.xlsx</strong> ou <strong>.csv</strong>.</p>
+                    <div class="alert alert-info small">
                         <strong>Formato esperado:</strong>
                         <ul>
-                            <li><strong>Colunas obrigatórias:</strong> <code>nome</code>, <code>cpf</code>, <code>unidade</code></li>
-                            <li><strong>Colunas opcionais:</strong> <code>rg</code>, <code>cnh</code>, <code>frota</code></li>
-                            <li>A primeira linha do arquivo deve conter exatamente esses nomes de cabeçalho.</li>
+                            <li><strong>Obrigatórias:</strong> <code>nome</code>, <code>cpf</code>, <code>unidade</code></li>
+                            <li><strong>Opcionais:</strong> <code>rg</code>, <code>cnh</code>, <code>frota</code>, <code>operacao</code></li>
+                            <li>A 1ª linha deve conter os cabeçalhos.</li>
+                             <li>Motoristas com CPF já cadastrado serão ignorados.</li>
                         </ul>
                     </div>
                     <form action="{{ url_for('admin.importar_dados', tipo='motoristas') }}" method="POST" enctype="multipart/form-data">
                         <div class="mb-3">
-                            <label for="file_motoristas" class="form-label">Arquivo de Motoristas</label>
-                            <input class="form-control" type="file" id="file_motoristas" name="arquivo" accept=".xlsx, .csv" required>
+                            <input class="form-control" type="file" name="arquivo" accept=".xlsx, .csv" required>
                         </div>
-                        <button type="submit" class="btn btn-success">
+                        <button type="submit" class="btn btn-success w-100">
                             <i class="fas fa-upload me-2"></i>Importar Motoristas
                         </button>
                     </form>
@@ -38,28 +38,57 @@
         </div>
 
         <!-- Coluna para Importação de Placas -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Importar Placas</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">2. Importar Placas</h6>
                 </div>
                 <div class="card-body">
-                    <p>Selecione um arquivo <strong>.xlsx</strong> ou <strong>.csv</strong> para importar placas em massa.</p>
-                    <div class="alert alert-info">
+                    <p>Importe placas avulsas. As placas devem existir antes de montar os conjuntos.</p>
+                    <div class="alert alert-info small">
                         <strong>Formato esperado:</strong>
                         <ul>
-                            <li><strong>Colunas obrigatórias:</strong> <code>numero</code>, <code>tipo</code>, <code>unidade</code></li>
-                            <li>O valor da coluna <code>tipo</code> deve ser 'CAVALO' ou 'CARRETA'.</li>
-                            <li>A primeira linha do arquivo deve conter exatamente esses nomes de cabeçalho.</li>
+                            <li><strong>Obrigatórias:</strong> <code>numero</code>, <code>tipo</code>, <code>unidade</code></li>
+                            <li><strong>Opcional:</strong> <code>operacao</code></li>
+                            <li>O <code>tipo</code> deve ser <strong>CAVALO</strong> ou <strong>CARRETA</strong>.</li>
+                            <li>Placas com número já cadastrado serão ignoradas.</li>
                         </ul>
                     </div>
                     <form action="{{ url_for('admin.importar_dados', tipo='placas') }}" method="POST" enctype="multipart/form-data">
                         <div class="mb-3">
-                            <label for="file_placas" class="form-label">Arquivo de Placas</label>
-                            <input class="form-control" type="file" id="file_placas" name="arquivo" accept=".xlsx, .csv" required>
+                            <input class="form-control" type="file" name="arquivo" accept=".xlsx, .csv" required>
                         </div>
-                        <button type="submit" class="btn btn-success">
+                        <button type="submit" class="btn btn-success w-100">
                             <i class="fas fa-upload me-2"></i>Importar Placas
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+         <!-- Coluna para Importação de Conjuntos -->
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">3. Importar Conjuntos Formados</h6>
+                </div>
+                <div class="card-body">
+                    <p>Monte os conjuntos (veículos) a partir das placas já importadas.</p>
+                    <div class="alert alert-info small">
+                        <strong>Formato esperado:</strong>
+                        <ul>
+                            <li><strong>Obrigatórias:</strong> <code>nome_conjunto</code>, <code>unidade</code>, <code>placa_cavalo</code></li>
+                            <li><strong>Opcionais:</strong> <code>placa_carreta1</code>, <code>placa_carreta2</code>, <code>operacao</code>, <code>obs</code></li>
+                            <li>Use o número das placas para preencher as colunas.</li>
+                            <li>Conjuntos com nome já cadastrado serão ignorados.</li>
+                        </ul>
+                    </div>
+                    <form action="{{ url_for('admin.importar_dados', tipo='conjuntos') }}" method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <input class="form-control" type="file" name="arquivo" accept=".xlsx, .csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-truck-pickup me-2"></i>Importar Conjuntos
                         </button>
                     </form>
                 </div>

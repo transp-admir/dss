@@ -66,3 +66,6 @@ database.db
 .vscode/
 *.sublime-project
 *.sublime-workspace
+__pycache__/
+*.pyc
+instance/database.db

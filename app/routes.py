@@ -126,32 +126,26 @@ def veiculos():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
-    # Queries base
+    # Filtra os veículos e placas com base na unidade do usuário
     veiculos_query = Veiculo.query
     placas_query = Placa.query
-
     if user_role != 'admin':
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
         placas_query = placas_query.filter(Placa.unidade == user_unidade)
-    
+
     lista_veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
-    lista_placas = placas_query.order_by(Placa.numero).all()
+    todas_as_placas = placas_query.order_by(Placa.numero).all()
     
-    # Prepara as placas disponíveis para os modais de edição
-    placas_disponiveis = {'CAVALO': [], 'CARRETA': []}
-    for p in lista_placas:
-        # Uma placa está disponível se não estiver vinculada a nenhum veículo.
-        # Adicionamos essa lógica porque o novo modal precisa dela.
-        veiculo_associado = Veiculo.query.filter(
-            (Veiculo.placa_cavalo_id == p.id) |
-            (Veiculo.placa_carreta1_id == p.id) |
-            (Veiculo.placa_carreta2_id == p.id)
-        ).first()
-        if not veiculo_associado:
-            if p.tipo == 'CAVALO':
-                placas_disponiveis['CAVALO'].append(p)
-            elif p.tipo == 'CARRETA':
-                placas_disponiveis['CARRETA'].append(p)
+    # Identifica os IDs de todas as placas que já estão em uso
+    placas_em_uso_ids = set()
+    for v in Veiculo.query.all(): # Precisamos checar todos os veículos, não apenas os filtrados
+        if v.placa_cavalo_id: placas_em_uso_ids.add(v.placa_cavalo_id)
+        if v.placa_carreta1_id: placas_em_uso_ids.add(v.placa_carreta1_id)
+        if v.placa_carreta2_id: placas_em_uso_ids.add(v.placa_carreta2_id)
+
+    # Cria listas de placas disponíveis para os formulários
+    placas_cavalo_disponiveis = [p for p in todas_as_placas if p.tipo == 'CAVALO' and p.id not in placas_em_uso_ids]
+    placas_carreta_disponiveis = [p for p in todas_as_placas if p.tipo == 'CARRETA' and p.id not in placas_em_uso_ids]
 
     unidades_disponiveis = []
     if user_role == 'admin':
@@ -161,8 +155,9 @@ def veiculos():
     return render_template(
         'veiculos.html',
         veiculos=lista_veiculos,
-        placas=lista_placas,
-        placas_disponiveis=placas_disponiveis,
+        placas=todas_as_placas, # Lista de todas as placas para a coluna da direita
+        placas_cavalo_disponiveis=placas_cavalo_disponiveis,
+        placas_carreta_disponiveis=placas_carreta_disponiveis,
         unidades_disponiveis=unidades_disponiveis
     )
 
@@ -174,10 +169,13 @@ def add_veiculo():
     
     nome_conjunto = request.form.get('nome_conjunto')
     unidade = request.form.get('unidade')
-    operacao = request.form.get('operacao') # NOVO CAMPO
+    operacao = request.form.get('operacao')
+    placa_cavalo_id = request.form.get('placa_cavalo_id')
+    placa_carreta1_id = request.form.get('placa_carreta1_id')
+    placa_carreta2_id = request.form.get('placa_carreta2_id')
 
-    if not nome_conjunto:
-        flash('O nome do conjunto é obrigatório.', 'danger')
+    if not nome_conjunto or not placa_cavalo_id:
+        flash('Nome do conjunto e Placa do Cavalo são obrigatórios.', 'danger')
         return redirect(url_for('admin.veiculos'))
 
     if user_role != 'admin':
@@ -194,13 +192,15 @@ def add_veiculo():
     novo_veiculo = Veiculo(
         nome_conjunto=nome_conjunto, 
         unidade=unidade,
-        operacao=operacao # NOVO CAMPO
+        operacao=operacao,
+        placa_cavalo_id=int(placa_cavalo_id) if placa_cavalo_id else None,
+        placa_carreta1_id=int(placa_carreta1_id) if placa_carreta1_id else None,
+        placa_carreta2_id=int(placa_carreta2_id) if placa_carreta2_id else None
     )
     db.session.add(novo_veiculo)
     db.session.commit()
-    flash(f'Conjunto "{nome_conjunto}" adicionado. Vincule as placas editando o conjunto.', 'success')
+    flash(f'Conjunto "{nome_conjunto}" adicionado com sucesso.', 'success')
     return redirect(url_for('admin.veiculos'))
-
 
 @admin_bp.route('/veiculos/edit/<int:veiculo_id>', methods=['POST'])
 @login_required()
@@ -213,16 +213,13 @@ def edit_veiculo(veiculo_id):
         flash('Você não tem permissão para editar este veículo.', 'danger')
         return redirect(url_for('admin.veiculos'))
 
-    # Atualiza campos de texto
     veiculo.nome_conjunto = request.form.get('nome_conjunto')
-    veiculo.operacao = request.form.get('operacao') # NOVO CAMPO
+    veiculo.operacao = request.form.get('operacao')
     veiculo.obs = request.form.get('obs')
     
-    # Atualiza Unidade (se for admin)
     if user_role == 'admin':
         veiculo.unidade = request.form.get('unidade')
 
-    # Atualiza Placas
     veiculo.placa_cavalo_id = int(request.form.get('placa_cavalo_id')) if request.form.get('placa_cavalo_id') else None
     veiculo.placa_carreta1_id = int(request.form.get('placa_carreta1_id')) if request.form.get('placa_carreta1_id') else None
     veiculo.placa_carreta2_id = int(request.form.get('placa_carreta2_id')) if request.form.get('placa_carreta2_id') else None
@@ -230,7 +227,6 @@ def edit_veiculo(veiculo_id):
     db.session.commit()
     flash(f'Conjunto "{veiculo.nome_conjunto}" atualizado com sucesso.', 'success')
     return redirect(url_for('admin.veiculos'))
-
 
 @admin_bp.route('/placas/add', methods=['POST'])
 @login_required()
@@ -328,30 +324,6 @@ def delete_placa(placa_id):
 #-----------------------------------------------------------------------
 from flask import send_from_directory
 
-@main_bp.route('/documentos/acessar/<int:documento_id>')
-def acessar_documento(documento_id):
-    # Verifica se o usuário (motorista ou admin) está logado
-    if 'motorista_id' not in session and 'admin_user' not in session:
-        flash('Acesso negado. Por favor, faça login.', 'danger')
-        return redirect(url_for('main.index'))
-        
-    # Busca o documento no banco de dados de forma segura
-    documento = DocumentoFixo.query.get_or_404(documento_id)
-    directory = os.path.abspath(DOCUMENTOS_UPLOAD_FOLDER)
-    
-    # Pega a ação da URL (?action=view ou ?action=download)
-    action = request.args.get('action', 'view') # 'view' (visualizar) é o padrão
-    
-    # Define se o arquivo deve ser forçado como download ou não
-    as_attachment = (action == 'download')
-
-    # Envia o arquivo para o usuário
-    return send_from_directory(
-        directory=directory, 
-        path=documento.nome_arquivo, 
-        as_attachment=as_attachment
-    )
-#-----------------------------------------------------------------------
 
 #-----------------------------------------------------------------------
 
@@ -1133,18 +1105,17 @@ def add_motorista():
 
     nome = request.form.get('nome')
     cpf = request.form.get('cpf')
-    # Demais campos...
     rg = request.form.get('rg')
     cnh = request.form.get('cnh')
     frota = request.form.get('frota')
     veiculo_id = request.form.get('veiculo_id')
     unidade = request.form.get('unidade')
+    operacao = request.form.get('operacao')
 
     if not nome or not cpf:
         flash('Nome e CPF são obrigatórios.', 'danger')
         return redirect(url_for('admin.motoristas'))
 
-    # Se o usuário não for admin, força o motorista a ser da sua unidade
     if user_role != 'admin':
         unidade = user_unidade
     
@@ -1163,12 +1134,19 @@ def add_motorista():
         cnh=cnh, 
         frota=frota, 
         unidade=unidade,
+        operacao=operacao,
         veiculo_id=int(veiculo_id) if veiculo_id else None
     )
+    
+    # LINHA ADICIONADA: Define a senha padrão (6 primeiros dígitos do CPF)
+    novo_motorista.set_password(None)
+    
     db.session.add(novo_motorista)
     db.session.commit()
     flash(f'Motorista {nome} adicionado com sucesso!', 'success')
     return redirect(url_for('admin.motoristas'))
+
+
 
 @admin_bp.route('/motoristas/edit/<int:motorista_id>', methods=['POST'])
 @login_required()
@@ -1178,7 +1156,6 @@ def edit_motorista(motorista_id):
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
-    # Se não for admin, verifica se o motorista pertence à sua unidade
     if user_role != 'admin' and motorista.unidade != user_unidade:
         flash('Você não tem permissão para editar este motorista.', 'danger')
         return redirect(url_for('admin.motoristas'))
@@ -1189,14 +1166,15 @@ def edit_motorista(motorista_id):
     motorista.cnh = request.form.get('cnh')
     motorista.frota = request.form.get('frota')
     motorista.veiculo_id = int(request.form.get('veiculo_id')) if request.form.get('veiculo_id') else None
+    motorista.operacao = request.form.get('operacao') # LINHA ADICIONADA
     
-    # Apenas um admin pode mudar a unidade de um motorista
     if user_role == 'admin':
         motorista.unidade = request.form.get('unidade')
 
     db.session.commit()
     flash(f'Dados do motorista {motorista.nome} atualizados com sucesso!', 'success')
     return redirect(url_for('admin.motoristas'))
+
 
 
 @admin_bp.route('/motoristas/delete/<int:motorista_id>', methods=['POST'])
@@ -1644,6 +1622,7 @@ def importacao_pagina():
 @admin_bp.route('/importacao/<string:tipo>', methods=['POST'])
 @login_required(required_role=["admin"])
 def importar_dados(tipo):
+    """Processa o upload de arquivos para importação em massa."""
     if 'arquivo' not in request.files:
         flash('Nenhum arquivo enviado.', 'danger')
         return redirect(url_for('admin.importacao_pagina'))
@@ -1692,11 +1671,12 @@ def importar_dados(tipo):
                         nome=row['nome'],
                         cpf=row['cpf'],
                         unidade=row['unidade'],
-                        operacao=row.get('operacao', None), # NOVO CAMPO
+                        operacao=row.get('operacao', None),
                         rg=row.get('rg', None),
                         cnh=row.get('cnh', None),
                         frota=row.get('frota', None)
                     )
+                    novo_motorista.set_password(None)
                     db.session.add(novo_motorista)
                     adicionados += 1
 
@@ -1725,10 +1705,65 @@ def importar_dados(tipo):
                         numero=row['numero'].upper(),
                         tipo=tipo_placa,
                         unidade=row['unidade'],
-                        operacao=row.get('operacao', None) # NOVO CAMPO
+                        operacao=row.get('operacao', None)
                     )
                     db.session.add(nova_placa)
                     adicionados += 1
+        
+        elif tipo == 'conjuntos':
+            required_cols = ['nome_conjunto', 'unidade', 'placa_cavalo']
+            if not all(col in df.columns for col in required_cols):
+                flash(f'O arquivo de conjuntos deve conter as colunas: {", ".join(required_cols)}.', 'danger')
+                return redirect(url_for('admin.importacao_pagina'))
+
+            for index, row in df.iterrows():
+                nome_conjunto = row.get('nome_conjunto')
+                if not nome_conjunto or not row.get('unidade') or not row.get('placa_cavalo'):
+                    erros.append(f'Linha {index + 2}: Dados obrigatórios (nome_conjunto, unidade, placa_cavalo) faltando.')
+                    ignorados += 1
+                    continue
+                
+                if Veiculo.query.filter_by(nome_conjunto=nome_conjunto).first():
+                    ignorados += 1
+                    continue
+                
+                # Buscar IDs das placas
+                placa_cavalo_num = row.get('placa_cavalo').upper()
+                cavalo = Placa.query.filter_by(numero=placa_cavalo_num, tipo='CAVALO').first()
+                if not cavalo:
+                    erros.append(f"Linha {index + 2}: Placa cavalo '{placa_cavalo_num}' não encontrada ou não é do tipo CAVALO.")
+                    ignorados += 1
+                    continue
+                
+                carreta1_id = None
+                placa_carreta1_num = row.get('placa_carreta1', '').upper()
+                if placa_carreta1_num:
+                    carreta1 = Placa.query.filter_by(numero=placa_carreta1_num, tipo='CARRETA').first()
+                    if carreta1:
+                        carreta1_id = carreta1.id
+                    else:
+                        erros.append(f"Linha {index + 2}: Placa carreta 1 '{placa_carreta1_num}' não encontrada ou não é do tipo CARRETA.")
+                
+                carreta2_id = None
+                placa_carreta2_num = row.get('placa_carreta2', '').upper()
+                if placa_carreta2_num:
+                    carreta2 = Placa.query.filter_by(numero=placa_carreta2_num, tipo='CARRETA').first()
+                    if carreta2:
+                        carreta2_id = carreta2.id
+                    else:
+                        erros.append(f"Linha {index + 2}: Placa carreta 2 '{placa_carreta2_num}' não encontrada ou não é do tipo CARRETA.")
+
+                novo_veiculo = Veiculo(
+                    nome_conjunto=nome_conjunto,
+                    unidade=row.get('unidade'),
+                    placa_cavalo_id=cavalo.id,
+                    placa_carreta1_id=carreta1_id,
+                    placa_carreta2_id=carreta2_id,
+                    operacao=row.get('operacao', None),
+                    obs=row.get('obs', None)
+                )
+                db.session.add(novo_veiculo)
+                adicionados += 1
 
         db.session.commit()
 
@@ -1742,3 +1777,35 @@ def importar_dados(tipo):
         flash(f'Ocorreu um erro ao processar o arquivo: {e}', 'danger')
 
     return redirect(url_for('admin.importacao_pagina'))
+
+
+# --- ROTAS DE DOCUMENTOS PARA MOTORISTA ---
+
+@main_bp.route('/documentos')
+def lista_documentos_motorista():
+    """Exibe a lista de documentos fixos para o motorista logado."""
+    if 'motorista_id' not in session:
+        flash('Por favor, faça login para acessar os documentos.', 'warning')
+        return redirect(url_for('main.motorista_login'))
+    
+    documentos = DocumentoFixo.query.order_by(DocumentoFixo.data_upload.desc()).all()
+    
+    return render_template('motorista_documentos.html', documentos=documentos)
+
+@main_bp.route('/documentos/acessar/<int:documento_id>')
+def acessar_documento(documento_id):
+    if 'motorista_id' not in session and 'user_id' not in session:
+        flash('Acesso negado. Por favor, faça login.', 'danger')
+        return redirect(url_for('main.index'))
+        
+    documento = DocumentoFixo.query.get_or_404(documento_id)
+    directory = os.path.abspath(DOCUMENTOS_UPLOAD_FOLDER)
+    
+    action = request.args.get('action', 'view') 
+    as_attachment = (action == 'download')
+
+    return send_from_directory(
+        directory=directory, 
+        path=documento.nome_arquivo, 
+        as_attachment=as_attachment
+    )
