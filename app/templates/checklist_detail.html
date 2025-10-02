@@ -1,57 +1,199 @@
 {% extends "base_adm.html" %}
 
-{% block title %}Detalhes do Checklist - {{ checklist.titulo }}{% endblock %}
+{% block title %}Detalhes do Checklist - {{ checklist.codigo }}{% endblock %}
 
-{% block header %}Itens do Checklist: <span class="text-primary">{{ checklist.titulo }}</span>{% endblock %}
+{% block header %}
+<div class="d-flex justify-content-between align-items-center">
+    <span>Itens do Checklist: <span class="text-primary">{{ checklist.codigo }}</span></span>
+    <a href="{{ url_for('admin.checklists') }}" class="btn btn-secondary btn-sm">Voltar à Lista</a>
+</div>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
+
+    <!-- Card de Informações do Checklist -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Informações do Checklist</h6>
+        </div>
+        <div class="card-body">
+            <p><strong>Título:</strong> {{ checklist.titulo }}</p>
+            <p><strong>Código:</strong> {{ checklist.codigo }} | <strong>Revisão:</strong> {{ checklist.revisao }} | <strong>Data:</strong> {{ checklist.data.strftime('%d/%m/%Y') }} | <strong>Tipo:</strong> {{ checklist.tipo }}</p>
+        </div>
+    </div>
+
     <div class="row">
-        <!-- Coluna para Adicionar Itens -->
-        <div class="col-lg-5">
+        <!-- Coluna para Adicionar Itens Principais (Categorias) -->
+        <div class="col-lg-4">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Adicionar Novo Item</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">Adicionar Nova Categoria (Item Principal)</h6>
                 </div>
                 <div class="card-body">
-                    <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST">
+                    <form action="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" method="POST">
                         <div class="mb-3">
-                            <label for="item_texto" class="form-label">Texto do Item</label>
-                            <textarea class="form-control" id="item_texto" name="texto" rows="3" placeholder="Ex: Verificar nível de óleo do motor" required></textarea>
+                            <label for="texto_item_principal" class="form-label">Nome da Categoria</label>
+                            <input type="text" class="form-control" id="texto_item_principal" name="texto" placeholder="Ex: Sistema de Freios" required>
                         </div>
-                        <button type="submit" class="btn btn-primary">Adicionar Item</button>
-                        <a href="{{ url_for('admin.checklists') }}" class="btn btn-secondary">Voltar para a Lista</a>
+                        <div class="mb-3">
+                            <label for="ordem_item_principal" class="form-label">Ordem de Exibição</label>
+                            <input type="number" class="form-control" id="ordem_item_principal" name="ordem" value="0">
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Adicionar Categoria</button>
                     </form>
                 </div>
             </div>
         </div>
 
-        <!-- Coluna para Listar Itens -->
-        <div class="col-lg-7">
+        <!-- Coluna para Listar Itens e Sub-itens -->
+        <div class="col-lg-8">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Itens Cadastrados no Checklist</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">Estrutura do Checklist</h6>
                 </div>
                 <div class="card-body">
-                    {% if checklist.itens %}
-                        <ul class="list-group list-group-flush">
-                            {% for item in checklist.itens|sort(attribute='id') %}
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                {{ item.texto }}
-                                <form action="{{ url_for('admin.delete_checklist_item', item_id=item.id) }}" method="POST">
-                                    <button type-="submit" class="btn btn-danger btn-sm" title="Excluir item">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </form>
-                            </li>
-                            {% endfor %}
-                        </ul>
+                    {% if not itens_principais %}
+                        <p class="text-center">Nenhuma categoria adicionada. Comece adicionando uma ao lado.</p>
                     {% else %}
-                        <p class="text-center">Ainda não há itens neste checklist. Adicione um ao lado.</p>
+                        {% for item_principal in itens_principais %}
+                            <div class="card mb-3">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <strong class="text-dark">{{ item_principal.ordem }}. {{ item_principal.texto }}</strong>
+                                    <div>
+                                        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#collapse-{{ item_principal.id }}">
+                                            <i class="fas fa-plus"></i> Adicionar Sub-item
+                                        </button>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="abrirModalEdicao({{ item_principal.id }}, '{{ item_principal.texto }}', {{ item_principal.ordem }})">
+                                            <i class="fas fa-edit"></i> Editar
+                                        </button>
+                                        <form action="{{ url_for('admin.excluir_item', item_id=item_principal.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Deseja excluir esta categoria e todos os seus sub-itens?');">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                <i class="fas fa-trash"></i> Excluir
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <!-- Formulário de Sub-item (colapsável) -->
+                                <div class="collapse p-3" id="collapse-{{ item_principal.id }}">
+                                    <form action="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" method="POST">
+                                        <input type="hidden" name="parent_id" value="{{ item_principal.id }}">
+                                        <div class="row">
+                                            <div class="col-md-8">
+                                                <input type="text" class="form-control" name="texto" placeholder="Texto do novo sub-item" required>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <input type="number" class="form-control" name="ordem" value="0">
+                                            </div>
+                                            <div class="col-md-2">
+                                                <button type="submit" class="btn btn-primary btn-sm w-100">Salvar</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                <ul class="list-group list-group-flush">
+                                    {% if item_principal.sub_itens.all() %}
+                                        {% for sub_item in item_principal.sub_itens|sort(attribute='ordem') %}
+                                            <li class="list-group-item d-flex justify-content-between align-items-center ps-4">
+                                                <span>{{ sub_item.ordem }}. {{ sub_item.texto }}</span>
+                                                <div>
+                                                    <button class="btn btn-link btn-sm" onclick="abrirModalEdicao({{ sub_item.id }}, '{{ sub_item.texto }}', {{ sub_item.ordem }})">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <form action="{{ url_for('admin.excluir_item', item_id=sub_item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Deseja excluir este sub-item?');">
+                                                        <button type="submit" class="btn btn-link btn-sm text-danger">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </li>
+                                        {% endfor %}
+                                    {% else %}
+                                        <li class="list-group-item text-muted ps-4">Nenhum sub-item cadastrado nesta categoria.</li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                        {% endfor %}
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Modal de Edição -->
+<div class="modal fade" id="editItemModal" tabindex="-1" aria-labelledby="editItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editItemModalLabel">Editar Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editItemForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editTexto" class="form-label">Texto do Item</label>
+                        <input type="text" class="form-control" id="editTexto" name="texto" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editOrdem" class="form-label">Ordem</label>
+                        <input type="number" class="form-control" id="editOrdem" name="ordem" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} {# Fim do bloco de conteúdo #}
+
+{% block scripts %}
+<script>
+function abrirModalEdicao(itemId, texto, ordem) {
+    const modal = new bootstrap.Modal(document.getElementById('editItemModal'));
+    const form = document.getElementById('editItemForm');
+    
+    // Preenche o formulário do modal com os dados do item
+    document.getElementById('editTexto').value = texto;
+    document.getElementById('editOrdem').value = ordem;
+    
+    // Define a URL da action do formulário para a rota de edição correta
+    form.action = `/admin/checklist/item/${itemId}/editar`;
+
+    modal.show();
+}
+
+// Adiciona um listener para o formulário de edição para usar Fetch API
+document.getElementById('editItemForm').addEventListener('submit', function(e) {
+    e.preventDefault(); // Impede o envio padrão do formulário
+    
+    const form = e.target;
+    const url = form.action;
+    const formData = new FormData(form);
+
+    fetch(url, {
+        method: 'POST',
+        body: new URLSearchParams(formData) // Envia como form-urlencoded
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Recarrega a página para ver as alterações
+            window.location.reload();
+        } else {
+            // Exibe uma mensagem de erro (pode ser melhorada)
+            alert('Erro ao salvar: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro na requisição:', error);
+        alert('Ocorreu um erro de comunicação.');
+    });
+});
+</script>
 {% endblock %}

@@ -91,6 +91,7 @@ class Veiculo(db.Model):
 
 class Checklist(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(200), nullable=False)
     unidade = db.Column(db.String(100), nullable=True) # NOVO CAMPO
     tipo = db.Column(db.String(50), nullable=False) # DIÁRIO, SEMANAL, etc.
     codigo = db.Column(db.String(50), nullable=False)

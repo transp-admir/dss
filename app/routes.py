@@ -1292,25 +1292,46 @@ def add_checklist():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
     
+    # Captura todos os dados do novo formulário
     titulo = request.form.get('titulo')
+    codigo = request.form.get('codigo')
+    revisao = request.form.get('revisao')
+    data_str = request.form.get('data')
+    tipo = request.form.get('tipo')
     unidade = request.form.get('unidade')
 
-    if not titulo:
-        flash('O título é obrigatório.', 'danger')
+    # Validação para garantir que todos os campos foram preenchidos
+    if not all([titulo, codigo, revisao, data_str, tipo, unidade]):
+        flash('Todos os campos são obrigatórios para criar o checklist.', 'danger')
         return redirect(url_for('admin.checklists'))
 
+    # Converte a string da data para um objeto date do Python
+    try:
+        data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Formato de data inválido. Use AAAA-MM-DD.', 'danger')
+        return redirect(url_for('admin.checklists'))
+
+    # Se o usuário não for admin, força o uso da sua própria unidade
     if user_role != 'admin':
         unidade = user_unidade
     
-    if not unidade:
-        flash('A unidade é obrigatória.', 'danger')
-        return redirect(url_for('admin.checklists'))
-
-    novo_checklist = Checklist(titulo=titulo, unidade=unidade)
+    # Cria o novo objeto Checklist com todos os campos
+    novo_checklist = Checklist(
+        titulo=titulo,
+        codigo=codigo,
+        revisao=revisao,
+        data=data_obj,
+        tipo=tipo,
+        unidade=unidade
+    )
+    
     db.session.add(novo_checklist)
     db.session.commit()
-    flash(f'Checklist "{titulo}" criado com sucesso.', 'success')
+    
+    flash(f'Checklist "{titulo}" (Cód: {codigo}) criado com sucesso.', 'success')
     return redirect(url_for('admin.checklists'))
+
 
 
 @admin_bp.route('/checklists/<int:checklist_id>')
@@ -1465,15 +1486,17 @@ def checklist_detalhe(checklist_id):
             else:
                 flash('Item principal adicionado com sucesso.', 'success')
         
+        # CORREÇÃO APLICADA AQUI:
         return redirect(url_for('admin.checklist_detalhe', checklist_id=checklist_id))
 
+    # A lógica 'GET' permanece a mesma
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
 
     return render_template(
-        'checklist_detalhe.html', 
+        'checklist_detail.html', 
         checklist=checklist, 
         itens_principais=itens_principais,
-        ChecklistItem=ChecklistItem  # Passa a classe para o template
+        ChecklistItem=ChecklistItem
     )
 
     
@@ -1550,13 +1573,20 @@ def editar_item(item_id):
 @admin_bp.route('/checklist/item/<int:item_id>/excluir', methods=['POST'])
 def excluir_item(item_id):
     if 'admin_user' not in session:
-        return jsonify({'success': False, 'message': 'Acesso negado'}), 403
+        # Para consistência, vamos retornar um redirect com flash em vez de JSON
+        flash('Acesso negado. Por favor, faça login novamente.', 'danger')
+        return redirect(url_for('admin.login'))
 
     item = ChecklistItem.query.get_or_404(item_id)
-    checklist_id = item.checklist_id
+    checklist_id = item.checklist_id  # Salva o ID antes de deletar o item
+
+    # Deleta o item e seus sub-itens, se houver (o SQLAlchemy cuida disso pelo cascade)
     db.session.delete(item)
     db.session.commit()
-    flash(f'Item "{item.texto}" foi excluído.', 'info')
+    
+    flash(f'Item "{item.texto}" foi excluído com sucesso.', 'info')
+    
+    # CORREÇÃO: Redireciona para 'checklist_detalhe' em vez de 'checklist_detail'
     return redirect(url_for('admin.checklist_detalhe', checklist_id=checklist_id))
 
 
