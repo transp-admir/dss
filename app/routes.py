@@ -398,58 +398,7 @@ def ver_conteudo(conteudo_id):
                            conteudo=conteudo, 
                            assinatura=assinatura)
 
-@main_bp.route('/checklists_motorista')
-def lista_checklists_motorista():
-    if 'motorista_id' not in session:
-        return redirect(url_for('main.motorista_login'))
-    
-    motorista_id = session['motorista_id']
-    # Garante que estamos pegando apenas checklists que têm itens cadastrados
-    checklists = Checklist.query.filter(Checklist.itens.any()).order_by(Checklist.tipo, Checklist.codigo).all()
-    
-    checklists_com_status = []
-    hoje = date.today()
 
-    for checklist in checklists:
-        preenchido_no_periodo = False
-        status_texto = "Pendente"
-
-        # Lógica para Checklist Diário
-        if checklist.tipo == 'DIÁRIO':
-            preenchimento = ChecklistPreenchido.query.filter(
-                and_(
-                    ChecklistPreenchido.motorista_id == motorista_id,
-                    ChecklistPreenchido.checklist_id == checklist.id,
-                    db.func.date(ChecklistPreenchido.data_preenchimento) == hoje
-                )
-            ).first()
-            if preenchimento:
-                preenchido_no_periodo = True
-                status_texto = "Preenchido Hoje"
-
-        # NOVA LÓGICA: Para Checklist Mensal
-        elif checklist.tipo == 'MENSAL':
-            preenchimento = ChecklistPreenchido.query.filter(
-                and_(
-                    ChecklistPreenchido.motorista_id == motorista_id,
-                    ChecklistPreenchido.checklist_id == checklist.id,
-                    db.func.extract('year', ChecklistPreenchido.data_preenchimento) == hoje.year,
-                    db.func.extract('month', ChecklistPreenchido.data_preenchimento) == hoje.month
-                )
-            ).first()
-            if preenchimento:
-                preenchido_no_periodo = True
-                status_texto = "Preenchido este Mês"
-        
-        # Outros tipos de checklist (Semanal, etc.) sempre aparecerão como "Pendente" por enquanto.
-        
-        checklists_com_status.append({
-            'checklist': checklist, 
-            'preenchido': preenchido_no_periodo, # Passa um booleano (True/False)
-            'status': status_texto                 # Passa o texto descritivo
-        })
-
-    return render_template('motorista_lista_checklists.html', checklists_info=checklists_com_status)
 
 
 @main_bp.route('/checklist/preencher/<int:checklist_id>', methods=['GET', 'POST'])
@@ -1306,6 +1255,8 @@ def add_conteudo():
     
     flash('Conteúdo adicionado com sucesso!', 'success')
     return redirect(url_for('admin.conteudo'))
+
+
 @admin_bp.route('/checklists')
 @login_required()
 def checklists():
@@ -1313,15 +1264,21 @@ def checklists():
     user_unidade = session.get('unidade')
 
     query = Checklist.query
+
+    # CORREÇÃO: Altera a lógica de filtro para usuários não-admin
     if user_role != 'admin':
-        query = query.filter(Checklist.unidade == user_unidade)
+        # Usuários 'master' ou 'comum' devem ver os checklists de sua unidade E os globais (sem unidade)
+        query = query.filter(or_(
+            Checklist.unidade == user_unidade,
+            Checklist.unidade == None
+        ))
     
-    # CORREÇÃO: Ordenado por 'codigo' que é o campo correto no modelo.
+    # A ordenação e o resto da lógica permanecem os mesmos
     lista_checklists = query.order_by(Checklist.codigo).all()
 
     unidades_disponiveis = []
     if user_role == 'admin':
-        # Pega unidades de outra tabela como motoristas para popular o form
+        # A lógica para popular o formulário do admin continua a mesma
         unidades_disponiveis = db.session.query(Motorista.unidade).distinct().all()
         unidades_disponiveis = sorted([u[0] for u in unidades_disponiveis if u[0]])
 
@@ -1332,52 +1289,124 @@ def checklists():
     )
 
 
+# 1. FUNÇÃO CORRIGIDA PARA ADICIONAR CHECKLISTS (ADMIN)
 @admin_bp.route('/checklists/add', methods=['POST'])
 @login_required()
 def add_checklist():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
     
-    # Captura todos os dados do novo formulário
+    # Coleta todos os dados do formulário
     titulo = request.form.get('titulo')
     codigo = request.form.get('codigo')
     revisao = request.form.get('revisao')
     data_str = request.form.get('data')
     tipo = request.form.get('tipo')
-    unidade = request.form.get('unidade')
+    unidade = request.form.get('unidade') # Pode vir vazio para o admin
 
-    # Validação para garantir que todos os campos foram preenchidos
-    if not all([titulo, codigo, revisao, data_str, tipo, unidade]):
-        flash('Todos os campos são obrigatórios para criar o checklist.', 'danger')
+    # Validação dos campos obrigatórios que sempre devem existir
+    if not all([titulo, codigo, revisao, data_str, tipo]):
+        flash('Os campos Título, Código, Revisão, Data e Tipo são obrigatórios.', 'danger')
         return redirect(url_for('admin.checklists'))
 
-    # Converte a string da data para um objeto date do Python
-    try:
-        data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
-    except ValueError:
-        flash('Formato de data inválido. Use AAAA-MM-DD.', 'danger')
-        return redirect(url_for('admin.checklists'))
-
-    # Se o usuário não for admin, força o uso da sua própria unidade
+    # Regra para não-admins: a unidade é obrigatória e travada
     if user_role != 'admin':
         unidade = user_unidade
-    
-    # Cria o novo objeto Checklist com todos os campos
+        if not unidade:
+            flash('Sua conta de usuário não está vinculada a uma unidade. Contate o administrador.', 'danger')
+            return redirect(url_for('admin.checklists'))
+
+    # Converte a data e define a unidade como Nula se o admin a deixou em branco
+    data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
+    unidade_para_salvar = unidade if unidade else None
+
     novo_checklist = Checklist(
         titulo=titulo,
         codigo=codigo,
         revisao=revisao,
         data=data_obj,
         tipo=tipo,
-        unidade=unidade
+        unidade=unidade_para_salvar # Salva None se for global
     )
-    
     db.session.add(novo_checklist)
     db.session.commit()
     
-    flash(f'Checklist "{titulo}" (Cód: {codigo}) criado com sucesso.', 'success')
+    if unidade_para_salvar:
+        flash(f'Checklist "{titulo}" criado para a unidade {unidade_para_salvar}.', 'success')
+    else:
+        flash(f'Checklist Global "{titulo}" criado com sucesso para todas as unidades.', 'success')
+        
     return redirect(url_for('admin.checklists'))
 
+
+@main_bp.route('/checklists_motorista')
+def lista_checklists_motorista():
+    if 'motorista_id' not in session:
+        return redirect(url_for('main.motorista_login'))
+    
+    motorista_id = session['motorista_id']
+    motorista = Motorista.query.get(motorista_id)
+
+    if not motorista:
+        flash('Seus dados de motorista não foram encontrados.', 'danger')
+        return redirect(url_for('main.motorista_login'))
+        
+    motorista_unidade = motorista.unidade
+    
+    # CORREÇÃO PRINCIPAL ESTÁ AQUI:
+    # Busca checklists que (1) pertencem à unidade do motorista OU (2) são globais (unidade é NULA).
+    # Também garante que o checklist tenha pelo menos um item cadastrado para aparecer na lista.
+    checklists = Checklist.query.filter(
+        Checklist.itens.any(),
+        or_(
+            Checklist.unidade == motorista_unidade,
+            Checklist.unidade == None
+        )
+    ).order_by(Checklist.tipo, Checklist.codigo).all()
+    
+    checklists_com_status = []
+    hoje = date.today()
+
+    for checklist in checklists:
+        preenchido_no_periodo = False
+        status_texto = "Pendente"
+
+        # Lógica para verificar o status do Checklist DIÁRIO
+        if checklist.tipo == 'DIÁRIO':
+            preenchimento = ChecklistPreenchido.query.filter(
+                and_(
+                    ChecklistPreenchido.motorista_id == motorista_id, # Filtra pelo motorista atual
+                    ChecklistPreenchido.checklist_id == checklist.id, # Filtra pelo checklist atual
+                    db.func.date(ChecklistPreenchido.data_preenchimento) == hoje
+                )
+            ).first()
+            if preenchimento:
+                preenchido_no_periodo = True
+                status_texto = "Preenchido Hoje"
+
+        # Lógica para verificar o status do Checklist MENSAL
+        elif checklist.tipo == 'MENSAL':
+            preenchimento = ChecklistPreenchido.query.filter(
+                and_(
+                    ChecklistPreenchido.motorista_id == motorista_id, # Filtra pelo motorista atual
+                    ChecklistPreenchido.checklist_id == checklist.id, # Filtra pelo checklist atual
+                    db.func.extract('year', ChecklistPreenchido.data_preenchimento) == hoje.year,
+                    db.func.extract('month', ChecklistPreenchido.data_preenchimento) == hoje.month
+                )
+            ).first()
+            if preenchimento:
+                preenchido_no_periodo = True
+                status_texto = "Preenchido este Mês"
+        
+        # Adiciona outras lógicas (SEMANAL, etc.) aqui se necessário...
+
+        checklists_com_status.append({
+            'checklist': checklist, 
+            'preenchido': preenchido_no_periodo,
+            'status': status_texto
+        })
+
+    return render_template('motorista_lista_checklists.html', checklists_info=checklists_com_status)
 
 
 @admin_bp.route('/checklists/<int:checklist_id>')

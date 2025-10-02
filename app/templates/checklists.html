@@ -46,14 +46,14 @@
                      <div class="col-md-2 mb-3">
                         <label for="unidade" class="form-label">Unidade</label>
                         {% if session.role == 'admin' %}
-                            <input type="text" class="form-control" id="unidade" name="unidade" list="unidades_list" placeholder="Digite ou selecione" required>
+                            <input type="text" class="form-control" id="unidade" name="unidade" list="unidades_list" placeholder="Opcional - p/ todas unidades">
                             <datalist id="unidades_list">
                                 {% for u in unidades_disponiveis %}
                                     <option value="{{ u }}">
                                 {% endfor %}
                             </datalist>
                         {% else %}
-                            <input type="text" class="form-control" id="unidade" name="unidade" value="{{ session.unidade }}" readonly>
+                            <input type="text" class="form-control" id="unidade" name="unidade" value="{{ session.unidade }}" readonly required>
                         {% endif %}
                     </div>
                     <div class="col-md-2 mb-3">
@@ -92,7 +92,7 @@
                             <td>{{ checklist.tipo }}</td>
                             <td>{{ checklist.revisao }}</td>
                             <td>{{ checklist.data.strftime('%d/%m/%Y') }}</td>
-                            <td>{{ checklist.unidade }}</td>
+                            <td>{{ checklist.unidade or 'Global (Todas as Unidades)' }}</td>
                             <td>{{ checklist.itens.count() }}</td>
                             <td>
                                 <a href="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" class="btn btn-info btn-sm" title="Ver Itens">
