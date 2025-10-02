@@ -43,10 +43,10 @@
                             <option value="OUTRO">OUTRO</option>
                         </select>
                     </div>
-                     <div class="col-md-2 mb-3">
+                    <div class="col-md-2 mb-3">
                         <label for="unidade" class="form-label">Unidade</label>
                         {% if session.role == 'admin' %}
-                            <input type="text" class="form-control" id="unidade" name="unidade" list="unidades_list" placeholder="Opcional - p/ todas unidades">
+                            <input type="text" class="form-control" id="unidade" name="unidade" list="unidades_list" placeholder="Deixe em branco para Global">
                             <datalist id="unidades_list">
                                 {% for u in unidades_disponiveis %}
                                     <option value="{{ u }}">
@@ -71,35 +71,39 @@
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
                     <thead>
                         <tr>
+                            <th>Status</th>
                             <th>Título</th>
                             <th>Código</th>
                             <th>Tipo</th>
-                            <th>Revisão</th>
-                            <th>Data</th>
                             <th>Unidade</th>
                             <th>Itens</th>
-                            <th>Ações</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for checklist in checklists %}
-                        <tr>
-                            <td>{{ checklist.titulo or '' }}</td>
-                            <td>{{ checklist.codigo }}</td>
-                            <td>{{ checklist.tipo }}</td>
-                            <td>{{ checklist.revisao }}</td>
-                            <td>{{ checklist.data.strftime('%d/%m/%Y') }}</td>
-                            <td>{{ checklist.unidade or 'Global (Todas as Unidades)' }}</td>
-                            <td>{{ checklist.itens.count() }}</td>
-                            <td>
-                                <a href="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" class="btn btn-info btn-sm" title="Ver Itens">
-                                    <i class="fas fa-list"></i> Itens
+                        {% for cl in checklists %}
+                        <tr class="{% if not cl.ativo %}table-secondary text-muted{% endif %}">
+                            <td class="text-center">
+                                {% if cl.ativo %}
+                                    <span class="badge bg-success">Ativo</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inativo</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ cl.titulo }}</td>
+                            <td>{{ cl.codigo }}</td>
+                            <td>{{ cl.tipo }}</td>
+                            <td>{{ cl.unidade or 'Global' }}</td>
+                            <td class="text-center">{{ cl.itens.count() }}</td>
+                            <td class="text-center">
+                                <a href="{{ url_for('admin.checklist_detalhe', checklist_id=cl.id) }}" class="btn btn-info btn-sm" title="Editar Itens">
+                                    <i class="fas fa-list"></i>
                                 </a>
-                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ checklist.id }}" title="Excluir">
-                                    <i class="fas fa-trash"></i>
+                                <button type="button" class="btn btn-sm {% if cl.ativo %}btn-warning{% else %}btn-success{% endif %}" data-bs-toggle="modal" data-bs-target="#toggleStatusModal-{{ cl.id }}" title="{% if cl.ativo %}Desativar{% else %}Reativar{% endif %}">
+                                    <i class="fas {% if cl.ativo %}fa-toggle-off{% else %}fa-toggle-on{% endif %}"></i>
                                 </button>
                             </td>
                         </tr>
@@ -111,23 +115,31 @@
     </div>
 </div>
 
-<!-- Modais de Exclusão -->
-{% for checklist in checklists %}
-<div class="modal fade" id="deleteModal-{{ checklist.id }}" tabindex="-1" aria-hidden="true">
+<!-- Modais de Ativação/Desativação -->
+{% for cl in checklists %}
+<div class="modal fade" id="toggleStatusModal-{{ cl.id }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Confirmar Exclusão</h5>
+                <h5 class="modal-title">Confirmar Alteração de Status</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>Tem certeza que deseja excluir o checklist <strong>{{ checklist.codigo }} - {{ checklist.titulo or '' }}</strong>?</p>
-                <p class="text-danger">Todos os seus itens também serão removidos. Esta ação não pode ser desfeita.</p>
+                {% if cl.ativo %}
+                    <p>Tem certeza que deseja <strong>desativar</strong> o checklist <strong>{{ cl.codigo }}</strong>?</p>
+                    <p class="text-warning"><i class="fas fa-exclamation-triangle me-2"></i>Ele não aparecerá mais para os motoristas, mas seu histórico será mantido.</p>
+                    <p class="small text-muted">Observação: Se o checklist nunca foi preenchido, ele será <strong>excluído permanentemente</strong>.</p>
+                {% else %}
+                    <p>Tem certeza que deseja <strong>reativar</strong> o checklist <strong>{{ cl.codigo }}</strong>?</p>
+                    <p class="text-success">Ele voltará a ficar disponível para os motoristas.</p>
+                {% endif %}
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <form action="{{ url_for('admin.delete_checklist', checklist_id=checklist.id) }}" method="POST" style="display: inline;">
-                    <button type="submit" class="btn btn-danger">Sim, Excluir</button>
+                <form action="{{ url_for('admin.toggle_checklist_status', checklist_id=cl.id) }}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn {% if cl.ativo %}btn-warning{% else %}btn-success{% endif %}">
+                        {% if cl.ativo %}Sim, Desativar{% else %}Sim, Reativar{% endif %}
+                    </button>
                 </form>
             </div>
         </div>

@@ -1265,20 +1265,19 @@ def checklists():
 
     query = Checklist.query
 
-    # CORREÇÃO: Altera a lógica de filtro para usuários não-admin
+    # Admin não tem filtro de unidade. Master/outros veem sua unidade ou globais.
     if user_role != 'admin':
-        # Usuários 'master' ou 'comum' devem ver os checklists de sua unidade E os globais (sem unidade)
         query = query.filter(or_(
             Checklist.unidade == user_unidade,
-            Checklist.unidade == None
+            Checklist.unidade == None  # Permite ver checklists globais
         ))
     
-    # A ordenação e o resto da lógica permanecem os mesmos
-    lista_checklists = query.order_by(Checklist.codigo).all()
+    # A lista é ordenada para mostrar os ativos primeiro. 
+    # O template decide como exibir (ex: checklists inativos com cor diferente).
+    lista_checklists = query.order_by(Checklist.ativo.desc(), Checklist.codigo).all()
 
     unidades_disponiveis = []
     if user_role == 'admin':
-        # A lógica para popular o formulário do admin continua a mesma
         unidades_disponiveis = db.session.query(Motorista.unidade).distinct().all()
         unidades_disponiveis = sorted([u[0] for u in unidades_disponiveis if u[0]])
 
@@ -1353,10 +1352,9 @@ def lista_checklists_motorista():
         
     motorista_unidade = motorista.unidade
     
-    # CORREÇÃO PRINCIPAL ESTÁ AQUI:
-    # Busca checklists que (1) pertencem à unidade do motorista OU (2) são globais (unidade é NULA).
-    # Também garante que o checklist tenha pelo menos um item cadastrado para aparecer na lista.
+    # FILTRO ATUALIZADO: Adiciona a condição 'Checklist.ativo == True'.
     checklists = Checklist.query.filter(
+        Checklist.ativo == True,  # <-- Garante que apenas checklists ativos apareçam.
         Checklist.itens.any(),
         or_(
             Checklist.unidade == motorista_unidade,
@@ -1371,12 +1369,12 @@ def lista_checklists_motorista():
         preenchido_no_periodo = False
         status_texto = "Pendente"
 
-        # Lógica para verificar o status do Checklist DIÁRIO
+        # Lógica para verificar o status (Diário)
         if checklist.tipo == 'DIÁRIO':
             preenchimento = ChecklistPreenchido.query.filter(
                 and_(
-                    ChecklistPreenchido.motorista_id == motorista_id, # Filtra pelo motorista atual
-                    ChecklistPreenchido.checklist_id == checklist.id, # Filtra pelo checklist atual
+                    ChecklistPreenchido.motorista_id == motorista_id,
+                    ChecklistPreenchido.checklist_id == checklist.id,
                     db.func.date(ChecklistPreenchido.data_preenchimento) == hoje
                 )
             ).first()
@@ -1384,12 +1382,12 @@ def lista_checklists_motorista():
                 preenchido_no_periodo = True
                 status_texto = "Preenchido Hoje"
 
-        # Lógica para verificar o status do Checklist MENSAL
+        # Lógica para verificar o status (Mensal)
         elif checklist.tipo == 'MENSAL':
             preenchimento = ChecklistPreenchido.query.filter(
                 and_(
-                    ChecklistPreenchido.motorista_id == motorista_id, # Filtra pelo motorista atual
-                    ChecklistPreenchido.checklist_id == checklist.id, # Filtra pelo checklist atual
+                    ChecklistPreenchido.motorista_id == motorista_id,
+                    ChecklistPreenchido.checklist_id == checklist.id,
                     db.func.extract('year', ChecklistPreenchido.data_preenchimento) == hoje.year,
                     db.func.extract('month', ChecklistPreenchido.data_preenchimento) == hoje.month
                 )
@@ -1398,8 +1396,6 @@ def lista_checklists_motorista():
                 preenchido_no_periodo = True
                 status_texto = "Preenchido este Mês"
         
-        # Adiciona outras lógicas (SEMANAL, etc.) aqui se necessário...
-
         checklists_com_status.append({
             'checklist': checklist, 
             'preenchido': preenchido_no_periodo,
@@ -1466,25 +1462,39 @@ def delete_checklist_item(item_id):
     return redirect(url_for('admin.view_checklist', checklist_id=checklist_id))
 
 
-@admin_bp.route('/checklists/delete/<int:checklist_id>', methods=['POST'])
-@login_required()
-def delete_checklist(checklist_id):
+@admin_bp.route('/checklists/toggle_status/<int:checklist_id>', methods=['POST'])
+@login_required(required_role=["admin", "master"])
+def toggle_checklist_status(checklist_id):
+    """
+    Desativa/Reativa um checklist se ele tiver histórico, ou o exclui se nunca foi usado.
+    """
     checklist = Checklist.query.get_or_404(checklist_id)
-
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
-    if user_role != 'admin' and checklist.unidade != user_unidade:
-        flash('Você não tem permissão para excluir este checklist.', 'danger')
+    # Validação de permissão
+    if user_role != 'admin' and checklist.unidade is not None and checklist.unidade != user_unidade:
+        flash('Você não tem permissão para alterar este checklist.', 'danger')
         return redirect(url_for('admin.checklists'))
 
-    # Opcional: remover itens associados se não houver cascade delete no modelo
-    ChecklistItem.query.filter_by(checklist_id=checklist.id).delete()
+    has_preenchimentos = ChecklistPreenchido.query.filter_by(checklist_id=checklist.id).first()
 
-    db.session.delete(checklist)
-    db.session.commit()
-    flash(f'Checklist "{checklist.titulo}" e todos os seus itens foram excluídos.', 'info')
+    # Se NUNCA foi preenchido, a ação é de exclusão permanente.
+    if not has_preenchimentos:
+        db.session.delete(checklist)
+        db.session.commit()
+        flash(f'Checklist "{checklist.titulo}" foi excluído permanentemente, pois não possuía histórico.', 'info')
+    else:
+        # Se JÁ FOI preenchido, apenas inativa ou reativa
+        checklist.ativo = not checklist.ativo
+        db.session.commit()
+        if checklist.ativo:
+            flash(f'Checklist "{checklist.titulo}" foi reativado com sucesso.', 'success')
+        else:
+            flash(f'Checklist "{checklist.titulo}" foi desativado. Ele não aparecerá para os motoristas, mas seu histórico foi mantido.', 'info')
+
     return redirect(url_for('admin.checklists'))
+
 
 
 @admin_bp.route('/conteudo/<int:conteudo_id>')
