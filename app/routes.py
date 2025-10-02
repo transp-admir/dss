@@ -3,7 +3,8 @@ from flask import (Blueprint, render_template, request,
 from functools import wraps
 from .models import (Usuario, Motorista, Conteudo, Assinatura, Checklist, 
                    ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
-                   ChecklistResposta, Pendencia, DocumentoFixo)
+                   ChecklistResposta, Pendencia, DocumentoFixo, ExtintorCheck)
+
 
 # --- BLUEPRINT DA ÁREA ADMINISTRATIVA ---
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -410,73 +411,79 @@ def preencher_checklist(checklist_id):
     motorista = Motorista.query.get(session['motorista_id'])
     veiculo_do_motorista = motorista.veiculo
 
+    # --- LÓGICA DE SALVAMENTO (POST) ---
     if request.method == 'POST':
         if not veiculo_do_motorista:
             flash('Você não está vinculado a um veículo. Contate o administrador.', 'danger')
             return redirect(url_for('main.lista_checklists_motorista'))
 
-        # Captura a assinatura do formulário
-        assinatura_data = request.form.get('assinatura_motorista')
-
-        # Captura os outros campos de texto
+        assinatura_motorista_data = request.form.get('assinatura_motorista')
+        assinatura_responsavel_data = request.form.get('assinatura_responsavel')
         outros_problemas = request.form.get('outros_problemas')
         solucoes_adotadas = request.form.get('solucoes_adotadas')
         pendencias_gerais = request.form.get('pendencias_gerais')
 
-        # Validação simples para garantir que a assinatura não está vazia
-        if not assinatura_data:
-            flash('A assinatura do motorista é obrigatória para enviar o checklist.', 'danger')
-            # Precisamos reenviar os dados para o template para que o usuário não perca o que já preencheu
-            # (Esta parte pode ser otimizada depois, mas por agora redireciona)
+        if not assinatura_motorista_data or not assinatura_responsavel_data:
+            flash('As assinaturas do Motorista e do Responsável são obrigatórias.', 'danger')
             return redirect(url_for('main.preencher_checklist', checklist_id=checklist_id))
 
-        # Cria o objeto ChecklistPreenchido, agora incluindo a assinatura
         novo_preenchimento = ChecklistPreenchido(
             motorista_id=motorista.id,
             veiculo_id=veiculo_do_motorista.id,
             checklist_id=checklist.id,
-            assinatura_motorista=assinatura_data,  # NOVO CAMPO SALVO
+            assinatura_motorista=assinatura_motorista_data,
+            assinatura_responsavel=assinatura_responsavel_data,
             outros_problemas=outros_problemas,
             solucoes_adotadas=solucoes_adotadas,
             pendencias_gerais=pendencias_gerais
         )
         db.session.add(novo_preenchimento)
+
+        # Salva os dados dos extintores, se houver
+        if '__BLOCO_EXTINTORES__' in request.form.getlist('item_textos_especiais', []):
+            for i in range(5):
+                local = request.form.get(f'extintor-{i}-local')
+                tipo = request.form.get(f'extintor-{i}-tipo')
+                peso = request.form.get(f'extintor-{i}-peso')
+                vencimento_str = request.form.get(f'extintor-{i}-vencimento')
+                trocado = request.form.get(f'extintor-{i}-trocado')
+                motivo = request.form.get(f'extintor-{i}-motivo')
+
+                if tipo or peso or vencimento_str:
+                    vencimento = datetime.strptime(vencimento_str, '%Y-%m-%d').date() if vencimento_str else None
+                    novo_extintor = ExtintorCheck(
+                        preenchimento=novo_preenchimento,
+                        local=local, tipo=tipo, peso=peso, vencimento=vencimento,
+                        trocado=trocado, motivo_troca=motivo
+                    )
+                    db.session.add(novo_extintor)
         
-        # O resto da lógica para salvar as respostas permanece igual...
+        # Salva as respostas dos itens normais
         respostas_adicionadas = []
         for key in request.form:
             if key.startswith('resposta-'):
-                parts = key.split('-')
-                item_id = int(parts[-1])
-                
+                item_id = int(key.split('-')[-1])
                 resposta_texto = request.form.get(key)
                 observacao = request.form.get(f'obs-{item_id}', '')
 
                 nova_resposta = ChecklistResposta(
-                    preenchimento=novo_preenchimento, 
-                    item_id=item_id,
-                    resposta=resposta_texto,
-                    observacao=observacao
+                    preenchimento=novo_preenchimento, item_id=item_id,
+                    resposta=resposta_texto, observacao=observacao
                 )
                 db.session.add(nova_resposta)
                 respostas_adicionadas.append(nova_resposta)
 
         db.session.flush()
 
-        # Lógica para criar pendências
+        # Cria pendências para respostas "NAO CONFORME"
         for resposta in respostas_adicionadas:
             if resposta.resposta == 'NAO CONFORME':
                 pendencia_existente = Pendencia.query.filter_by(
-                    item_id=resposta.item_id,
-                    veiculo_id=veiculo_do_motorista.id,
-                    status='PENDENTE'
+                    item_id=resposta.item_id, veiculo_id=veiculo_do_motorista.id, status='PENDENTE'
                 ).first()
-
                 if not pendencia_existente:
                     nova_pendencia = Pendencia(
-                        item_id=resposta.item_id,
-                        veiculo_id=veiculo_do_motorista.id,
-                        resposta_abertura_id=resposta.id
+                        item_id=resposta.item_id, veiculo_id=veiculo_do_motorista.id, resposta_abertura_id=resposta.id
                     )
                     db.session.add(nova_pendencia)
         
@@ -484,7 +491,24 @@ def preencher_checklist(checklist_id):
         flash('Checklist enviado com sucesso!', 'success')
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    # A parte 'GET' da função permanece a mesma
+    # --- LÓGICA DE EXIBIÇÃO (GET) ---
+    # Busca os itens principais ordenados. Simples e direto.
+    itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+    pendencias_abertas = set()
+
+    if veiculo_do_motorista:
+        lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
+        pendencias_abertas = {p.item_id for p in lista_pendencias}
+
+    return render_template(
+        'motorista_preencher_checklist.html',
+        checklist=checklist,
+        veiculo=veiculo_do_motorista, 
+        itens_principais=itens_principais,  # Enviando a lista ordenada diretamente
+        pendencias_abertas=pendencias_abertas
+    )
+
+    # A parte 'GET' da função (que exibe o formulário) permanece a mesma
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
     itens_agrupados = {}
     pendencias_abertas = set()
@@ -495,17 +519,13 @@ def preencher_checklist(checklist_id):
 
     for item in itens_principais:
         sub_itens = item.sub_itens.order_by(ChecklistItem.ordem).all()
-        if sub_itens:
-            itens_agrupados[item] = sub_itens
-        else:
-            itens_agrupados[item] = []
+        itens_agrupados[item] = sub_itens if sub_itens else []
 
     return render_template(
         'motorista_preencher_checklist.html',
         checklist=checklist,
         veiculo=veiculo_do_motorista, 
         itens_agrupados=itens_agrupados, 
-        itens_principais=itens_principais,
         pendencias_abertas=pendencias_abertas
     )
 
@@ -1405,61 +1425,125 @@ def lista_checklists_motorista():
     return render_template('motorista_lista_checklists.html', checklists_info=checklists_com_status)
 
 
+# app/routes.py
+
 @admin_bp.route('/checklists/<int:checklist_id>')
 @login_required()
 def view_checklist(checklist_id):
+    """
+    Exibe a página de detalhes para gerenciar os itens de um checklist.
+    """
     checklist = Checklist.query.get_or_404(checklist_id)
     
+    # Validação de segurança
     user_role = session.get('role')
     user_unidade = session.get('unidade')
-
     if user_role != 'admin' and checklist.unidade != user_unidade:
         flash('Você não tem permissão para ver este checklist.', 'danger')
         return redirect(url_for('admin.checklists'))
 
-    return render_template('checklist_detail.html', checklist=checklist)
+    # Busca os itens principais (que não são sub-itens)
+    itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
 
+    return render_template(
+        'checklist_detalhe.html', 
+        checklist=checklist, 
+        itens_principais=itens_principais
+    )
 
 @admin_bp.route('/checklists/add_item/<int:checklist_id>', methods=['POST'])
 @login_required()
 def add_checklist_item(checklist_id):
+    """
+    Adiciona um novo item ou sub-item a um checklist.
+    """
     checklist = Checklist.query.get_or_404(checklist_id)
-
+    
+    # Validação de segurança
     user_role = session.get('role')
     user_unidade = session.get('unidade')
-
     if user_role != 'admin' and checklist.unidade != user_unidade:
         flash('Você não tem permissão para modificar este checklist.', 'danger')
         return redirect(url_for('admin.checklists'))
 
     texto = request.form.get('texto')
-    if texto:
-        novo_item = ChecklistItem(texto=texto, checklist_id=checklist.id)
-        db.session.add(novo_item)
-        db.session.commit()
-        flash('Item adicionado ao checklist.', 'success')
+    parent_id = request.form.get('parent_id')
+    ordem = request.form.get('ordem', 0, type=int)
 
+    if not texto:
+        flash('O texto do item não pode ser vazio.', 'warning')
+        return redirect(url_for('admin.view_checklist', checklist_id=checklist_id))
+
+    # Lógica para evitar duplicar o bloco de extintores
+    if texto == '__BLOCO_EXTINTORES__':
+        item_existente = ChecklistItem.query.filter_by(checklist_id=checklist.id, texto='__BLOCO_EXTINTORES__').first()
+        if item_existente:
+            flash('O bloco de extintores já foi adicionado a este checklist.', 'warning')
+            return redirect(url_for('admin.view_checklist', checklist_id=checklist_id))
+
+    novo_item = ChecklistItem(
+        texto=texto, 
+        checklist_id=checklist.id,
+        ordem=ordem if not parent_id else 0, # Ordem só se aplica a itens pais
+        parent_id=int(parent_id) if parent_id else None
+    )
+    db.session.add(novo_item)
+    db.session.commit()
+    
+    flash('Item adicionado com sucesso!', 'success')
     return redirect(url_for('admin.view_checklist', checklist_id=checklist_id))
 
+@admin_bp.route('/checklists/edit_item/<int:item_id>', methods=['POST'])
+@login_required()
+def edit_checklist_item(item_id):
+    """
+    Edita o texto ou a ordem de um item de checklist.
+    """
+    item = ChecklistItem.query.get_or_404(item_id)
+    
+    # Validação de segurança
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+    if user_role != 'admin' and item.checklist.unidade != user_unidade:
+        flash('Você não tem permissão para modificar este item.', 'danger')
+        return redirect(url_for('admin.checklists'))
+    
+    novo_texto = request.form.get('texto')
+    nova_ordem = request.form.get('ordem', type=int)
+
+    if not novo_texto:
+        flash('O texto do item não pode ser vazio.', 'warning')
+    else:
+        item.texto = novo_texto
+        if nova_ordem is not None and not item.parent_id:
+            item.ordem = nova_ordem
+        db.session.commit()
+        flash('Item atualizado com sucesso.', 'success')
+
+    return redirect(url_for('admin.view_checklist', checklist_id=item.checklist_id))
 
 @admin_bp.route('/checklists/delete_item/<int:item_id>', methods=['POST'])
 @login_required()
 def delete_checklist_item(item_id):
+    """
+    Exclui um item ou sub-item de um checklist.
+    """
     item = ChecklistItem.query.get_or_404(item_id)
-    checklist_id = item.checklist_id
-    checklist = Checklist.query.get(checklist_id)
-
+    checklist_id = item.checklist_id # Salva o ID antes de deletar
+    
+    # Validação de segurança
     user_role = session.get('role')
     user_unidade = session.get('unidade')
-
-    if user_role != 'admin' and checklist.unidade != user_unidade:
-        flash('Você não tem permissão para modificar este checklist.', 'danger')
+    if user_role != 'admin' and item.checklist.unidade != user_unidade:
+        flash('Você não tem permissão para excluir este item.', 'danger')
         return redirect(url_for('admin.checklists'))
     
     db.session.delete(item)
     db.session.commit()
-    flash('Item removido do checklist.', 'info')
+    
+    flash('Item removido com sucesso.', 'info')
     return redirect(url_for('admin.view_checklist', checklist_id=checklist_id))
+
 
 
 @admin_bp.route('/checklists/toggle_status/<int:checklist_id>', methods=['POST'])
@@ -1544,12 +1628,23 @@ def edit_checklist(checklist_id):
 
 
 @admin_bp.route('/checklist/<int:checklist_id>', methods=['GET', 'POST'])
+@login_required()
 def checklist_detalhe(checklist_id):
-    if 'admin_user' not in session:
-        return redirect(url_for('admin.login'))
-
+    """
+    Exibe os detalhes de um checklist, a lista de seus itens e processa
+    a adição de novos itens e sub-itens.
+    Esta função unifica a visualização e a adição.
+    """
     checklist = Checklist.query.get_or_404(checklist_id)
 
+    # Verifica permissão do usuário
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+    if user_role != 'admin' and checklist.unidade != user_unidade:
+        flash('Você não tem permissão para acessar este checklist.', 'danger')
+        return redirect(url_for('admin.checklists'))
+
+    # Se o formulário for enviado (adição de item ou sub-item)
     if request.method == 'POST':
         parent_id = request.form.get('parent_id')
         texto = request.form.get('texto')
@@ -1566,15 +1661,15 @@ def checklist_detalhe(checklist_id):
             )
             db.session.add(novo_item)
             db.session.commit()
+            
             if parent_id:
                 flash('Sub-item adicionado com sucesso.', 'success')
             else:
                 flash('Item principal adicionado com sucesso.', 'success')
         
-        # CORREÇÃO APLICADA AQUI:
         return redirect(url_for('admin.checklist_detalhe', checklist_id=checklist_id))
 
-    # A lógica 'GET' permanece a mesma
+    # Se for um GET, apenas busca e exibe os itens
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
 
     return render_template(
@@ -1637,43 +1732,48 @@ def pendencias():
 
 
 @admin_bp.route('/checklist/item/<int:item_id>/editar', methods=['POST'])
+@login_required()
 def editar_item(item_id):
-    if 'admin_user' not in session:
-        return jsonify({'success': False, 'message': 'Acesso negado'}), 403
-
+    """
+    CORRIGIDO: Atualiza o texto e a ordem de um item ou sub-item e
+    redireciona de volta para a página de detalhes do checklist.
+    """
     item = ChecklistItem.query.get_or_404(item_id)
     texto = request.form.get('texto')
     ordem = request.form.get('ordem', type=int)
 
+    # Validação para não permitir texto vazio
     if not texto:
-        return jsonify({'success': False, 'message': 'O texto não pode ser vazio.'}), 400
+        flash('O texto do item não pode ser vazio.', 'danger')
+        return redirect(url_for('admin.checklist_detalhe', checklist_id=item.checklist_id))
 
     item.texto = texto
     item.ordem = ordem
     db.session.commit()
     
-    flash(f'Item "{item.texto}" atualizado com sucesso!', 'success')
-    return jsonify({'success': True})
+    flash(f'Item "{item.texto}" foi atualizado com sucesso!', 'success')
+    # Redireciona de volta para a página de gerenciamento de itens
+    return redirect(url_for('admin.checklist_detalhe', checklist_id=item.checklist_id))
+
+
 
 @admin_bp.route('/checklist/item/<int:item_id>/excluir', methods=['POST'])
+@login_required()
 def excluir_item(item_id):
-    if 'admin_user' not in session:
-        # Para consistência, vamos retornar um redirect com flash em vez de JSON
-        flash('Acesso negado. Por favor, faça login novamente.', 'danger')
-        return redirect(url_for('admin.login'))
-
+    """
+    CORRIGIDO: Exclui um item ou sub-item e redireciona de volta para a
+    página de detalhes do checklist.
+    """
     item = ChecklistItem.query.get_or_404(item_id)
-    checklist_id = item.checklist_id  # Salva o ID antes de deletar o item
+    checklist_id = item.checklist_id # Guarda o ID para o redirect
 
-    # Deleta o item e seus sub-itens, se houver (o SQLAlchemy cuida disso pelo cascade)
+    # A relação cascade no modelo deve cuidar da exclusão dos sub-itens
     db.session.delete(item)
     db.session.commit()
     
-    flash(f'Item "{item.texto}" foi excluído com sucesso.', 'info')
-    
-    # CORREÇÃO: Redireciona para 'checklist_detalhe' em vez de 'checklist_detail'
+    flash(f'O item "{item.texto}" foi excluído.', 'info')
+    # Redireciona de volta para a página de gerenciamento de itens
     return redirect(url_for('admin.checklist_detalhe', checklist_id=checklist_id))
-
 
 
 

@@ -19,51 +19,111 @@
             Preenchendo checklist para o veículo: <strong>{{ veiculo.nome_conjunto }}</strong>
         </div>
 
-        {% for item, sub_itens in itens_agrupados.items() %}
-            <div class="card mb-3">
-                <div class="card-header fw-bold {% if item.id in pendencias_abertas %}bg-warning text-dark{% endif %}">
-                    {{ item.ordem }}. {{ item.texto }}
-                    {% if item.id in pendencias_abertas %}
-                        <span class="badge bg-danger ms-2">Item com pendência aberta</span>
-                    {% endif %}
+        <!-- Loop principal simplificado usando itens_principais -->
+        {% for item in itens_principais %}
+
+            <!-- LINHA DE DEBUG -->
+            <div class="alert alert-warning">DEBUG: Texto do item recebido: <strong>{{ item.texto }}</strong></div>
+            
+            {# Lógica para renderizar o bloco de extintores #}
+            {% if item.texto == '__BLOCO_EXTINTORES__' %}
+                <div class="card mt-4 mb-3">
+                    <div class="card-header">
+                        <h5>Controle de Extintores</h5>
+                    </div>
+                    <div class="card-body table-responsive">
+                        <!-- Input escondido para que o backend saiba que este bloco está presente -->
+                        <input type="hidden" name="item_textos_especiais" value="__BLOCO_EXTINTORES__">
+
+                        <table class="table table-bordered align-middle text-center">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 15%;">Local</th>
+                                    <th style="width: 15%;">Tipo</th>
+                                    <th style="width: 15%;">Peso</th>
+                                    <th style="width: 20%;">Vencimento</th>
+                                    <th style="width: 15%;">Trocado?</th>
+                                    <th>Motivo da Troca</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% set locais = ['CABINE', '1° CARRETA L.D', '1° CARRETA L.E', '2° CARRETA L.D', '2° CARRETA L.E'] %}
+                                {% for i in range(5) %}
+                                <tr>
+                                    <td>
+                                        {{ locais[i] }}
+                                        <input type="hidden" name="extintor-{{ i }}-local" value="{{ locais[i] }}">
+                                    </td>
+                                    <td><input type="text" class="form-control" name="extintor-{{ i }}-tipo"></td>
+                                    <td><input type="text" class="form-control" name="extintor-{{ i }}-peso"></td>
+                                    <td><input type="date" class="form-control" name="extintor-{{ i }}-vencimento"></td>
+                                    <td>
+                                        <div class="btn-group w-100" role="group">
+                                            <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="trocado-sim-{{ i }}" value="Sim" autocomplete="off">
+                                            <label class="btn btn-outline-primary btn-sm" for="trocado-sim-{{ i }}">Sim</label>
+
+                                            <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="trocado-nao-{{ i }}" value="Não" autocomplete="off" checked>
+                                            <label class="btn btn-outline-secondary btn-sm" for="trocado-nao-{{ i }}">Não</label>
+                                        </div>
+                                    </td>
+                                    <td><input type="text" class="form-control" name="extintor-{{ i }}-motivo"></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <ul class="list-group list-group-flush">
-                    {% if sub_itens %}
-                        {% for sub_item in sub_itens %}
-                            <li class="list-group-item {% if sub_item.id in pendencias_abertas %}list-group-item-warning{% endif %}">
-                                <div class="mb-2">{{ sub_item.texto }} {% if sub_item.id in pendencias_abertas %}<span class="badge bg-danger ms-1">Pendência</span>{% endif %}</div>
+
+            {# Lógica para renderizar itens normais #}
+            {% else %}
+                <div class="card mb-3">
+                    <div class="card-header fw-bold {% if item.id in pendencias_abertas %}bg-warning text-dark{% endif %}">
+                        {{ item.ordem }}. {{ item.texto }}
+                        {% if item.id in pendencias_abertas %}
+                            <span class="badge bg-danger ms-2">Item com pendência aberta</span>
+                        {% endif %}
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        {% if item.sub_itens %}
+                            {% for sub_item in item.sub_itens.order_by('ordem') %}
+                                <li class="list-group-item {% if sub_item.id in pendencias_abertas %}list-group-item-warning{% endif %}">
+                                    <div class="mb-2">{{ sub_item.texto }} {% if sub_item.id in pendencias_abertas %}<span class="badge bg-danger ms-1">Pendência</span>{% endif %}</div>
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off" required>
+                                        <label class="btn btn-outline-success" for="conforme-{{ sub_item.id }}">Conforme</label>
+
+                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="nao-conforme-{{ sub_item.id }}" value="NAO CONFORME" autocomplete="off">
+                                        <label class="btn btn-outline-danger" for="nao-conforme-{{ sub_item.id }}">Não Conforme</label>
+
+                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="na-{{ sub_item.id }}" value="N/A" autocomplete="off">
+                                        <label class="btn btn-outline-secondary" for="na-{{ sub_item.id }}">N/A</label>
+                                    </div>
+                                    <textarea class="form-control mt-2" name="obs-{{ sub_item.id }}" placeholder="Observação (opcional)"></textarea>
+                                </li>
+                            {% endfor %}
+                        {% else %}
+                            <li class="list-group-item">
                                 <div class="btn-group w-100" role="group">
-                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off" required>
-                                    <label class="btn btn-outline-success" for="conforme-{{ sub_item.id }}">Conforme</label>
+                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conforme-{{ item.id }}" value="CONFORME" autocomplete="off" required>
+                                    <label class="btn btn-outline-success" for="conforme-{{ item.id }}">Conforme</label>
 
-                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="nao-conforme-{{ sub_item.id }}" value="NAO CONFORME" autocomplete="off">
-                                    <label class="btn btn-outline-danger" for="nao-conforme-{{ sub_item.id }}">Não Conforme</label>
+                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="nao-conforme-{{ item.id }}" value="NAO CONFORME" autocomplete="off">
+                                    <label class="btn btn-outline-danger" for="nao-conforme-{{ item.id }}">Não Conforme</label>
 
-                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="na-{{ sub_item.id }}" value="N/A" autocomplete="off">
-                                    <label class="btn btn-outline-secondary" for="na-{{ sub_item.id }}">N/A</label>
+                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="na-{{ item.id }}" value="N/A" autocomplete="off">
+                                    <label class="btn btn-outline-secondary" for="na-{{ item.id }}">N/A</label>
                                 </div>
-                                <textarea class="form-control mt-2" name="obs-{{ sub_item.id }}" placeholder="Observação (opcional)"></textarea>
+                                <textarea class="form-control mt-2" name="obs-{{ item.id }}" placeholder="Observação (opcional)"></textarea>
                             </li>
-                        {% endfor %}
-                    {% else %}
-                        <li class="list-group-item">
-                            <div class="btn-group w-100" role="group">
-                                <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conforme-{{ item.id }}" value="CONFORME" autocomplete="off" required>
-                                <label class="btn btn-outline-success" for="conforme-{{ item.id }}">Conforme</label>
-
-                                <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="nao-conforme-{{ item.id }}" value="NAO CONFORME" autocomplete="off">
-                                <label class="btn btn-outline-danger" for="nao-conforme-{{ item.id }}">Não Conforme</label>
-
-                                <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="na-{{ item.id }}" value="N/A" autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="na-{{ item.id }}">N/A</label>
-                            </div>
-                            <textarea class="form-control mt-2" name="obs-{{ item.id }}" placeholder="Observação (opcional)"></textarea>
-                        </li>
-                    {% endif %}
-                </ul>
-            </div>
+                        {% endif %}
+                    </ul>
+                </div>
+            {% endif %}
         {% endfor %}
-        
+
+        <!-- O resto do formulário (Observações, Termo, Assinaturas) permanece o mesmo -->
+
+        <!-- Observações Gerais -->
         <div class="card mt-4">
             <div class="card-header">
                 <h5>Observações Gerais</h5>
@@ -84,20 +144,54 @@
             </div>
         </div>
 
-        <!-- Seção de Assinatura -->
+        <!-- Termo de Ciência -->
         <div class="card mt-4">
-            <div class="card-header">
-                <h5>Assinatura do Motorista</h5>
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Termo de Ciência e Responsabilidade</h5>
             </div>
-            <div class="card-body text-center">
-                <div id="signature-pad-container" style="border: 1px solid #ced4da; border-radius: .25rem; position: relative; height: 200px; margin: 0 auto; max-width: 500px;">
-                    <canvas id="signature-canvas" style="width: 100%; height: 100%;"></canvas>
+            <div class="card-body">
+                <p class="small text-muted">
+                    1 - Estou ciente que a utilização dos referidos EPIs e Uniformes são obrigatórios. A não observância deste critério, acarretará punições "Sanções Disciplinares". No caso dos EPIs, a não utilização poderá caracterizar falta grave, considerada no artigo 482, letra “H” da C.L.T.
+                </p>
+                <p class="small text-muted">
+                    2 - Declaro para os devidos fins que o veículo de minha responsabilidade, encontra-se nas perfeitas condições de uso, conforme apurado nos itens acima e que estou ciente de que deverei comunicar a empresa sobre qualquer alteração no estado de conservação e funcionamento do mesmo.
+                </p>
+            </div>
+        </div>
+
+        <!-- Seção de Assinaturas -->
+        <div class="row mt-4">
+            <div class="col-md-6 mb-3 mb-md-0">
+                <div class="card h-100">
+                    <div class="card-header text-center">
+                        <h5>Assinatura do Motorista</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        <div style="border: 1px solid #ced4da; border-radius: .25rem; position: relative; height: 200px; margin: 0 auto; max-width: 400px;">
+                            <canvas id="signature-canvas-motorista" style="width: 100%; height: 100%;"></canvas>
+                        </div>
+                        <input type="hidden" name="assinatura_motorista" id="assinatura_motorista_input">
+                        <div class="mt-2">
+                            <button type="button" id="clear-signature-motorista" class="btn btn-sm btn-outline-secondary">Limpar</button>
+                        </div>
+                    </div>
                 </div>
-                <input type="hidden" name="assinatura_motorista" id="assinatura_motorista_input">
-                <div class="mt-2">
-                    <button type="button" id="clear-signature" class="btn btn-sm btn-outline-secondary">Limpar Assinatura</button>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header text-center">
+                        <h5>Assinatura do Responsável</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        <div style="border: 1px solid #ced4da; border-radius: .25rem; position: relative; height: 200px; margin: 0 auto; max-width: 400px;">
+                            <canvas id="signature-canvas-responsavel" style="width: 100%; height: 100%;"></canvas>
+                        </div>
+                        <input type="hidden" name="assinatura_responsavel" id="assinatura_responsavel_input">
+                        <div class="mt-2">
+                            <button type="button" id="clear-signature-responsavel" class="btn btn-sm btn-outline-secondary">Limpar</button>
+                        </div>
+                    </div>
                 </div>
-                <small class="form-text text-muted">Por favor, assine no campo acima antes de enviar.</small>
             </div>
         </div>
 
@@ -109,39 +203,51 @@
 </form>
 
 {% if veiculo %}
-<!-- Adiciona a biblioteca e o script da assinatura no final -->
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const canvas = document.getElementById('signature-canvas');
-        const signaturePad = new SignaturePad(canvas, {
-            backgroundColor: 'rgb(255, 255, 255)'
-        });
+        const canvasMotorista = document.getElementById('signature-canvas-motorista');
+        const signaturePadMotorista = new SignaturePad(canvasMotorista, { backgroundColor: 'rgb(255, 255, 255)' });
 
-        function resizeCanvas() {
-            const ratio =  Math.max(window.devicePixelRatio || 1, 1);
-            canvas.width = canvas.offsetWidth * ratio;
-            canvas.height = canvas.offsetHeight * ratio;
-            canvas.getContext("2d").scale(ratio, ratio);
-            signaturePad.clear();
+        const canvasResponsavel = document.getElementById('signature-canvas-responsavel');
+        const signaturePadResponsavel = new SignaturePad(canvasResponsavel, { backgroundColor: 'rgb(255, 255, 255)' });
+
+        function resizeCanvases() {
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            [canvasMotorista, canvasResponsavel].forEach(canvas => {
+                if(canvas) {
+                    canvas.width = canvas.offsetWidth * ratio;
+                    canvas.height = canvas.offsetHeight * ratio;
+                    canvas.getContext("2d").scale(ratio, ratio);
+                }
+            });
+            signaturePadMotorista.clear();
+            signaturePadResponsavel.clear();
         }
 
-        window.addEventListener("resize", resizeCanvas);
-        resizeCanvas();
+        window.addEventListener("resize", resizeCanvases);
+        resizeCanvases();
 
-        document.getElementById('clear-signature').addEventListener('click', function () {
-            signaturePad.clear();
-        });
+        document.getElementById('clear-signature-motorista').addEventListener('click', () => signaturePadMotorista.clear());
+        document.getElementById('clear-signature-responsavel').addEventListener('click', () => signaturePadResponsavel.clear());
 
-        const form = canvas.closest('form');
-        form.addEventListener('submit', function (event) {
-            if (signaturePad.isEmpty()) {
-                alert("A assinatura do motorista é obrigatória.");
-                event.preventDefault(); // Impede o envio do formulário
-            } else {
-                const signatureInput = document.getElementById('assinatura_motorista_input');
-                signatureInput.value = signaturePad.toDataURL('image/png');
+        document.querySelector('form').addEventListener('submit', function (event) {
+            let motoristaAssinou = !signaturePadMotorista.isEmpty();
+            let responsavelAssinou = !signaturePadResponsavel.isEmpty();
+
+            if (!motoristaAssinou) {
+                alert("A assinatura do Motorista é obrigatória.");
+                event.preventDefault();
+                return;
             }
+            if (!responsavelAssinou) {
+                alert("A assinatura do Responsável é obrigatória.");
+                event.preventDefault();
+                return;
+            }
+            
+            document.getElementById('assinatura_motorista_input').value = signaturePadMotorista.toDataURL('image/png');
+            document.getElementById('assinatura_responsavel_input').value = signaturePadResponsavel.toDataURL('image/png');
         });
     });
 </script>

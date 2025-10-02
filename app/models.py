@@ -93,10 +93,10 @@ class Checklist(db.Model):
     codigo = db.Column(db.String(50), nullable=False)
     revisao = db.Column(db.String(20), nullable=False)
     data = db.Column(db.Date, nullable=False)
-    ativo = db.Column(db.Boolean, default=True, nullable=False)  # <-- CAMPO ADICIONADO
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
 
     itens = db.relationship('ChecklistItem', backref='checklist', lazy='dynamic', cascade="all, delete-orphan")
-    preenchimentos = db.relationship('ChecklistPreenchido', backref='checklist', lazy=True, cascade="all, delete-orphan") # <-- CASCADE ADICIONADO
+    preenchimentos = db.relationship('ChecklistPreenchido', backref='checklist', lazy=True, cascade="all, delete-orphan")
 
 class ChecklistItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -115,11 +115,13 @@ class ChecklistPreenchido(db.Model):
     data_preenchimento = db.Column(db.DateTime, default=datetime.utcnow)
     
     assinatura_motorista = db.Column(db.Text, nullable=True)
+    assinatura_responsavel = db.Column(db.Text, nullable=True) # <-- NOVO CAMPO
     outros_problemas = db.Column(db.Text, nullable=True)
     solucoes_adotadas = db.Column(db.Text, nullable=True)
     pendencias_gerais = db.Column(db.Text, nullable=True)
 
     respostas = db.relationship('ChecklistResposta', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
+    extintores = db.relationship('ExtintorCheck', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan") # <-- NOVO RELACIONAMENTO
 
 class ChecklistResposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -130,6 +132,17 @@ class ChecklistResposta(db.Model):
 
     item = db.relationship('ChecklistItem')
     pendencia = db.relationship('Pendencia', backref='resposta_abertura', uselist=False, cascade="all, delete-orphan")
+
+# --- NOVA TABELA PARA EXTINTORES ---
+class ExtintorCheck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    preenchimento_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)
+    local = db.Column(db.String(50), nullable=False) # Ex: 'CABINE', '1° CARRETA L.D'
+    tipo = db.Column(db.String(50))
+    peso = db.Column(db.String(20))
+    vencimento = db.Column(db.Date, nullable=True)
+    trocado = db.Column(db.String(3)) # 'Sim' ou 'Não'
+    motivo_troca = db.Column(db.Text, nullable=True)
 
 # --- ESTRUTURA PARA PENDÊNCIAS ---
 

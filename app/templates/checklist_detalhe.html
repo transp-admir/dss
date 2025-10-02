@@ -18,10 +18,10 @@
                 <h6 class="m-0 font-weight-bold text-primary">Adicionar Novo Item Principal</h6>
             </div>
             <div class="card-body">
-                <form action="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" method="POST">
+                <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST">
                     <div class="input-group">
-                        <input type="number" name="ordem" class="form-control" placeholder="Ordem" value="0" style="max-width: 100px;">
                         <input type="text" name="texto" class="form-control" placeholder="Digite o texto para o novo item..." required>
+                        <input type="number" name="ordem" class="form-control" placeholder="Ordem" value="0" style="max-width: 100px;">
                         <button class="btn btn-success" type="submit">Adicionar Item</button>
                     </div>
                 </form>
@@ -35,9 +35,9 @@
                 <h6 class="m-0 font-weight-bold text-info">Blocos Especiais</h6>
             </div>
             <div class="card-body">
-                <form action="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" method="POST">
+                <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST">
+                    <!-- Este input está escondido! Ele envia o texto especial correto para o backend -->
                     <input type="hidden" name="texto" value="__BLOCO_EXTINTORES__">
-                     <input type="hidden" name="ordem" value="99">
                     <div class="d-grid">
                         <button type="submit" class="btn btn-info">Adicionar Bloco de Controle de Extintores</button>
                     </div>
@@ -60,14 +60,13 @@
             <ul class="list-group">
                 {% for item in itens_principais %}
                     <li class="list-group-item">
-                        <!-- Formulário de Edição do Item Principal -->
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <form action="{{ url_for('admin.editar_item', item_id=item.id) }}" method="POST" class="d-flex flex-grow-1 align-items-center edit-item-form">
-                                <input type="number" name="ordem" value="{{ item.ordem }}" class="form-control me-2" style="width: 80px;" title="Ordem de exibição">
+                            <!-- Formulário de Edição do Item Principal -->
+                            <form action="{{ url_for('admin.edit_checklist_item', item_id=item.id) }}" method="POST" class="d-flex flex-grow-1 align-items-center">
+                                <input type="number" name="ordem" value="{{ item.ordem }}" class="form-control me-2" style="width: 80px;">
                                 
                                 {% if item.texto == '__BLOCO_EXTINTORES__' %}
                                     <span class="form-control bg-light text-info fw-bold">-- Bloco de Controle de Extintores --</span>
-                                    <input type="hidden" name="texto" value="{{ item.texto }}" />
                                 {% else %}
                                     <input type="text" name="texto" value="{{ item.texto }}" class="form-control me-2">
                                 {% endif %}
@@ -75,7 +74,8 @@
                                 <button type="submit" class="btn btn-sm btn-primary me-2">Salvar</button>
                             </form>
                             
-                            <form action="{{ url_for('admin.excluir_item', item_id=item.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir este item e todos os seus sub-itens?');">
+                            <!-- Botão de Exclusão do Item Principal -->
+                            <form action="{{ url_for('admin.delete_checklist_item', item_id=item.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir este item e todos os seus sub-itens?');">
                                 <button type="submit" class="btn btn-sm btn-danger">&times;</button>
                             </form>
                         </div>
@@ -84,25 +84,18 @@
                         {% if item.texto != '__BLOCO_EXTINTORES__' %}
                         <div class="ps-5">
                             <ul class="list-group list-group-flush">
-                                {% for sub_item in item.sub_itens.order_by(ChecklistItem.ordem) %}
-                                <li class="list-group-item d-flex justify-content-between align-items-center py-1">
-                                    <!-- Formulário de Edição do Sub-item -->
-                                    <form action="{{ url_for('admin.editar_item', item_id=sub_item.id) }}" method="POST" class="d-flex flex-grow-1 align-items-center edit-item-form">
-                                        <input type="number" name="ordem" value="{{ sub_item.ordem }}" class="form-control form-control-sm me-2" style="width: 70px;" title="Ordem">
-                                        <input type="text" name="texto" value="{{ sub_item.texto }}" class="form-control form-control-sm me-2">
-                                        <button type="submit" class="btn btn-sm btn-outline-primary py-0 px-2 me-2">Salvar</button>
-                                    </form>
-                                    <!-- Formulário de Exclusão do Sub-item -->
-                                    <form action="{{ url_for('admin.excluir_item', item_id=sub_item.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir este sub-item?');">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">&times;</button>
+                                {% for sub_item in item.sub_itens.order_by('ordem') %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <small>{{ sub_item.texto }}</small>
+                                    <form action="{{ url_for('admin.delete_checklist_item', item_id=sub_item.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir este sub-item?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">&times;</button>
                                     </form>
                                 </li>
                                 {% endfor %}
                             </ul>
                             <!-- Formulário para adicionar sub-item -->
-                            <form action="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" method="POST" class="input-group input-group-sm mt-2">
+                            <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST" class="input-group input-group-sm mt-2">
                                 <input type="hidden" name="parent_id" value="{{ item.id }}">
-                                <input type="number" name="ordem" class="form-control" placeholder="Ordem" value="0" style="max-width: 80px;">
                                 <input type="text" name="texto" class="form-control" placeholder="Adicionar sub-item..." required>
                                 <button class="btn btn-outline-secondary" type="submit">Adicionar</button>
                             </form>
