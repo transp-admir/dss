@@ -26,8 +26,6 @@ wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -46,11 +44,12 @@ htmlcov/
 
 # Flask
 instance/
+instance/*.db
 .webassets-cache
 
 # Environments
 .env
-.venv
+.venv/
 venv/
 ENV/
 env.bak/
@@ -59,13 +58,9 @@ venv.bak/
 # SQLite databases
 *.sqlite3
 *.db
-database.db
 
 # IDE / Editor specific files
 .idea/
 .vscode/
 *.sublime-project
 *.sublime-workspace
-__pycache__/
-*.pyc
-

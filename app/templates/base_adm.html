@@ -199,8 +199,11 @@
 
     <main class="main-content" id="main-content">
         {% if self.header()|trim %}
-        <header class="header">
-            <h1>{% block header %}{% endblock %}</h1>
+        <header class="header d-flex justify-content-between align-items-center">
+            <h1 class="m-0">{% block header %}{% endblock %}</h1>
+            {% if session.admin_user %}
+                <span class="fs-5 text-muted">Bem-vindo(a), <strong class="text-dark">{{ session.admin_user }}</strong></span>
+            {% endif %}
         </header>
         {% endif %}
 
