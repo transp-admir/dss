@@ -57,7 +57,7 @@
             transition: transform 0.2s, box-shadow 0.2s;
             min-height: 150px;
         }
-        .option-card:hover {
+        .option-card:not(.disabled):hover {
             transform: translateY(-5px);
             box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         }
@@ -70,6 +70,13 @@
         .option-card.documentos {
             background-color: #ffc107;
             color: #212529;
+        }
+        /* Estilo para os cards desabilitados */
+        .option-card.disabled {
+            background-color: #adb5bd; /* Cor cinza */
+            color: #6c757d;
+            cursor: not-allowed; /* Cursor de "não permitido" */
+            pointer-events: none; /* Impede eventos de clique */
         }
         .option-card i {
             font-size: 3rem;
@@ -98,7 +105,7 @@
         <p class="portal-subtitle">Selecione uma das opções abaixo para continuar.</p>
         
         <div class="options-grid">
-            <a href="{{ url_for('main.lista_conteudos') }}" class="option-card dss">
+            <a href="#" class="option-card dss disabled">
                 <i class="fas fa-file-signature"></i>
                 <span>Acessar DSS</span>
             </a>
@@ -106,7 +113,7 @@
                 <i class="fas fa-clipboard-check"></i>
                 <span>Fazer Checklist</span>
             </a>
-            <a href="{{ url_for('main.lista_documentos_motorista') }}" class="option-card documentos">
+            <a href="#" class="option-card documentos disabled">
                 <i class="fas fa-folder-open"></i>
                 <span>Biblioteca de Documentos</span>
             </a>

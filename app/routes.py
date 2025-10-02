@@ -404,30 +404,53 @@ def lista_checklists_motorista():
         return redirect(url_for('main.motorista_login'))
     
     motorista_id = session['motorista_id']
-    checklists = Checklist.query.order_by(Checklist.data.desc()).all()
+    # Garante que estamos pegando apenas checklists que têm itens cadastrados
+    checklists = Checklist.query.filter(Checklist.itens.any()).order_by(Checklist.tipo, Checklist.codigo).all()
     
     checklists_com_status = []
     hoje = date.today()
 
     for checklist in checklists:
-        status = "N/A"
+        preenchido_no_periodo = False
+        status_texto = "Pendente"
+
+        # Lógica para Checklist Diário
         if checklist.tipo == 'DIÁRIO':
-            preenchido_hoje = ChecklistPreenchido.query.filter(
+            preenchimento = ChecklistPreenchido.query.filter(
                 and_(
                     ChecklistPreenchido.motorista_id == motorista_id,
                     ChecklistPreenchido.checklist_id == checklist.id,
                     db.func.date(ChecklistPreenchido.data_preenchimento) == hoje
                 )
             ).first()
+            if preenchimento:
+                preenchido_no_periodo = True
+                status_texto = "Preenchido Hoje"
 
-            if preenchido_hoje:
-                status = "Preenchido Hoje"
-            else:
-                status = "Pendente"
+        # NOVA LÓGICA: Para Checklist Mensal
+        elif checklist.tipo == 'MENSAL':
+            preenchimento = ChecklistPreenchido.query.filter(
+                and_(
+                    ChecklistPreenchido.motorista_id == motorista_id,
+                    ChecklistPreenchido.checklist_id == checklist.id,
+                    db.func.extract('year', ChecklistPreenchido.data_preenchimento) == hoje.year,
+                    db.func.extract('month', ChecklistPreenchido.data_preenchimento) == hoje.month
+                )
+            ).first()
+            if preenchimento:
+                preenchido_no_periodo = True
+                status_texto = "Preenchido este Mês"
         
-        checklists_com_status.append({'checklist': checklist, 'status': status})
+        # Outros tipos de checklist (Semanal, etc.) sempre aparecerão como "Pendente" por enquanto.
+        
+        checklists_com_status.append({
+            'checklist': checklist, 
+            'preenchido': preenchido_no_periodo, # Passa um booleano (True/False)
+            'status': status_texto                 # Passa o texto descritivo
+        })
 
     return render_template('motorista_lista_checklists.html', checklists_info=checklists_com_status)
+
 
 @main_bp.route('/checklist/preencher/<int:checklist_id>', methods=['GET', 'POST'])
 def preencher_checklist(checklist_id):
@@ -811,32 +834,44 @@ def excluir_documento(documento_id):
 
 
 # --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (NOVAS) ---
+# --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (COM FILTRO DE UNIDADE) ---
+
 @admin_bp.route('/pendencias', methods=['GET'])
+@login_required()  # Garante que apenas usuários logados acessem
 def gerenciar_pendencias():
-    if 'admin_user' not in session:
-        return redirect(url_for('admin.login'))
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
 
     # Dicionário para agrupar as pendências
     pendencias_agrupadas = defaultdict(list)
     
-    # Query base para buscar todas as pendências com status 'PENDENTE'
-    query = Pendencia.query.filter_by(status='PENDENTE').order_by(Pendencia.data_criacao.desc())
+    # Query base que já une Pendencia com Veiculo
+    query = Pendencia.query.join(Veiculo).filter(Pendencia.status == 'PENDENTE')
+
+    # Se o usuário não for admin, filtra as pendências pela sua unidade
+    if user_role != 'admin':
+        query = query.filter(Veiculo.unidade == user_unidade)
     
-    # Filtra por um veículo específico, se solicitado
+    # Filtra por um veículo específico, se solicitado via URL
     veiculo_id_str = request.args.get('veiculo_id')
     veiculo_id = int(veiculo_id_str) if veiculo_id_str else None
     if veiculo_id:
-        query = query.filter_by(veiculo_id=veiculo_id)
+        query = query.filter(Pendencia.veiculo_id == veiculo_id)
 
-    # Executa a query
-    pendencias = query.all()
+    # Executa a query final
+    pendencias = query.order_by(Pendencia.data_criacao.desc()).all()
 
     # Agrupa as pendências encontradas pelo objeto do veículo
     for pendencia in pendencias:
+        # A verificação de unidade já foi feita na query, aqui apenas agrupamos
         pendencias_agrupadas[pendencia.veiculo].append(pendencia)
 
-    # Busca todos os veículos para popular o filtro
-    todos_veiculos = Veiculo.query.order_by(Veiculo.nome_conjunto).all()
+    # Busca a lista de veículos para popular o filtro da página
+    veiculos_query = Veiculo.query
+    if user_role != 'admin':
+        # Se não for admin, o filtro também só mostra veículos da sua unidade
+        veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
+    todos_veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
 
     return render_template(
         'admin_pendencias.html',
@@ -847,13 +882,15 @@ def gerenciar_pendencias():
 
 
 @admin_bp.route('/pendencias/resolver', methods=['POST'])
+@login_required()
 def resolver_pendencia():
-    if 'admin_user' not in session:
-        return redirect(url_for('admin.login'))
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
 
     pendencia_id = request.form.get('pendencia_id')
     novo_status = request.form.get('status')
     observacao = request.form.get('observacao_admin')
+    numero_os = request.form.get('numero_os') # CAPTURA O NOVO CAMPO
 
     pendencia = Pendencia.query.get(pendencia_id)
 
@@ -861,18 +898,27 @@ def resolver_pendencia():
         flash('Pendência não encontrada.', 'danger')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
+    # Verificação de segurança (já implementada)
+    if user_role != 'admin' and pendencia.veiculo.unidade != user_unidade:
+        flash('Você não tem permissão para resolver pendências de outra unidade.', 'danger')
+        return redirect(url_for('admin.gerenciar_pendencias'))
+
     if pendencia.status != 'PENDENTE':
         flash('Esta pendência já foi resolvida ou finalizada.', 'warning')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
+    # Atualiza os campos no objeto da pendência
     pendencia.status = novo_status
     pendencia.observacao_admin = observacao
+    pendencia.numero_os = numero_os # SALVA O NÚMERO DA OS
     pendencia.data_resolucao = datetime.utcnow()
     
     db.session.commit()
 
-    flash(f'Pendência do item "{pendencia.item.texto}" atualizada para {novo_status.replace("_", " ")}.', 'success')
+    flash(f'Pendência do item "{pendencia.item.texto}" atualizada com sucesso.', 'success')
     return redirect(url_for('admin.gerenciar_pendencias'))
+
+
 # --- FIM DAS NOVAS ROTAS ---
 
 

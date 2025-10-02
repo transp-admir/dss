@@ -148,6 +148,7 @@ class Pendencia(db.Model):
     data_criacao = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     data_resolucao = db.Column(db.DateTime, nullable=True)
     observacao_admin = db.Column(db.Text, nullable=True)
+    numero_os = db.Column(db.String(50), nullable=True) # Campo para a Ordem de Serviço
 
     item = db.relationship('ChecklistItem')
     veiculo = db.relationship('Veiculo')

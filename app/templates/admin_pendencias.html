@@ -116,7 +116,6 @@
                                                         <p><strong>Veículo:</strong> {{ veiculo.nome_conjunto }}</p>
                                                         <p><strong>Observação do Motorista (para este item):</strong> {{ pendencia.resposta_abertura.observacao or 'N/A' }}</p>
                                                         
-                                                        <!-- Contexto do Checklist Original -->
                                                         <hr>
                                                         <div class="alert alert-secondary p-2">
                                                             <h6 class="alert-heading">Contexto: Observações Gerais do Checklist Original</h6>
@@ -137,14 +136,25 @@
                                                         </div>
                                                         <hr>
 
-                                                        <div class="mb-3">
-                                                            <label for="status-{{ pendencia.id }}" class="form-label"><strong>Alterar Status para:</strong></label>
-                                                            <select name="status" id="status-{{ pendencia.id }}" class="form-select" required>
-                                                                <option value="RESOLVIDO">RESOLVIDO</option>
-                                                                <option value="EM_ANDAMENTO">EM ANDAMENTO</option>
-                                                                <option value="NAO_PROCEDE">NÃO PROCEDE</option>
-                                                            </select>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="mb-3">
+                                                                    <label for="status-{{ pendencia.id }}" class="form-label"><strong>Alterar Status para:</strong></label>
+                                                                    <select name="status" id="status-{{ pendencia.id }}" class="form-select" required>
+                                                                        <option value="RESOLVIDO">RESOLVIDO</option>
+                                                                        <option value="EM_ANDAMENTO">EM ANDAMENTO</option>
+                                                                        <option value="NAO_PROCEDE">NÃO PROCEDE</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <div class="mb-3">
+                                                                    <label for="numero_os-{{ pendencia.id }}" class="form-label"><strong>N° Ordem de Serviço (O.S.):</strong></label>
+                                                                    <input type="text" name="numero_os" id="numero_os-{{ pendencia.id }}" class="form-control" placeholder="Opcional">
+                                                                </div>
+                                                            </div>
                                                         </div>
+                                                        
                                                         <div class="mb-3">
                                                             <label for="observacao_admin-{{ pendencia.id }}" class="form-label"><strong>Observação do Administrador:</strong></label>
                                                             <textarea name="observacao_admin" id="observacao_admin-{{ pendencia.id }}" class="form-control" rows="3"></textarea>
