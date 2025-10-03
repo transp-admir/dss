@@ -1837,10 +1837,21 @@ def importacao_pagina():
     return render_template('admin_importacao.html')
 
 
+# Substitua a sua função 'importar_dados' por esta versão corrigida
+
+# Substitua a sua função 'importar_dados' por esta versão melhorada
+
+# Substitua a sua função 'importar_dados' por esta versão COMPLETA e CORRIGIDA
+
 @admin_bp.route('/importacao/<string:tipo>', methods=['POST'])
 @login_required(required_role=["admin"])
 def importar_dados(tipo):
-    """Processa o upload de arquivos para importação em massa."""
+    """
+    Processa o upload de arquivos para importação em massa com lógica de "upsert".
+    - Se um registro não existe, ele é criado.
+    - Se um registro já existe, ele é atualizado caso os dados do arquivo sejam diferentes.
+    - CORRIGIDO: Mapeia a coluna 'frota' da planilha para o campo 'operacao' do banco de dados.
+    """
     if 'arquivo' not in request.files:
         flash('Nenhum arquivo enviado.', 'danger')
         return redirect(url_for('admin.importacao_pagina'))
@@ -1858,41 +1869,60 @@ def importar_dados(tipo):
         in_memory_file = io.BytesIO(arquivo.read())
         
         if arquivo.filename.endswith('.csv'):
-            df = pd.read_csv(in_memory_file, sep=';', dtype=str)
+            df = pd.read_csv(in_memory_file, sep=';', dtype=str, keep_default_na=False)
         else:
-            df = pd.read_excel(in_memory_file, dtype=str)
+            df = pd.read_excel(in_memory_file, dtype=str, keep_default_na=False)
         
-        df.columns = df.columns.str.strip()
+        df.columns = df.columns.str.strip().str.lower()
         df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
-        df.fillna('', inplace=True)
-
+        
         adicionados = 0
+        atualizados = 0
         ignorados = 0
         erros = []
 
         if tipo == 'motoristas':
             required_cols = ['nome', 'cpf', 'unidade']
             if not all(col in df.columns for col in required_cols):
-                flash(f'O arquivo de motoristas deve conter as colunas: {", ".join(required_cols)}.', 'danger')
+                flash(f'Arquivo de motoristas deve conter as colunas: {", ".join(required_cols)}.', 'danger')
                 return redirect(url_for('admin.importacao_pagina'))
 
             for index, row in df.iterrows():
-                if not row['cpf'] or not row['nome'] or not row['unidade']:
-                    erros.append(f'Linha {index + 2}: Dados obrigatórios (nome, cpf, unidade) faltando.')
+                if not row.get('cpf') or not row.get('nome') or not row.get('unidade'):
+                    erros.append(f'Linha {index + 2}: Faltando dados obrigatórios (nome, cpf, unidade).')
                     ignorados += 1
                     continue
                 
-                if Motorista.query.filter_by(cpf=row['cpf']).first():
-                    ignorados += 1
+                motorista = Motorista.query.filter_by(cpf=row['cpf']).first()
+                
+                # Pega o valor da coluna 'frota' para usar nos campos 'operacao' e 'frota' do banco
+                valor_operacao_frota = row.get('frota', '')
+
+                if motorista:
+                    # UPDATE: Motorista existe, verifica por mudanças
+                    changes = []
+                    if motorista.nome != row.get('nome'): motorista.nome = row.get('nome'); changes.append('nome')
+                    if motorista.unidade != row.get('unidade'): motorista.unidade = row.get('unidade'); changes.append('unidade')
+                    if motorista.rg != row.get('rg', ''): motorista.rg = row.get('rg', ''); changes.append('rg')
+                    if motorista.cnh != row.get('cnh', ''): motorista.cnh = row.get('cnh', ''); changes.append('cnh')
+                    
+                    if (motorista.operacao or '') != valor_operacao_frota: motorista.operacao = valor_operacao_frota; changes.append('operacao')
+                    if (motorista.frota or '') != valor_operacao_frota: motorista.frota = valor_operacao_frota; changes.append('frota')
+                    
+                    if changes:
+                        atualizados += 1
+                    else:
+                        ignorados += 1
                 else:
+                    # INSERT: Motorista não existe, cria um novo
                     novo_motorista = Motorista(
                         nome=row['nome'],
                         cpf=row['cpf'],
                         unidade=row['unidade'],
-                        operacao=row.get('operacao', None),
-                        rg=row.get('rg', None),
-                        cnh=row.get('cnh', None),
-                        frota=row.get('frota', None)
+                        operacao=valor_operacao_frota,
+                        frota=valor_operacao_frota,
+                        rg=row.get('rg', ''),
+                        cnh=row.get('cnh', '')
                     )
                     novo_motorista.set_password(None)
                     db.session.add(novo_motorista)
@@ -1901,13 +1931,15 @@ def importar_dados(tipo):
         elif tipo == 'placas':
             required_cols = ['numero', 'tipo', 'unidade']
             if not all(col in df.columns for col in required_cols):
-                flash(f'O arquivo de placas deve conter as colunas: {", ".join(required_cols)}.', 'danger')
+                flash(f'Arquivo de placas deve conter as colunas: {", ".join(required_cols)}.', 'danger')
                 return redirect(url_for('admin.importacao_pagina'))
 
             for index, row in df.iterrows():
+                numero_placa = row.get('numero', '').upper()
                 tipo_placa = row.get('tipo', '').upper()
-                if not row['numero'] or not tipo_placa or not row['unidade']:
-                    erros.append(f'Linha {index + 2}: Dados obrigatórios (numero, tipo, unidade) faltando.')
+
+                if not numero_placa or not tipo_placa or not row.get('unidade'):
+                    erros.append(f'Linha {index + 2}: Faltando dados obrigatórios (numero, tipo, unidade).')
                     ignorados += 1
                     continue
 
@@ -1916,83 +1948,84 @@ def importar_dados(tipo):
                     ignorados += 1
                     continue
                 
-                if Placa.query.filter_by(numero=row['numero'].upper()).first():
-                    ignorados += 1
+                placa = Placa.query.filter_by(numero=numero_placa).first()
+
+                if placa:
+                    changes = []
+                    if (placa.tipo or '') != tipo_placa: placa.tipo = tipo_placa; changes.append('tipo')
+                    if (placa.unidade or '') != row.get('unidade'): placa.unidade = row.get('unidade'); changes.append('unidade')
+                    if (placa.operacao or '') != row.get('operacao', ''): placa.operacao = row.get('operacao', ''); changes.append('operacao')
+                    if changes: atualizados += 1
+                    else: ignorados += 1
                 else:
-                    nova_placa = Placa(
-                        numero=row['numero'].upper(),
-                        tipo=tipo_placa,
-                        unidade=row['unidade'],
-                        operacao=row.get('operacao', None)
-                    )
+                    nova_placa = Placa(numero=numero_placa, tipo=tipo_placa, unidade=row['unidade'], operacao=row.get('operacao', ''))
                     db.session.add(nova_placa)
                     adicionados += 1
         
         elif tipo == 'conjuntos':
             required_cols = ['nome_conjunto', 'unidade', 'placa_cavalo']
             if not all(col in df.columns for col in required_cols):
-                flash(f'O arquivo de conjuntos deve conter as colunas: {", ".join(required_cols)}.', 'danger')
+                flash(f'Arquivo de conjuntos deve conter as colunas: {", ".join(required_cols)}.', 'danger')
                 return redirect(url_for('admin.importacao_pagina'))
 
             for index, row in df.iterrows():
                 nome_conjunto = row.get('nome_conjunto')
                 if not nome_conjunto or not row.get('unidade') or not row.get('placa_cavalo'):
-                    erros.append(f'Linha {index + 2}: Dados obrigatórios (nome_conjunto, unidade, placa_cavalo) faltando.')
+                    erros.append(f'Linha {index + 2}: Faltando dados obrigatórios (nome_conjunto, unidade, placa_cavalo).')
                     ignorados += 1
                     continue
                 
-                if Veiculo.query.filter_by(nome_conjunto=nome_conjunto).first():
-                    ignorados += 1
-                    continue
-                
-                # Buscar IDs das placas
                 placa_cavalo_num = row.get('placa_cavalo').upper()
-                cavalo = Placa.query.filter_by(numero=placa_cavalo_num, tipo='CAVALO').first()
+                cavalo = Placa.query.filter_by(numero=placa_cavalo_num).first()
                 if not cavalo:
-                    erros.append(f"Linha {index + 2}: Placa cavalo '{placa_cavalo_num}' não encontrada ou não é do tipo CAVALO.")
+                    erros.append(f"Linha {index + 2}: Placa cavalo '{placa_cavalo_num}' não encontrada no banco.")
                     ignorados += 1
                     continue
                 
                 carreta1_id = None
                 placa_carreta1_num = row.get('placa_carreta1', '').upper()
                 if placa_carreta1_num:
-                    carreta1 = Placa.query.filter_by(numero=placa_carreta1_num, tipo='CARRETA').first()
-                    if carreta1:
-                        carreta1_id = carreta1.id
-                    else:
-                        erros.append(f"Linha {index + 2}: Placa carreta 1 '{placa_carreta1_num}' não encontrada ou não é do tipo CARRETA.")
+                    carreta1 = Placa.query.filter_by(numero=placa_carreta1_num).first()
+                    if carreta1: carreta1_id = carreta1.id
+                    else: erros.append(f"Linha {index + 2}: Placa carreta 1 '{placa_carreta1_num}' não encontrada.")
                 
                 carreta2_id = None
                 placa_carreta2_num = row.get('placa_carreta2', '').upper()
                 if placa_carreta2_num:
-                    carreta2 = Placa.query.filter_by(numero=placa_carreta2_num, tipo='CARRETA').first()
-                    if carreta2:
-                        carreta2_id = carreta2.id
-                    else:
-                        erros.append(f"Linha {index + 2}: Placa carreta 2 '{placa_carreta2_num}' não encontrada ou não é do tipo CARRETA.")
+                    carreta2 = Placa.query.filter_by(numero=placa_carreta2_num).first()
+                    if carreta2: carreta2_id = carreta2.id
+                    else: erros.append(f"Linha {index + 2}: Placa carreta 2 '{placa_carreta2_num}' não encontrada.")
 
-                novo_veiculo = Veiculo(
-                    nome_conjunto=nome_conjunto,
-                    unidade=row.get('unidade'),
-                    placa_cavalo_id=cavalo.id,
-                    placa_carreta1_id=carreta1_id,
-                    placa_carreta2_id=carreta2_id,
-                    operacao=row.get('operacao', None),
-                    obs=row.get('obs', None)
-                )
-                db.session.add(novo_veiculo)
-                adicionados += 1
+                veiculo = Veiculo.query.filter_by(nome_conjunto=nome_conjunto).first()
+
+                if veiculo:
+                    changes = []
+                    if veiculo.unidade != row.get('unidade'): veiculo.unidade = row.get('unidade'); changes.append('unidade')
+                    if veiculo.operacao != row.get('operacao', ''): veiculo.operacao = row.get('operacao', ''); changes.append('operacao')
+                    if veiculo.obs != row.get('obs', ''): veiculo.obs = row.get('obs', ''); changes.append('obs')
+                    if veiculo.placa_cavalo_id != cavalo.id: veiculo.placa_cavalo_id = cavalo.id; changes.append('placa_cavalo')
+                    if veiculo.placa_carreta1_id != carreta1_id: veiculo.placa_carreta1_id = carreta1_id; changes.append('placa_carreta1')
+                    if veiculo.placa_carreta2_id != carreta2_id: veiculo.placa_carreta2_id = carreta2_id; changes.append('placa_carreta2')
+                    if changes: atualizados += 1
+                    else: ignorados += 1
+                else:
+                    novo_veiculo = Veiculo(
+                        nome_conjunto=nome_conjunto, unidade=row.get('unidade'), operacao=row.get('operacao', ''),
+                        obs=row.get('obs', ''), placa_cavalo_id=cavalo.id, placa_carreta1_id=carreta1_id,
+                        placa_carreta2_id=carreta2_id)
+                    db.session.add(novo_veiculo)
+                    adicionados += 1
 
         db.session.commit()
 
-        flash(f'Importação de {tipo} concluída! Adicionados: {adicionados}, Ignorados (duplicados/inválidos): {ignorados}.', 'success')
+        flash(f'Importação de {tipo} concluída! Adicionados: {adicionados}, Atualizados: {atualizados}, Ignorados (sem alterações): {ignorados}.', 'success')
         if erros:
             for erro in erros[:5]:
                 flash(erro, 'warning')
 
     except Exception as e:
         db.session.rollback()
-        flash(f'Ocorreu um erro ao processar o arquivo: {e}', 'danger')
+        flash(f'Ocorreu um erro inesperado ao processar o arquivo: {e}', 'danger')
 
     return redirect(url_for('admin.importacao_pagina'))
 
