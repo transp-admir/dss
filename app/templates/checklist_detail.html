@@ -20,7 +20,7 @@
             <div class="card-body">
                 <form action="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" method="POST">
                     <div class="input-group">
-                        <input type="number" name="ordem" class="form-control" placeholder="Ordem" value="0" style="max-width: 100px;">
+                        <input type="number" step="any" name="ordem" class="form-control" placeholder="Ordem" value="0" style="max-width: 100px;">
                         <input type="text" name="texto" class="form-control" placeholder="Digite o texto para o novo item..." required>
                         <button class="btn btn-success" type="submit">Adicionar Item</button>
                     </div>
@@ -63,7 +63,7 @@
                         <!-- Formulário de Edição do Item Principal -->
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <form action="{{ url_for('admin.editar_item', item_id=item.id) }}" method="POST" class="d-flex flex-grow-1 align-items-center edit-item-form">
-                                <input type="number" name="ordem" value="{{ item.ordem }}" class="form-control me-2" style="width: 80px;" title="Ordem de exibição">
+                                <input type="number" step="any" name="ordem" value="{{ item.ordem }}" class="form-control me-2" style="width: 80px;" title="Ordem de exibição">
                                 
                                 {% if item.texto == '__BLOCO_EXTINTORES__' %}
                                     <span class="form-control bg-light text-info fw-bold">-- Bloco de Controle de Extintores --</span>
@@ -88,7 +88,7 @@
                                 <li class="list-group-item d-flex justify-content-between align-items-center py-1">
                                     <!-- Formulário de Edição do Sub-item -->
                                     <form action="{{ url_for('admin.editar_item', item_id=sub_item.id) }}" method="POST" class="d-flex flex-grow-1 align-items-center edit-item-form">
-                                        <input type="number" name="ordem" value="{{ sub_item.ordem }}" class="form-control form-control-sm me-2" style="width: 70px;" title="Ordem">
+                                        <input type="number" step="any" name="ordem" value="{{ sub_item.ordem }}" class="form-control form-control-sm me-2" style="width: 70px;" title="Ordem">
                                         <input type="text" name="texto" value="{{ sub_item.texto }}" class="form-control form-control-sm me-2">
                                         <button type="submit" class="btn btn-sm btn-outline-primary py-0 px-2 me-2">Salvar</button>
                                     </form>
@@ -102,7 +102,7 @@
                             <!-- Formulário para adicionar sub-item -->
                             <form action="{{ url_for('admin.checklist_detalhe', checklist_id=checklist.id) }}" method="POST" class="input-group input-group-sm mt-2">
                                 <input type="hidden" name="parent_id" value="{{ item.id }}">
-                                <input type="number" name="ordem" class="form-control" placeholder="Ordem" value="0" style="max-width: 80px;">
+                                <input type="number" step="any" name="ordem" class="form-control" placeholder="Ordem" value="0" style="max-width: 80px;">
                                 <input type="text" name="texto" class="form-control" placeholder="Adicionar sub-item..." required>
                                 <button class="btn btn-outline-secondary" type="submit">Adicionar</button>
                             </form>

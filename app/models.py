@@ -102,7 +102,7 @@ class ChecklistItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     checklist_id = db.Column(db.Integer, db.ForeignKey('checklist.id'), nullable=False)
     texto = db.Column(db.String(500), nullable=False)
-    ordem = db.Column(db.Integer, default=0)
+    ordem = db.Column(db.Float, default=0.0)
     
     parent_id = db.Column(db.Integer, db.ForeignKey('checklist_item.id'), nullable=True)
     sub_itens = db.relationship('ChecklistItem', backref=db.backref('parent', remote_side=[id]), lazy='dynamic', cascade="all, delete-orphan")
@@ -115,13 +115,13 @@ class ChecklistPreenchido(db.Model):
     data_preenchimento = db.Column(db.DateTime, default=datetime.utcnow)
     
     assinatura_motorista = db.Column(db.Text, nullable=True)
-    assinatura_responsavel = db.Column(db.Text, nullable=True) # <-- NOVO CAMPO
+    assinatura_responsavel = db.Column(db.Text, nullable=True)
     outros_problemas = db.Column(db.Text, nullable=True)
     solucoes_adotadas = db.Column(db.Text, nullable=True)
     pendencias_gerais = db.Column(db.Text, nullable=True)
 
     respostas = db.relationship('ChecklistResposta', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
-    extintores = db.relationship('ExtintorCheck', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan") # <-- NOVO RELACIONAMENTO
+    extintores = db.relationship('ExtintorCheck', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
 
 class ChecklistResposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -137,11 +137,11 @@ class ChecklistResposta(db.Model):
 class ExtintorCheck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     preenchimento_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)
-    local = db.Column(db.String(50), nullable=False) # Ex: 'CABINE', '1° CARRETA L.D'
+    local = db.Column(db.String(50), nullable=False)
     tipo = db.Column(db.String(50))
     peso = db.Column(db.String(20))
     vencimento = db.Column(db.Date, nullable=True)
-    trocado = db.Column(db.String(3)) # 'Sim' ou 'Não'
+    trocado = db.Column(db.String(3))
     motivo_troca = db.Column(db.Text, nullable=True)
 
 # --- ESTRUTURA PARA PENDÊNCIAS ---

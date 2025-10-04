@@ -1636,7 +1636,7 @@ def checklist_detalhe(checklist_id):
     """
     Exibe os detalhes de um checklist, a lista de seus itens e processa
     a adição de novos itens e sub-itens.
-    Esta função unifica a visualização e a adição.
+    CORRIGIDO: Processa o campo 'ordem' como um número decimal (float).
     """
     checklist = Checklist.query.get_or_404(checklist_id)
 
@@ -1647,11 +1647,11 @@ def checklist_detalhe(checklist_id):
         flash('Você não tem permissão para acessar este checklist.', 'danger')
         return redirect(url_for('admin.checklists'))
 
-    # Se o formulário for enviado (adição de item ou sub-item)
     if request.method == 'POST':
         parent_id = request.form.get('parent_id')
         texto = request.form.get('texto')
-        ordem = request.form.get('ordem', 0, type=int)
+        # CORREÇÃO: Converte a ordem para float em vez de int
+        ordem = request.form.get('ordem', 0.0, type=float)
 
         if not texto:
             flash('O texto do item é obrigatório.', 'danger')
@@ -1672,7 +1672,6 @@ def checklist_detalhe(checklist_id):
         
         return redirect(url_for('admin.checklist_detalhe', checklist_id=checklist_id))
 
-    # Se for um GET, apenas busca e exibe os itens
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
 
     return render_template(
@@ -1738,14 +1737,14 @@ def pendencias():
 @login_required()
 def editar_item(item_id):
     """
-    CORRIGIDO: Atualiza o texto e a ordem de um item ou sub-item e
-    redireciona de volta para a página de detalhes do checklist.
+    Atualiza o texto e a ordem de um item ou sub-item.
+    CORRIGIDO: Processa o campo 'ordem' como um número decimal (float).
     """
     item = ChecklistItem.query.get_or_404(item_id)
     texto = request.form.get('texto')
-    ordem = request.form.get('ordem', type=int)
+    # CORREÇÃO: Converte a ordem para float em vez de int
+    ordem = request.form.get('ordem', type=float)
 
-    # Validação para não permitir texto vazio
     if not texto:
         flash('O texto do item não pode ser vazio.', 'danger')
         return redirect(url_for('admin.checklist_detalhe', checklist_id=item.checklist_id))
@@ -1755,7 +1754,6 @@ def editar_item(item_id):
     db.session.commit()
     
     flash(f'Item "{item.texto}" foi atualizado com sucesso!', 'success')
-    # Redireciona de volta para a página de gerenciamento de itens
     return redirect(url_for('admin.checklist_detalhe', checklist_id=item.checklist_id))
 
 
