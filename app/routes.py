@@ -1634,13 +1634,11 @@ def edit_checklist(checklist_id):
 @login_required()
 def checklist_detalhe(checklist_id):
     """
-    Exibe os detalhes de um checklist, a lista de seus itens e processa
-    a adição de novos itens e sub-itens.
-    CORRIGIDO: Processa o campo 'ordem' como um número decimal (float).
+    Exibe e processa a adição de novos itens.
+    CORRIGIDO: Converte a vírgula (,) em ponto (.) para o campo 'ordem'.
     """
     checklist = Checklist.query.get_or_404(checklist_id)
 
-    # Verifica permissão do usuário
     user_role = session.get('role')
     user_unidade = session.get('unidade')
     if user_role != 'admin' and checklist.unidade != user_unidade:
@@ -1650,8 +1648,15 @@ def checklist_detalhe(checklist_id):
     if request.method == 'POST':
         parent_id = request.form.get('parent_id')
         texto = request.form.get('texto')
-        # CORREÇÃO: Converte a ordem para float em vez de int
-        ordem = request.form.get('ordem', 0.0, type=float)
+        
+        # --- LÓGICA CORRIGIDA ---
+        # 1. Pega o valor como texto e substitui a vírgula por ponto.
+        ordem_str = request.form.get('ordem', '0.0').replace(',', '.')
+        # 2. Converte para float de forma segura.
+        try:
+            ordem = float(ordem_str)
+        except (ValueError, TypeError):
+            ordem = 0.0 # Define um padrão em caso de erro
 
         if not texto:
             flash('O texto do item é obrigatório.', 'danger')
@@ -1665,10 +1670,7 @@ def checklist_detalhe(checklist_id):
             db.session.add(novo_item)
             db.session.commit()
             
-            if parent_id:
-                flash('Sub-item adicionado com sucesso.', 'success')
-            else:
-                flash('Item principal adicionado com sucesso.', 'success')
+            flash('Item adicionado com sucesso.', 'success')
         
         return redirect(url_for('admin.checklist_detalhe', checklist_id=checklist_id))
 
@@ -1680,7 +1682,6 @@ def checklist_detalhe(checklist_id):
         itens_principais=itens_principais,
         ChecklistItem=ChecklistItem
     )
-
     
 @admin_bp.route('/checklists/preenchidos')
 @login_required()
@@ -1737,13 +1738,20 @@ def pendencias():
 @login_required()
 def editar_item(item_id):
     """
-    Atualiza o texto e a ordem de um item ou sub-item.
-    CORRIGIDO: Processa o campo 'ordem' como um número decimal (float).
+    Atualiza um item existente.
+    CORRIGIDO: Converte a vírgula (,) em ponto (.) para o campo 'ordem'.
     """
     item = ChecklistItem.query.get_or_404(item_id)
     texto = request.form.get('texto')
-    # CORREÇÃO: Converte a ordem para float em vez de int
-    ordem = request.form.get('ordem', type=float)
+
+    # --- LÓGICA CORRIGIDA ---
+    # 1. Pega o valor como texto e substitui a vírgula por ponto.
+    ordem_str = request.form.get('ordem', str(item.ordem)).replace(',', '.')
+    # 2. Converte para float de forma segura.
+    try:
+        ordem = float(ordem_str)
+    except (ValueError, TypeError):
+        ordem = item.ordem # Mantém o valor antigo em caso de erro
 
     if not texto:
         flash('O texto do item não pode ser vazio.', 'danger')
