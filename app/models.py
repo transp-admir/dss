@@ -102,7 +102,8 @@ class ChecklistItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     checklist_id = db.Column(db.Integer, db.ForeignKey('checklist.id'), nullable=False)
     texto = db.Column(db.String(500), nullable=False)
-    ordem = db.Column(db.Float, default=0.0)
+    # CORRIGIDO: Usa String para preservar o formato exato (ex: 2.10)
+    ordem = db.Column(db.String(20), nullable=False, default='0')
     
     parent_id = db.Column(db.Integer, db.ForeignKey('checklist_item.id'), nullable=True)
     sub_itens = db.relationship('ChecklistItem', backref=db.backref('parent', remote_side=[id]), lazy='dynamic', cascade="all, delete-orphan")

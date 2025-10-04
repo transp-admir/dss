@@ -9,6 +9,7 @@ from .models import (Usuario, Motorista, Conteudo, Assinatura, Checklist,
 # --- BLUEPRINT DA ÁREA ADMINISTRATIVA ---
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
+from decimal import Decimal, InvalidOperation
 import pandas as pd
 import io
 from flask import send_from_directory
@@ -1634,8 +1635,8 @@ def edit_checklist(checklist_id):
 @login_required()
 def checklist_detalhe(checklist_id):
     """
-    Exibe e processa a adição de novos itens.
-    CORRIGIDO: Converte a vírgula (,) em ponto (.) para o campo 'ordem'.
+    Exibe os detalhes de um checklist e ordena os itens de forma "natural" e segura.
+    CORRIGIDO: A função de ordenação agora lida com números e textos.
     """
     checklist = Checklist.query.get_or_404(checklist_id)
 
@@ -1648,41 +1649,52 @@ def checklist_detalhe(checklist_id):
     if request.method == 'POST':
         parent_id = request.form.get('parent_id')
         texto = request.form.get('texto')
+        ordem_str = request.form.get('ordem', '0').replace(',', '.')
         
-        # --- LÓGICA CORRIGIDA ---
-        # 1. Pega o valor como texto e substitui a vírgula por ponto.
-        ordem_str = request.form.get('ordem', '0.0').replace(',', '.')
-        # 2. Converte para float de forma segura.
-        try:
-            ordem = float(ordem_str)
-        except (ValueError, TypeError):
-            ordem = 0.0 # Define um padrão em caso de erro
-
         if not texto:
             flash('O texto do item é obrigatório.', 'danger')
         else:
             novo_item = ChecklistItem(
                 checklist_id=checklist.id,
                 texto=texto,
-                ordem=ordem,
+                ordem=ordem_str,
                 parent_id=int(parent_id) if parent_id else None
             )
             db.session.add(novo_item)
             db.session.commit()
-            
             flash('Item adicionado com sucesso.', 'success')
         
         return redirect(url_for('admin.checklist_detalhe', checklist_id=checklist_id))
 
-    itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+    # --- LÓGICA DE ORDENAÇÃO CORRIGIDA ---
+    def natural_sort_key(s):
+        # 1. Garante que o valor de entrada é uma string
+        s_str = str(s or '0')
+        try:
+            # 2. Tenta separar por ponto e converter em números
+            return [int(c) for c in s_str.split('.')]
+        except ValueError:
+            # 3. Se falhar, retorna um valor que ordena o texto de forma previsível
+            return [s_str]
+
+    itens_principais_unsorted = checklist.itens.filter_by(parent_id=None).all()
+    itens_principais_sorted = sorted(itens_principais_unsorted, key=lambda item: natural_sort_key(item.ordem))
+    
+    itens_com_subitens = []
+    for item in itens_principais_sorted:
+        sub_itens_unsorted = item.sub_itens.all()
+        sub_itens_sorted = sorted(sub_itens_unsorted, key=lambda sub: natural_sort_key(sub.ordem))
+        itens_com_subitens.append((item, sub_itens_sorted))
 
     return render_template(
         'checklist_detail.html', 
         checklist=checklist, 
-        itens_principais=itens_principais,
+        itens_com_subitens=itens_com_subitens,
         ChecklistItem=ChecklistItem
     )
-    
+
+
+
 @admin_bp.route('/checklists/preenchidos')
 @login_required()
 def checklists_preenchidos():
@@ -1738,32 +1750,22 @@ def pendencias():
 @login_required()
 def editar_item(item_id):
     """
-    Atualiza um item existente.
-    CORRIGIDO: Converte a vírgula (,) em ponto (.) para o campo 'ordem'.
+    Atualiza um item existente, salvando a ordem como texto.
     """
     item = ChecklistItem.query.get_or_404(item_id)
     texto = request.form.get('texto')
-
-    # --- LÓGICA CORRIGIDA ---
-    # 1. Pega o valor como texto e substitui a vírgula por ponto.
-    ordem_str = request.form.get('ordem', str(item.ordem)).replace(',', '.')
-    # 2. Converte para float de forma segura.
-    try:
-        ordem = float(ordem_str)
-    except (ValueError, TypeError):
-        ordem = item.ordem # Mantém o valor antigo em caso de erro
+    ordem_str = request.form.get('ordem', '0').replace(',', '.')
 
     if not texto:
         flash('O texto do item não pode ser vazio.', 'danger')
         return redirect(url_for('admin.checklist_detalhe', checklist_id=item.checklist_id))
 
     item.texto = texto
-    item.ordem = ordem
+    item.ordem = ordem_str
     db.session.commit()
     
     flash(f'Item "{item.texto}" foi atualizado com sucesso!', 'success')
     return redirect(url_for('admin.checklist_detalhe', checklist_id=item.checklist_id))
-
 
 
 @admin_bp.route('/checklist/item/<int:item_id>/excluir', methods=['POST'])

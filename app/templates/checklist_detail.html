@@ -54,11 +54,13 @@
         <h6 class="m-0 font-weight-bold text-primary">Itens do Checklist</h6>
     </div>
     <div class="card-body">
-        {% if not itens_principais %}
+        {# CORRIGIDO: Usa a nova estrutura 'itens_com_subitens' #}
+        {% if not itens_com_subitens %}
             <div class="alert alert-info">Ainda não há itens neste checklist.</div>
         {% else %}
             <ul class="list-group">
-                {% for item in itens_principais %}
+                {# CORRIGIDO: Itera sobre a nova estrutura #}
+                {% for item, sub_itens in itens_com_subitens %}
                     <li class="list-group-item">
                         <!-- Formulário de Edição do Item Principal -->
                         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -84,7 +86,8 @@
                         {% if item.texto != '__BLOCO_EXTINTORES__' %}
                         <div class="ps-5">
                             <ul class="list-group list-group-flush">
-                                {% for sub_item in item.sub_itens.order_by(ChecklistItem.ordem) %}
+                                {# CORRIGIDO: Itera sobre a lista de sub-itens já ordenada #}
+                                {% for sub_item in sub_itens %}
                                 <li class="list-group-item d-flex justify-content-between align-items-center py-1">
                                     <!-- Formulário de Edição do Sub-item -->
                                     <form action="{{ url_for('admin.editar_item', item_id=sub_item.id) }}" method="POST" class="d-flex flex-grow-1 align-items-center edit-item-form">
