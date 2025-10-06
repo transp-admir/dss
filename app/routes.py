@@ -1110,11 +1110,23 @@ def motoristas():
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
 
     lista_motoristas = motoristas_query.order_by(Motorista.nome).all()
-    # A lista de veículos também é filtrada para ser usada no formulário de associação
-    veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
+    
+    # Pega os IDs de todos os conjuntos que já estão vinculados a algum motorista
+    veiculos_vinculados_ids = {m.veiculo_id for m in Motorista.query.filter(Motorista.veiculo_id.isnot(None)).all()}
 
-    return render_template('motoristas.html', motoristas=lista_motoristas, veiculos=veiculos)
+    # Busca apenas os veículos (conjuntos) que NÃO estão na lista de vinculados
+    veiculos_disponiveis = veiculos_query.filter(Veiculo.id.notin_(veiculos_vinculados_ids)).order_by(Veiculo.nome_conjunto).all()
+    
+    # Pega a lista de unidades para o formulário (apenas para admin)
+    unidades_disponiveis = []
+    if user_role == 'admin':
+        unidades_db = db.session.query(Usuario.unidade).distinct().all()
+        unidades_disponiveis = sorted([u[0] for u in unidades_db if u[0]])
 
+    return render_template('motoristas.html', 
+                           motoristas=lista_motoristas, 
+                           veiculos_disponiveis=veiculos_disponiveis,
+                           unidades_disponiveis=unidades_disponiveis)
 
 @admin_bp.route('/motoristas/add', methods=['POST'])
 @login_required()
@@ -1215,6 +1227,32 @@ def delete_motorista(motorista_id):
     db.session.commit()
     flash(f'Motorista {motorista.nome} excluído com sucesso.', 'info')
     return redirect(url_for('admin.motoristas'))
+
+# Em app/routes.py, ADICIONE esta nova função:
+
+@admin_bp.route('/motoristas/desvincular/<int:motorista_id>', methods=['POST'])
+@login_required()
+def desvincular_conjunto(motorista_id):
+    motorista = Motorista.query.get_or_404(motorista_id)
+
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+
+    # Verificação de segurança: Apenas admin ou master da mesma unidade podem desvincular
+    if user_role != 'admin' and motorista.unidade != user_unidade:
+        flash('Você não tem permissão para modificar este motorista.', 'danger')
+        return redirect(url_for('admin.motoristas'))
+
+    if motorista.veiculo:
+        veiculo_nome = motorista.veiculo.nome_conjunto
+        motorista.veiculo_id = None
+        db.session.commit()
+        flash(f'O conjunto "{veiculo_nome}" foi desvinculado do motorista {motorista.nome}.', 'success')
+    else:
+        flash(f'O motorista {motorista.nome} já não possui um conjunto vinculado.', 'info')
+
+    return redirect(url_for('admin.motoristas'))
+
 
 @admin_bp.route('/conteudo')
 def conteudo():

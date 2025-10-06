@@ -57,10 +57,11 @@
                 </div>
                 <div class="row mb-3">
                     <div class="col-md-12">
-                        <label for="veiculo_id" class="form-label">Conjunto Vinculado</label>
+                        <label for="veiculo_id" class="form-label">Vincular Conjunto Disponível</label>
                         <select id="veiculo_id" name="veiculo_id" class="form-select">
                             <option value="">-- Nenhum --</option>
-                            {% for veiculo in veiculos %}
+                            {# ATUALIZADO: Loop usa a nova variável 'veiculos_disponiveis' #}
+                            {% for veiculo in veiculos_disponiveis %}
                                 <option value="{{ veiculo.id }}">{{ veiculo.nome_conjunto }}</option>
                             {% endfor %}
                         </select>
@@ -86,7 +87,7 @@
                             <th>Unidade</th>
                             <th>Operação</th>
                             <th>Conjunto</th>
-                            <th>Ações</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -97,11 +98,19 @@
                             <td>{{ motorista.unidade }}</td>
                             <td>{{ motorista.operacao or 'N/A' }}</td>
                             <td>{{ motorista.veiculo.nome_conjunto if motorista.veiculo else 'N/A' }}</td>
-                            <td>
-                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal-{{ motorista.id }}">
+                            <td class="text-center text-nowrap">
+                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal-{{ motorista.id }}" title="Editar Motorista">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ motorista.id }}">
+
+                                {# NOVO: Botão de Desvincular que só aparece se houver um conjunto vinculado #}
+                                {% if motorista.veiculo %}
+                                <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#desvincularModal-{{ motorista.id }}" title="Desvincular Conjunto">
+                                    <i class="fas fa-unlink"></i>
+                                </button>
+                                {% endif %}
+
+                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ motorista.id }}" title="Excluir Motorista">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </td>
@@ -114,7 +123,7 @@
     </div>
 </div>
 
-<!-- Modais de Edição e Exclusão -->
+<!-- Modais de Edição, Exclusão e Desvinculação -->
 {% for motorista in motoristas %}
 <!-- Modal de Edição -->
 <div class="modal fade" id="editModal-{{ motorista.id }}" tabindex="-1" aria-hidden="true">
@@ -167,10 +176,18 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Conjunto Vinculado</label>
+                            {# LÓGICA ATUALIZADA para o dropdown de edição #}
                             <select name="veiculo_id" class="form-select">
                                 <option value="">-- Nenhum --</option>
-                                {% for veiculo in veiculos %}
-                                    <option value="{{ veiculo.id }}" {% if motorista.veiculo_id == veiculo.id %}selected{% endif %}>{{ veiculo.nome_conjunto }}</option>
+                                
+                                {# Se o motorista já tem um conjunto, ele deve aparecer na lista como selecionado #}
+                                {% if motorista.veiculo %}
+                                    <option value="{{ motorista.veiculo.id }}" selected>{{ motorista.veiculo.nome_conjunto }} (Atual)</option>
+                                {% endif %}
+
+                                {# Agora, lista todos os outros veículos que estão disponíveis #}
+                                {% for veiculo in veiculos_disponiveis %}
+                                    <option value="{{ veiculo.id }}">{{ veiculo.nome_conjunto }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -205,6 +222,31 @@
         </div>
     </div>
 </div>
+
+{# NOVO: Modal para confirmar a desvinculação do conjunto #}
+{% if motorista.veiculo %}
+<div class="modal fade" id="desvincularModal-{{ motorista.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Desvinculação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja desvincular o conjunto <strong>{{ motorista.veiculo.nome_conjunto }}</strong> do motorista <strong>{{ motorista.nome }}</strong>?</p>
+                <p class="text-info"><i class="fas fa-info-circle me-2"></i>O conjunto ficará disponível para ser vinculado a outro motorista.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form action="{{ url_for('admin.desvincular_conjunto', motorista_id=motorista.id) }}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-info">Sim, Desvincular</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endfor %}
 
 {% endblock %}
