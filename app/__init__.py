@@ -42,10 +42,14 @@ def create_app():
     app.jinja_env.filters['nl2br'] = nl2br
     app.jinja_env.filters['youtube_id'] = youtube_id
 
-    # --- REGISTRO DE BLUEPRINTS E MODELOS ---
+    # --- IMPORTAÇÃO DE MODELOS E ROTAS (CORREÇÃO) ---
+    # Os modelos e rotas são importados aqui para garantir que sejam registrados
+    # antes que o contexto da aplicação seja estritamente necessário.
+    from . import models
+    from . import routes
+
+    # --- REGISTRO DE BLUEPRINTS ---
     with app.app_context():
-        from . import models
-        from . import routes
         app.register_blueprint(routes.admin_bp)
         app.register_blueprint(routes.main_bp)
 
