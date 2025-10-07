@@ -550,23 +550,21 @@ def login():
         password = request.form.get('password')
         user = Usuario.query.filter_by(nome=nome).first()
 
-        # Verifica se o usuário existe e se a senha está correta
         if user and user.check_password(password):
-            # Se a senha estiver correta, armazena os dados na sessão.
-            # A verificação de permissão é removida daqui, pois qualquer usuário
-            # cadastrado pode logar. O acesso às páginas será controlado
-            # pelo decorador @login_required.
             session['user_id'] = user.id
             session['admin_user'] = user.nome
             session['role'] = user.role
             session['unidade'] = user.unidade
+            # --- LINHA CRÍTICA ADICIONADA ---
+            session['setor'] = user.setor  # Salva o setor do usuário na sessão
+            # --- FIM DA CORREÇÃO ---
             flash('Login bem-sucedido!', 'success')
             return redirect(url_for('admin.dashboard'))
         else:
-            # Se o usuário não existir ou a senha estiver errada
             flash('Nome de usuário ou senha inválidos.', 'danger')
             
     return render_template('admin_login.html')
+
 
 
 
@@ -813,45 +811,43 @@ def excluir_documento(documento_id):
 
 #-----------------------------------------------------------------------
 
-
-# --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (NOVAS) ---
 # --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (COM FILTRO DE UNIDADE) ---
 
 @admin_bp.route('/pendencias', methods=['GET'])
-@login_required()  # Garante que apenas usuários logados acessem
+@login_required()
 def gerenciar_pendencias():
     user_role = session.get('role')
-    user_unidade = session.get('unidade')
+    # --- CORREÇÃO: Usar o 'setor' salvo na sessão ---
+    user_setor = session.get('setor')
 
-    # Dicionário para agrupar as pendências
-    pendencias_agrupadas = defaultdict(list)
-    
-    # Query base que já une Pendencia com Veiculo
-    query = Pendencia.query.join(Veiculo).filter(Pendencia.status == 'PENDENTE')
+    # Query base que busca apenas pendências com status 'PENDENTE'
+    query = Pendencia.query.filter(Pendencia.status == 'PENDENTE')
 
-    # Se o usuário não for admin, filtra as pendências pela sua unidade
+    # Se o usuário NÃO for 'admin', filtra as pendências pelo setor responsável
     if user_role != 'admin':
-        query = query.filter(Veiculo.unidade == user_unidade)
-    
-    # Filtra por um veículo específico, se solicitado via URL
+        # A consulta agora junta com ChecklistItem e compara o setor_responsavel
+        query = query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
+                     .filter(ChecklistItem.setor_responsavel == user_setor)
+
+    # Filtra por um veículo específico, se solicitado (funcionalidade mantida)
     veiculo_id_str = request.args.get('veiculo_id')
     veiculo_id = int(veiculo_id_str) if veiculo_id_str else None
     if veiculo_id:
         query = query.filter(Pendencia.veiculo_id == veiculo_id)
 
-    # Executa a query final
     pendencias = query.order_by(Pendencia.data_criacao.desc()).all()
 
-    # Agrupa as pendências encontradas pelo objeto do veículo
+    # Agrupa as pendências pelo veículo
+    pendencias_agrupadas = defaultdict(list)
     for pendencia in pendencias:
-        # A verificação de unidade já foi feita na query, aqui apenas agrupamos
         pendencias_agrupadas[pendencia.veiculo].append(pendencia)
 
-    # Busca a lista de veículos para popular o filtro da página
+    # Busca veículos para popular o filtro da página (lógica de unidade aqui está correta)
+    user_unidade = session.get('unidade')
     veiculos_query = Veiculo.query
     if user_role != 'admin':
-        # Se não for admin, o filtro também só mostra veículos da sua unidade
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
+    
     todos_veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
 
     return render_template(
@@ -862,52 +858,43 @@ def gerenciar_pendencias():
     )
 
 
+
+
 @admin_bp.route('/pendencias/resolver', methods=['POST'])
 @login_required()
 def resolver_pendencia():
     user_role = session.get('role')
-    user_unidade = session.get('unidade')
+    # --- CORREÇÃO: Usar o 'setor' salvo na sessão ---
+    user_setor = session.get('setor')
 
     pendencia_id = request.form.get('pendencia_id')
-    novo_status = request.form.get('status')
-    observacao = request.form.get('observacao_admin')
-    numero_os = request.form.get('numero_os')
-
     pendencia = Pendencia.query.get(pendencia_id)
 
     if not pendencia:
         flash('Pendência não encontrada.', 'danger')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
-    # Verificação de segurança para unidade
-    if user_role != 'admin' and pendencia.veiculo.unidade != user_unidade:
-        flash('Você não tem permissão para resolver pendências de outra unidade.', 'danger')
-        return redirect(url_for('admin.gerenciar_pendencias'))
+    # --- VERIFICAÇÃO DE SEGURANÇA CORRIGIDA ---
+    # Se não for admin, verifica se o setor responsável do item é o mesmo do usuário
+    if user_role != 'admin':
+        if not pendencia.item or pendencia.item.setor_responsavel != user_setor:
+            flash('Você não tem permissão para resolver pendências deste setor.', 'danger')
+            return redirect(url_for('admin.gerenciar_pendencias'))
 
     if pendencia.status != 'PENDENTE':
         flash('Esta pendência já foi resolvida ou finalizada.', 'warning')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
-    # Atualiza os campos no objeto da pendência
-    pendencia.status = novo_status
-    pendencia.observacao_admin = observacao
-    pendencia.numero_os = numero_os
+    # Atualiza a pendência (código inalterado)
+    pendencia.status = request.form.get('status')
+    pendencia.observacao_admin = request.form.get('observacao_admin')
+    pendencia.numero_os = request.form.get('numero_os')
     pendencia.data_resolucao = datetime.utcnow()
-    
     db.session.commit()
 
-    # --- INÍCIO DA CORREÇÃO ---
-    # Verifica se o item de checklist associado à pendência ainda existe
-    # antes de tentar acessar seu texto.
-    if pendencia.item:
-        flash(f'Pendência do item "{pendencia.item.texto}" atualizada com sucesso.', 'success')
-    else:
-        # Se o item não existe (foi excluído), mostra uma mensagem genérica
-        # para evitar o erro e ainda informar o usuário.
-        flash(f'Pendência (ID: {pendencia.id}) atualizada com sucesso. O item original não foi encontrado.', 'success')
-    # --- FIM DA CORREÇÃO ---
-        
+    flash(f'Pendência atualizada com sucesso.', 'success')
     return redirect(url_for('admin.gerenciar_pendencias'))
+
 
 
 @admin_bp.route('/acompanhamento_diario')
