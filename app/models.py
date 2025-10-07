@@ -153,11 +153,12 @@ class ChecklistPreenchido(db.Model):
 # --- INÍCIO DA ALTERAÇÃO ---
 class ChecklistResposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    preenchimento_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False) # Nome da coluna no banco
+    checklist_preenchido_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)  # atualizado
     item_id = db.Column(db.Integer, db.ForeignKey('checklist_item.id'), nullable=False)
-    resposta = db.Column(db.String(50)) # 'CONFORME', 'NAO CONFORME', 'N/A'
+    resposta = db.Column(db.String(50))  # 'CONFORME', 'NAO CONFORME', 'N/A'
     observacao = db.Column(db.Text)
     item = db.relationship('ChecklistItem')
+
 
 class ExtintorCheck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
