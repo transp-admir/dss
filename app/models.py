@@ -1,4 +1,3 @@
-# Conteúdo completo para o arquivo app/models.py
 
 from .extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -132,7 +131,7 @@ class ChecklistItem(db.Model):
     checklist_id = db.Column(db.Integer, db.ForeignKey('checklist.id'), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('checklist_item.id'), nullable=True)
     sub_itens = db.relationship('ChecklistItem', backref=db.backref('parent', remote_side=[id]), lazy='dynamic', cascade="all, delete-orphan")
-    setor_responsavel = db.Column(db.String(100), nullable=True) # CAMPO ADICIONADO
+    setor_responsavel = db.Column(db.String(100), nullable=True)
 
 class ChecklistPreenchido(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -151,13 +150,25 @@ class ChecklistPreenchido(db.Model):
     respostas = db.relationship('ChecklistResposta', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
     extintores_check = db.relationship('ExtintorCheck', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
 
+# --- INÍCIO DA ALTERAÇÃO ---
 class ChecklistResposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    checklist_preenchido_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)
+    preenchimento_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False) # Nome da coluna no banco
     item_id = db.Column(db.Integer, db.ForeignKey('checklist_item.id'), nullable=False)
     resposta = db.Column(db.String(50)) # 'CONFORME', 'NAO CONFORME', 'N/A'
     observacao = db.Column(db.Text)
     item = db.relationship('ChecklistItem')
+
+class ExtintorCheck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    preenchimento_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False) # Nome da coluna no banco
+    local = db.Column(db.String(100))
+    tipo = db.Column(db.String(50))
+    peso = db.Column(db.String(20))
+    vencimento = db.Column(db.Date)
+    trocado = db.Column(db.String(10))
+    motivo_troca = db.Column(db.Text)
+# --- FIM DA ALTERAÇÃO ---
 
 class Pendencia(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -173,16 +184,6 @@ class Pendencia(db.Model):
     item = db.relationship('ChecklistItem')
     veiculo = db.relationship('Veiculo')
     resposta_abertura = db.relationship('ChecklistResposta')
-
-class ExtintorCheck(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    checklist_preenchido_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)
-    local = db.Column(db.String(100))
-    tipo = db.Column(db.String(50))
-    peso = db.Column(db.String(20))
-    vencimento = db.Column(db.Date)
-    trocado = db.Column(db.String(10))
-    motivo_troca = db.Column(db.Text)
 
 class DocumentoFixo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
