@@ -1764,34 +1764,7 @@ def add_checklist_item(checklist_id):
 
 
 
-@admin_bp.route('/checklists/edit_item/<int:item_id>', methods=['POST'])
-@login_required()
-def edit_checklist_item(item_id):
-    """
-    Edita o texto ou a ordem de um item de checklist.
-    """
-    item = ChecklistItem.query.get_or_404(item_id)
-    
-    # Validação de segurança
-    user_role = session.get('role')
-    user_unidade = session.get('unidade')
-    if user_role != 'admin' and item.checklist.unidade != user_unidade:
-        flash('Você não tem permissão para modificar este item.', 'danger')
-        return redirect(url_for('admin.checklists'))
-    
-    novo_texto = request.form.get('texto')
-    nova_ordem = request.form.get('ordem', type=int)
 
-    if not novo_texto:
-        flash('O texto do item não pode ser vazio.', 'warning')
-    else:
-        item.texto = novo_texto
-        if nova_ordem is not None and not item.parent_id:
-            item.ordem = nova_ordem
-        db.session.commit()
-        flash('Item atualizado com sucesso.', 'success')
-
-    return redirect(url_for('admin.view_checklist', checklist_id=item.checklist_id))
 
 @admin_bp.route('/checklists/delete_item/<int:item_id>', methods=['POST'])
 @login_required()
@@ -1953,26 +1926,62 @@ def pendencias():
     return render_template('pendencias.html', pendencias=lista_pendencias)
 
 
-@admin_bp.route('/checklist/item/<int:item_id>/editar', methods=['POST'])
+@admin_bp.route('/checklist/item/<int:item_id>/json', methods=['GET'])
 @login_required()
-def editar_item(item_id):
+def get_checklist_item_json(item_id):
     """
-    Atualiza um item existente, salvando a ordem como texto.
+    Retorna os dados de um item de checklist em formato JSON para o modal de edição.
     """
     item = ChecklistItem.query.get_or_404(item_id)
-    texto = request.form.get('texto')
-    ordem_str = request.form.get('ordem', '0').replace(',', '.')
-
-    if not texto:
-        flash('O texto do item não pode ser vazio.', 'danger')
-        return redirect(url_for('admin.checklist_detalhe', checklist_id=item.checklist_id))
-
-    item.texto = texto
-    item.ordem = ordem_str
-    db.session.commit()
     
-    flash(f'Item "{item.texto}" foi atualizado com sucesso!', 'success')
-    return redirect(url_for('admin.checklist_detalhe', checklist_id=item.checklist_id))
+    # Validação de segurança
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+    if user_role != 'admin' and item.checklist.unidade is not None and item.checklist.unidade != user_unidade:
+        return jsonify({'error': 'Permissão negada'}), 403
+
+    return jsonify({
+        'id': item.id,
+        'texto': item.texto,
+        'ordem': item.ordem or '', # Garante que não seja None
+        'setor_responsavel': item.setor_responsavel or '' # Retorna string vazia se for None
+    })
+
+
+@admin_bp.route('/checklist/item/update/<int:item_id>', methods=['POST'])
+@login_required()
+def update_checklist_item(item_id):
+    """
+    Atualiza um item de checklist (principal ou sub-item) a partir dos dados do formulário modal.
+    """
+    item = ChecklistItem.query.get_or_404(item_id)
+    
+    # Validação de segurança
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+    if user_role != 'admin' and item.checklist.unidade is not None and item.checklist.unidade != user_unidade:
+        flash('Você não tem permissão para modificar este item.', 'danger')
+        return redirect(url_for('admin.checklists'))
+
+    # Captura os dados do formulário
+    novo_texto = request.form.get('texto')
+    # Substitui vírgula por ponto para consistência na ordem
+    nova_ordem = request.form.get('ordem', '').replace(',', '.')
+    novo_setor = request.form.get('setor_responsavel')
+
+    if not novo_texto:
+        flash('O texto do item não pode ser vazio.', 'danger')
+    else:
+        item.texto = novo_texto
+        item.ordem = nova_ordem
+        # Salva o setor, ou None se a opção "Nenhum" for selecionada (valor vazio)
+        item.setor_responsavel = novo_setor if novo_setor else None
+        
+        db.session.commit()
+        flash('Item atualizado com sucesso!', 'success')
+
+    return redirect(url_for('admin.view_checklist', checklist_id=item.checklist_id))
+
 
 
 @admin_bp.route('/checklist/item/<int:item_id>/excluir', methods=['POST'])

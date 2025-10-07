@@ -11,41 +11,40 @@
 
 <!-- Formulários de Adição -->
 <div class="row">
-    <!-- Formulário para Itens Principais (Categorias) -->
+    <!-- Formulário para Itens Principais -->
     <div class="col-md-8">
         <div class="card shadow mb-4">
             <div class="card-header py-3">
-                <h6 class="m-0 font-weight-bold text-primary">Adicionar Nova Categoria de Itens</h6>
+                <h6 class="m-0 font-weight-bold text-primary">Adicionar Novo Item Principal (Categoria)</h6>
             </div>
             <div class="card-body">
                 <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST">
                     <div class="input-group">
-                        <input type="text" name="ordem" class="form-control" placeholder="Ordem (ex: 1)" style="max-width: 120px;">
-                        <input type="text" name="texto" class="form-control" placeholder="Texto para a nova categoria..." required>
+                        <input type="text" name="texto" class="form-control" placeholder="Texto da nova categoria..." required>
+                        <input type="text" name="ordem" class="form-control" placeholder="Ordem" style="max-width: 100px;">
                         <button class="btn btn-success" type="submit">Adicionar Categoria</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
-    <!-- Bloco Especial de Extintores -->
+    <!-- Botão para Bloco Especial -->
     <div class="col-md-4">
-         <div class="card shadow mb-4">
+        <div class="card shadow mb-4">
             <div class="card-header py-3">
                 <h6 class="m-0 font-weight-bold text-info">Blocos Especiais</h6>
             </div>
-            <div class="card-body text-center">
-                <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST" onsubmit="return confirm('Isso adicionará um grupo de itens para o controle de extintores. Deseja continuar?');">
+            <div class="card-body">
+                <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST">
                     <input type="hidden" name="texto" value="__BLOCO_EXTINTORES__">
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-info">Adicionar Bloco de Extintores</button>
+                        <button type="submit" class="btn btn-info">Adicionar Bloco de Controle de Extintores</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
-
 
 <!-- Lista de Itens Existentes -->
 <div class="card shadow mb-4">
@@ -59,53 +58,71 @@
             <ul class="list-group">
                 {% for item, sub_itens in itens_com_subitens %}
                     <li class="list-group-item">
-                        <!-- Item Principal (Categoria) -->
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <form action="{{ url_for('admin.edit_checklist_item', item_id=item.id) }}" method="POST" class="d-flex flex-grow-1 align-items-center">
-                                <input type="text" name="ordem" value="{{ item.ordem or '' }}" class="form-control me-2" style="width: 80px;" title="Ordem da Categoria">
-                                
+                            <!-- INFORMAÇÕES DO ITEM PRINCIPAL -->
+                            <div class="flex-grow-1">
                                 {% if item.texto == '__BLOCO_EXTINTORES__' %}
-                                    <span class="form-control bg-light text-info fw-bold">-- Bloco de Controle de Extintores --</span>
+                                    <strong class="text-info">-- Bloco de Controle de Extintores --</strong>
                                 {% else %}
-                                    <input type="text" name="texto" value="{{ item.texto }}" class="form-control me-2">
+                                    <strong>{{ item.ordem }}. {{ item.texto }}</strong>
                                 {% endif %}
+                            </div>
 
-                                <button type="submit" class="btn btn-sm btn-primary me-2">Salvar</button>
-                            </form>
-                            
-                            <form action="{{ url_for('admin.delete_checklist_item', item_id=item.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir esta categoria e todos os seus sub-itens?');">
-                                <button type="submit" class="btn btn-sm btn-danger">&times;</button>
-                            </form>
+                            <!-- BOTÕES DE AÇÃO DO ITEM PRINCIPAL -->
+                            <div class="btn-group">
+                                {% if item.texto != '__BLOCO_EXTINTORES__' %}
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#editItemModal"
+                                        data-item-id="{{ item.id }}"
+                                        data-item-type="item">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                                {% endif %}
+                                <form action="{{ url_for('admin.delete_checklist_item', item_id=item.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir esta categoria e todos os seus sub-itens?');" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="fas fa-trash"></i> Excluir
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                         
-                        <!-- Sub-itens e Formulário de Adição de Sub-item -->
+                        <!-- Sub-itens e Formulário de Adição -->
                         {% if item.texto != '__BLOCO_EXTINTORES__' %}
                         <div class="ps-5">
                             <ul class="list-group list-group-flush">
                                 {% for sub_item in sub_itens %}
                                 <li class="list-group-item d-flex justify-content-between align-items-center py-1">
-                                    <span>
-                                        <!-- CORREÇÃO: Exibe a ordem do sub-item -->
-                                        <strong class="me-2 text-muted">{{ sub_item.ordem }}</strong>
-                                        {{ sub_item.texto }}
+                                    <small>
+                                        <strong>{{ sub_item.ordem }}</strong> - {{ sub_item.texto }}
                                         {% if sub_item.setor_responsavel %}
-                                            <span class="badge bg-secondary ms-2" title="Setor Responsável">{{ sub_item.setor_responsavel }}</span>
+                                            <span class="badge bg-secondary">{{ sub_item.setor_responsavel }}</span>
                                         {% endif %}
-                                    </span>
-                                    <form action="{{ url_for('admin.delete_checklist_item', item_id=sub_item.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir este sub-item?');">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1">&times;</button>
-                                    </form>
+                                    </small>
+                                    <div class="btn-group">
+                                        <button class="btn btn-sm btn-outline-secondary"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#editItemModal"
+                                                data-item-id="{{ sub_item.id }}"
+                                                data-item-type="subitem">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <form action="{{ url_for('admin.delete_checklist_item', item_id=sub_item.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir este sub-item?');" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </li>
                                 {% endfor %}
                             </ul>
                             <!-- Formulário para adicionar sub-item -->
-                            <!-- CORREÇÃO: Adicionado campo de ordem para sub-item -->
                             <form action="{{ url_for('admin.add_checklist_item', checklist_id=checklist.id) }}" method="POST" class="input-group input-group-sm mt-2">
                                 <input type="hidden" name="parent_id" value="{{ item.id }}">
-                                <input type="text" name="ordem" class="form-control" placeholder="Ordem (ex: 1.1)" style="max-width: 100px;">
                                 <input type="text" name="texto" class="form-control" placeholder="Adicionar sub-item..." required>
+                                <input type="text" name="ordem" class="form-control" placeholder="Ordem" style="max-width: 80px;">
                                 <select name="setor_responsavel" class="form-select" style="max-width: 150px;">
-                                    <option value="">Setor...</option>
+                                    <option value="">Nenhum Setor</option>
                                     {% for setor in setores_disponiveis %}
                                     <option value="{{ setor }}">{{ setor }}</option>
                                     {% endfor %}
@@ -122,4 +139,88 @@
     </div>
 </div>
 
+<!-- Modal de Edição de Item -->
+<div class="modal fade" id="editItemModal" tabindex="-1" aria-labelledby="editItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="editItemForm" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editItemModalLabel">Editar Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editOrdem" class="form-label">Ordem</label>
+                        <input type="text" class="form-control" id="editOrdem" name="ordem">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editTexto" class="form-label">Texto do Item</label>
+                        <input type="text" class="form-control" id="editTexto" name="texto" required>
+                    </div>
+                    <div class="mb-3" id="editSetorContainer">
+                        <label for="editSetor" class="form-label">Setor Responsável</label>
+                        <select class="form-select" id="editSetor" name="setor_responsavel">
+                            <option value="">Nenhum Setor</option>
+                            {% for setor in setores_disponiveis %}
+                                <option value="{{ setor }}">{{ setor }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var editItemModal = document.getElementById('editItemModal');
+    
+    editItemModal.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget; // Botão que acionou o modal
+        var itemId = button.getAttribute('data-item-id');
+        var itemType = button.getAttribute('data-item-type');
+
+        var modalTitle = editItemModal.querySelector('.modal-title');
+        var form = editItemModal.querySelector('#editItemForm');
+        var ordemInput = editItemModal.querySelector('#editOrdem');
+        var textoInput = editItemModal.querySelector('#editTexto');
+        var setorContainer = editItemModal.querySelector('#editSetorContainer');
+        var setorSelect = editItemModal.querySelector('#editSetor');
+
+        // Define o título e a visibilidade dos campos com base no tipo de item
+        if (itemType === 'item') {
+            modalTitle.textContent = 'Editar Categoria';
+            setorContainer.style.display = 'none'; // Esconde o seletor de setor para categorias
+        } else {
+            modalTitle.textContent = 'Editar Sub-item';
+            setorContainer.style.display = 'block'; // Mostra o seletor para sub-itens
+        }
+
+        // Define a URL de action do formulário
+        form.action = '/admin/checklist/item/update/' + itemId;
+
+        // Busca os dados do item via JSON e preenche o formulário
+        fetch('/admin/checklist/item/' + itemId + '/json')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                ordemInput.value = data.ordem;
+                textoInput.value = data.texto;
+                setorSelect.value = data.setor_responsavel;
+            })
+            .catch(error => console.error('Erro ao buscar dados do item:', error));
+    });
+});
+</script>
 {% endblock %}
