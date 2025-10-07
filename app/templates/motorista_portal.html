@@ -6,98 +6,7 @@
     <title>Portal do Motorista</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body {
-            font-family: 'Roboto', sans-serif;
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background-color: #f0f2f5;
-            padding: 2rem 0;
-        }
-        .portal-container {
-            background: #fff;
-            padding: 3rem 4rem;
-            border-radius: 10px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-            text-align: center;
-            width: 100%;
-            max-width: 800px;
-        }
-        .welcome-message {
-            font-size: 1.5rem;
-            color: #333;
-            margin-bottom: 1rem;
-        }
-        .welcome-message span {
-            font-weight: 700;
-        }
-        .portal-subtitle {
-            font-size: 1.1rem;
-            color: #666;
-            margin-bottom: 3rem;
-        }
-        .options-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 2rem;
-        }
-        .option-card {
-            text-decoration: none;
-            color: #fff;
-            background-color: #007bff;
-            padding: 2rem;
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.2s, box-shadow 0.2s;
-            min-height: 150px;
-        }
-        .option-card:not(.disabled):hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        }
-        .option-card.dss {
-            background-color: #005A9C;
-        }
-        .option-card.checklist {
-            background-color: #28a745;
-        }
-        .option-card.documentos {
-            background-color: #ffc107;
-            color: #212529;
-        }
-        /* Estilo para os cards desabilitados */
-        .option-card.disabled {
-            background-color: #adb5bd; /* Cor cinza */
-            color: #6c757d;
-            cursor: not-allowed; /* Cursor de "não permitido" */
-            pointer-events: none; /* Impede eventos de clique */
-        }
-        .option-card i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-        .option-card span {
-            font-size: 1.1rem;
-            font-weight: 700;
-            text-align: center;
-        }
-         .logout-link {
-            display: inline-block;
-            margin-top: 3rem;
-            color: #6c757d;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        .logout-link:hover {
-            text-decoration: underline;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/portal_motorista.css') }}">
 </head>
 <body>
     <div class="portal-container">
@@ -117,9 +26,21 @@
                 <i class="fas fa-folder-open"></i>
                 <span>Biblioteca de Documentos</span>
             </a>
+            <a href="https://drive.google.com/drive/folders/1lD2QokjiM5dZXUABPd-Ck8X1nmIKpdv9?usp=drive_link" class="option-card tutoriais" target="_blank">
+                <i class="fas fa-video"></i>
+                <span>Ver Tutoriais</span>
+            </a>
         </div>
+
+        <p class="info-message">
+            Encontrou algum erro nos seus dados? Entre em contato com o suporte.
+        </p>
 
         <a href="{{ url_for('main.logout') }}" class="logout-link">Sair</a>
     </div>
+
+    <a href="https://wa.me/+55 18 98143-0410" class="whatsapp-fab" target="_blank">
+        <i class="fab fa-whatsapp"></i>
+    </a>
 </body>
 </html>

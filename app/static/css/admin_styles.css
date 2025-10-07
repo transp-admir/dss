@@ -139,6 +139,16 @@ body {
     border-top: 1px solid #dee2e6;
 }
 
+.list-group-item-highlight {
+    background-color: #e7f3ff; /* Um azul bem claro */
+    border-left: 4px solid #007bff; /* Uma borda azul para reforçar */
+}
+
+.list-group-item-highlight:hover {
+    background-color: #d0e8ff; /* Um pouco mais escuro no hover */
+}
+
+
 @media (max-width: 768px) {
     .sidebar {
         transform: translateX(-100%);
