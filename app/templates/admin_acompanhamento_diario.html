@@ -1,73 +1,186 @@
 {% extends "base_adm.html" %}
 
-{% block title %}Acompanhamento Diário{% endblock %}
+{% block title %}Acompanhamento de Checklists Diários{% endblock %}
+
+{% block header %}
+Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
+{% if checklist_diario %}
+    <span class="fs-6 text-muted fw-normal">(Referência: Checklist {{ checklist_diario.codigo }})</span>
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <h2 class="mb-3">Acompanhamento do Checklist Diário</h2>
-    <p class="lead mb-4">Status de preenchimento para a data: <strong>{{ data_hoje.strftime('%d/%m/%Y') }}</strong></p>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} mb-4">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+    <div class="row mb-3">
+        <div class="col text-end">
+            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalIndisponibilidade">
+                <i class="fas fa-car-crash me-2"></i> Declarar Veículo Indisponível
+            </button>
+            <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#modalIsencaoMotorista">
+                <i class="fas fa-user-clock me-2"></i> Isentar Motorista
+            </button>
+        </div>
+    </div>
 
-    {# Painel de Ação Imediata para Pendências #}
-    {% if checklist_diario %}
-        <div class="card border-danger mb-4">
-            <div class="card-header bg-danger text-white">
-                <h5 class="mb-0">Pendências de Hoje</h5>
+    <div class="row">
+        <!-- Card Principal: Status dos Veículos -->
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Status dos Veículos Hoje</h6>
+                </div>
+                <div class="card-body">
+                    {% if not checklist_diario %}
+                        <div class="alert alert-warning" role="alert">
+                          <h4 class="alert-heading">Atenção!</h4>
+                          <p>Não foi encontrado nenhum checklist do tipo <strong>DIÁRIO</strong> que esteja <strong>ATIVO</strong> no sistema para sua unidade.</p>
+                          <hr>
+                          <p class="mb-0">Para que o acompanhamento funcione, por favor, <a href="{{ url_for('admin.checklists') }}" class="alert-link">crie ou ative um checklist diário</a>.</p>
+                        </div>
+                    {% elif veiculos_status %}
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th>Veículo (Conjunto)</th>
+                                        <th class="text-center">Status</th>
+                                        <th>Detalhe</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in veiculos_status %}
+                                        <tr class="{{ item.classe_css }}">
+                                            <td><strong>{{ item.veiculo.nome_conjunto }}</strong></td>
+                                            <td class="text-center"><strong>{{ item.status }}</strong></td>
+                                            <td>{{ item.detalhe }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">Nenhum veículo encontrado para acompanhamento na sua unidade.</div>
+                    {% endif %}
+                </div>
             </div>
-            <div class="card-body">
-                {% if motoristas_pendentes %}
-                    <p>Os seguintes motoristas ainda não preencheram o checklist <strong>{{ checklist_diario.codigo }}</strong> hoje:</p>
-                    <ul class="list-group">
-                        {% for motorista in motoristas_pendentes %}
-                            <li class="list-group-item">{{ motorista.nome }}</li>
-                        {% endfor %}
-                    </ul>
-                {% else %}
-                    <div class="alert alert-success mb-0">
-                        <h5 class="alert-heading"><i class="fas fa-check-circle"></i> Missão Cumprida!</h5>
-                        <p class="mb-0">Parabéns! Todos os motoristas já preencheram o checklist diário de hoje.</p>
+        </div>
+
+        <!-- Card Lateral: Resumo de Pendentes -->
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Resumo de Pendências</h6>
+                </div>
+                <div class="card-body">
+                    {% set pendentes = veiculos_status | selectattr('status', 'equalto', 'Pendente') | list %}
+                    {% if pendentes %}
+                        <p><strong>{{ pendentes|length }} veículo(s) com preenchimento pendente hoje:</strong></p>
+                        <ul class="list-group">
+                            {% for item in pendentes %}
+                            <li class="list-group-item list-group-item-danger">
+                                <strong>{{ item.veiculo.nome_conjunto }}</strong>
+                                <br><small class="text-muted">{{ item.detalhe }}</small>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="alert alert-success text-center">
+                            <i class="fas fa-check-circle fa-2x mb-2"></i>
+                            <p class="mb-0">Parabéns! Não há nenhuma pendência de checklist para hoje.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Declarar Veículo Indisponível -->
+<div class="modal fade" id="modalIndisponibilidade" tabindex="-1" aria-labelledby="modalIndisponibilidadeLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('admin.registrar_indisponibilidade') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalIndisponibilidadeLabel">Declarar Veículo Indisponível</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">Use esta opção para marcar um veículo como indisponível por um período (ex: manutenção, vendido). Ele não aparecerá como pendente.</p>
+                    <div class="mb-3">
+                        <label for="veiculo_id_indisp" class="form-label">Veículo</label>
+                        <select class="form-select" id="veiculo_id_indisp" name="veiculo_id" required>
+                            <option value="" disabled selected>Selecione um veículo...</option>
+                            {% for veiculo in veiculos_para_formulario %}
+                                <option value="{{ veiculo.id }}">{{ veiculo.nome_conjunto }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                {% endif %}
-            </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="data_inicio_indisp" class="form-label">Data de Início</label>
+                            <input type="date" class="form-control" id="data_inicio_indisp" name="data_inicio" value="{{ data_hoje.strftime('%Y-%m-%d') }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="data_fim_indisp" class="form-label">Data Final (opcional)</label>
+                            <input type="date" class="form-control" id="data_fim_indisp" name="data_fim">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="motivo_indisp" class="form-label">Motivo</label>
+                        <input type="text" class="form-control" id="motivo_indisp" name="motivo" placeholder="Ex: Em manutenção na oficina" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Indisponibilidade</button>
+                </div>
+            </form>
         </div>
+    </div>
+</div>
 
-        {# Painel de Visão Geral #}
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Status Geral dos Motoristas</h5>
-            </div>
-            <div class="card-body p-0">
-                <table class="table table-striped table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th scope="col">Motorista</th>
-                            <th scope="col" class="text-center">Status do Checklist Diário</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for motorista in motoristas_status %}
-                            <tr>
-                                <td>{{ motorista.nome }}</td>
-                                <td class="text-center">
-                                    {% if motorista.status == 'Preenchido' %}
-                                        <span class="badge bg-success rounded-pill px-3 py-2">Preenchido</span>
-                                    {% else %}
-                                        <span class="badge bg-danger rounded-pill px-3 py-2">Pendente</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+<!-- Modal para Isentar Motorista -->
+<div class="modal fade" id="modalIsencaoMotorista" tabindex="-1" aria-labelledby="modalIsencaoMotoristaLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('admin.registrar_isencao_motorista') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalIsencaoMotoristaLabel">Isentar Motorista do Checklist</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">Use esta opção para isentar um motorista por um ou mais dias (ex: atestado médico, folga, férias).</p>
+                    <div class="mb-3">
+                        <label for="motorista_id_isencao" class="form-label">Motorista</label>
+                        <select class="form-select" id="motorista_id_isencao" name="motorista_id" required>
+                            <option value="" disabled selected>Selecione um motorista...</option>
+                            {% for motorista in motoristas_para_formulario %}
+                                <option value="{{ motorista.id }}">{{ motorista.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                     <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="data_inicio_isencao" class="form-label">Data de Início</label>
+                            <input type="date" class="form-control" id="data_inicio_isencao" name="data_inicio" value="{{ data_hoje.strftime('%Y-%m-%d') }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="data_fim_isencao" class="form-label">Data Final (opcional)</label>
+                            <input type="date" class="form-control" id="data_fim_isencao" name="data_fim">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="motivo_isencao" class="form-label">Motivo</label>
+                        <input type="text" class="form-control" id="motivo_isencao" name="motivo" placeholder="Ex: Atestado Médico" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Isenção</button>
+                </div>
+            </form>
         </div>
-    {% endif %}
+    </div>
 </div>
 {% endblock %}

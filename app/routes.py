@@ -1,9 +1,17 @@
 from flask import (Blueprint, render_template, request, 
                    redirect, url_for, session, flash, jsonify, Response)
 from functools import wraps
+
 from .models import (Usuario, Motorista, Conteudo, Assinatura, Checklist, 
                    ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
-                   ChecklistResposta, Pendencia, DocumentoFixo, ExtintorCheck)
+                   ChecklistResposta, Pendencia, DocumentoFixo, ExtintorCheck,
+                   VeiculoIndisponibilidade, MotoristaIsencao)
+
+
+
+# No topo de app/routes.py
+from datetime import datetime, date, timedelta
+
 
 
 # --- BLUEPRINT DA ÁREA ADMINISTRATIVA ---
@@ -895,50 +903,252 @@ def resolver_pendencia():
 # --- FIM DAS NOVAS ROTAS ---
 
 
+# Em app/routes.py, SUBSTITUA a função 'acompanhamento_diario' por esta:
+
 @admin_bp.route('/acompanhamento_diario')
+@login_required()
 def acompanhamento_diario():
-    if 'admin_user' not in session:
-        return redirect(url_for('admin.login'))
-
     hoje = date.today()
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+
+    # --- Lógica de busca e status (permanece a mesma) ---
+    checklist_diario_query = Checklist.query.filter(Checklist.tipo == 'DIÁRIO', Checklist.ativo == True)
+    if user_role != 'admin':
+        checklist_diario_query = checklist_diario_query.filter(or_(Checklist.unidade == user_unidade, Checklist.unidade == None))
+    checklist_diario = checklist_diario_query.order_by(Checklist.data.desc()).first()
+
+    veiculos_query = Veiculo.query
+    motoristas_query = Motorista.query
+    if user_role != 'admin':
+        veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
+        motoristas_query = motoristas_query.filter(Motorista.unidade == user_unidade)
     
-    checklist_diario = Checklist.query.filter_by(tipo='DIÁRIO').order_by(Checklist.data.desc()).first()
+    veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
+    
+    veiculos_status = []
+    if checklist_diario:
+        indisponibilidades_hoje = {ind.veiculo_id: ind.motivo for ind in VeiculoIndisponibilidade.query.filter(VeiculoIndisponibilidade.data_inicio <= hoje, or_(VeiculoIndisponibilidade.data_fim >= hoje, VeiculoIndisponibilidade.data_fim == None)).all()}
+        isencoes_hoje = {isen.motorista_id: isen.motivo for isen in MotoristaIsencao.query.filter(MotoristaIsencao.data == hoje, MotoristaIsencao.tipo_checklist == 'DIÁRIO').all()}
+        preenchimentos_hoje = {p.veiculo_id: p for p in ChecklistPreenchido.query.filter(ChecklistPreenchido.checklist_id == checklist_diario.id, db.func.date(ChecklistPreenchido.data_preenchimento) == hoje).all()}
 
-    motoristas_status = []
-    motoristas_pendentes = []
-
-    if not checklist_diario:
-        flash('Nenhum checklist do tipo "DIÁRIO" foi configurado no sistema.', 'warning')
+        for veiculo in veiculos:
+            status_info = {'veiculo': veiculo, 'status': 'Pendente', 'detalhe': '', 'classe_css': 'table-warning'}
+            if veiculo.id in indisponibilidades_hoje:
+                status_info.update({'status': 'Indisponível', 'detalhe': indisponibilidades_hoje[veiculo.id], 'classe_css': 'table-secondary'})
+            elif not veiculo.motorista:
+                status_info.update({'status': 'Sem Motorista', 'detalhe': 'Vincule um motorista ao veículo', 'classe_css': 'table-info'})
+            elif veiculo.id in preenchimentos_hoje:
+                preenchimento = preenchimentos_hoje[veiculo.id]
+                status_info.update({'status': 'Preenchido', 'detalhe': f"por {preenchimento.motorista.nome} às {preenchimento.data_preenchimento.strftime('%H:%M')}", 'classe_css': 'table-success'})
+            elif veiculo.motorista and veiculo.motorista.id in isencoes_hoje:
+                status_info.update({'status': 'Isento', 'detalhe': f"Motorista isento: {isencoes_hoje[veiculo.motorista.id]}", 'classe_css': 'table-light'})
+            else:
+                status_info.update({'status': 'Pendente', 'detalhe': f"Motorista: {veiculo.motorista.nome}", 'classe_css': 'table-danger'})
+            veiculos_status.append(status_info)
     else:
-        motoristas = Motorista.query.order_by(Motorista.nome).all()
-        for motorista in motoristas:
-            preenchido = ChecklistPreenchido.query.filter(
-                and_(
-                    ChecklistPreenchido.motorista_id == motorista.id,
-                    ChecklistPreenchido.checklist_id == checklist_diario.id,
-                    db.func.date(ChecklistPreenchido.data_preenchimento) == hoje
-                )
-            ).first()
-            
-            status = 'Preenchido' if preenchido else 'Pendente'
-            
-            info = {
-                'id': motorista.id,
-                'nome': motorista.nome,
-                'status': status
-            }
-            motoristas_status.append(info)
-            
-            if status == 'Pendente':
-                motoristas_pendentes.append(info)
+        flash('Nenhum checklist "DIÁRIO" ativo foi configurado para sua unidade.', 'warning')
+
+    # --- NOVA LÓGICA ---
+    # Busca veículos e motoristas para popular os formulários dos modais
+    veiculos_para_formulario = veiculos_query.order_by(Veiculo.nome_conjunto).all()
+    motoristas_para_formulario = motoristas_query.order_by(Motorista.nome).all()
 
     return render_template(
         'admin_acompanhamento_diario.html',
-        motoristas_status=motoristas_status,
-        motoristas_pendentes=motoristas_pendentes,
+        veiculos_status=veiculos_status,
         checklist_diario=checklist_diario,
-        data_hoje=hoje
+        data_hoje=hoje,
+        # NOVAS VARIÁVEIS ENVIADAS AO TEMPLATE:
+        veiculos_para_formulario=veiculos_para_formulario,
+        motoristas_para_formulario=motoristas_para_formulario
     )
+
+
+# ROTA PARA REGISTRAR INDISPONIBILIDADE DE VEÍCULO
+@admin_bp.route('/indisponibilidade/registrar', methods=['POST'])
+@login_required()
+def registrar_indisponibilidade():
+    user_id = session.get('user_id')
+    
+    veiculo_id = request.form.get('veiculo_id')
+    data_inicio_str = request.form.get('data_inicio')
+    data_fim_str = request.form.get('data_fim')
+    motivo = request.form.get('motivo')
+
+    if not all([veiculo_id, data_inicio_str, motivo]):
+        flash('Veículo, data de início e motivo são obrigatórios.', 'danger')
+        return redirect(url_for('admin.acompanhamento_diario'))
+
+    data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+    data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date() if data_fim_str else None
+
+    if data_fim and data_fim < data_inicio:
+        flash('A data final não pode ser anterior à data de início.', 'danger')
+        return redirect(url_for('admin.acompanhamento_diario'))
+
+    # Remove qualquer registro conflitante antes de adicionar o novo
+    VeiculoIndisponibilidade.query.filter(
+        VeiculoIndisponibilidade.veiculo_id == veiculo_id,
+        VeiculoIndisponibilidade.data_fim >= data_inicio
+    ).delete(synchronize_session=False)
+
+    nova_indisponibilidade = VeiculoIndisponibilidade(
+        veiculo_id=veiculo_id,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        motivo=motivo,
+        usuario_id=user_id
+    )
+    db.session.add(nova_indisponibilidade)
+    db.session.commit()
+    
+    flash('Indisponibilidade do veículo registrada com sucesso!', 'success')
+    return redirect(url_for('admin.acompanhamento_diario'))
+
+
+# ROTA PARA REGISTRAR ISENÇÃO DE MOTORISTA (COM PERÍODO)
+@admin_bp.route('/isencao/registrar', methods=['POST'])
+@login_required()
+def registrar_isencao_motorista():
+    user_id = session.get('user_id')
+    
+    motorista_id = request.form.get('motorista_id')
+    data_inicio_str = request.form.get('data_inicio')
+    data_fim_str = request.form.get('data_fim') # Campo novo
+    motivo = request.form.get('motivo')
+
+    if not all([motorista_id, data_inicio_str, motivo]):
+        flash('Motorista, data de início e motivo são obrigatórios.', 'danger')
+        return redirect(url_for('admin.acompanhamento_diario'))
+
+    data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+    # Se a data fim não for preenchida, usa a data de início
+    data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date() if data_fim_str else data_inicio
+
+    if data_fim < data_inicio:
+        flash('A data final não pode ser anterior à data inicial.', 'danger')
+        return redirect(url_for('admin.acompanhamento_diario'))
+        
+    delta = data_fim - data_inicio
+    dias_a_isentar = [data_inicio + timedelta(days=i) for i in range(delta.days + 1)]
+
+    adicionadas = 0
+    ignoradas = 0
+    for dia in dias_a_isentar:
+        isencao_existente = MotoristaIsencao.query.filter_by(
+            motorista_id=motorista_id,
+            data=dia,
+            tipo_checklist='DIÁRIO'
+        ).first()
+
+        if not isencao_existente:
+            nova_isencao = MotoristaIsencao(
+                motorista_id=motorista_id,
+                data=dia,
+                motivo=motivo,
+                tipo_checklist='DIÁRIO',
+                usuario_id=user_id
+            )
+            db.session.add(nova_isencao)
+            adicionadas += 1
+        else:
+            ignoradas += 1
+
+    db.session.commit()
+    
+    if adicionadas > 0:
+        flash(f'{adicionadas} dia(s) de isenção registrados com sucesso para o motorista.', 'success')
+    if ignoradas > 0:
+        flash(f'{ignoradas} dia(s) de isenção já existiam e foram ignorados.', 'info')
+
+    return redirect(url_for('admin.acompanhamento_diario'))
+
+
+
+
+@admin_bp.route('/isencoes/registrar_periodo', methods=['POST'])
+@login_required(required_role=["admin", "master"])
+def registrar_isencao_periodo():
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+    usuario_id = session.get('user_id')
+
+    motorista_id_str = request.form.get('motorista_id')
+    data_inicio_str = request.form.get('data_inicio')
+    data_fim_str = request.form.get('data_fim')
+    tipo_checklist = request.form.get('tipo_checklist')
+    motivo = request.form.get('motivo')
+
+    if not all([motorista_id_str, data_inicio_str, data_fim_str, tipo_checklist, motivo]):
+        flash('Todos os campos são obrigatórios para registrar uma liberação.', 'danger')
+        return redirect(url_for('admin.acompanhamento_diario'))
+
+    try:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Formato de data inválido.', 'danger')
+        return redirect(url_for('admin.acompanhamento_diario'))
+
+    if data_fim < data_inicio:
+        flash('A data final não pode ser anterior à data inicial.', 'danger')
+        return redirect(url_for('admin.acompanhamento_diario'))
+
+    motoristas_a_isentar = []
+    if motorista_id_str == 'todos':
+        query = Motorista.query
+        if user_role == 'master':
+            query = query.filter(Motorista.unidade == user_unidade)
+        motoristas_a_isentar = query.all()
+    else:
+        motorista = Motorista.query.get(motorista_id_str)
+        if motorista:
+            if user_role == 'master' and motorista.unidade != user_unidade:
+                 flash('Você só pode registrar liberações para motoristas da sua unidade.', 'danger')
+                 return redirect(url_for('admin.acompanhamento_diario'))
+            motoristas_a_isentar.append(motorista)
+
+    if not motoristas_a_isentar:
+        flash('Nenhum motorista encontrado para registrar a liberação.', 'warning')
+        return redirect(url_for('admin.acompanhamento_diario'))
+
+    adicionadas = 0
+    ignoradas = 0
+    delta = data_fim - data_inicio
+    
+    for motorista in motoristas_a_isentar:
+        for i in range(delta.days + 1):
+            dia = data_inicio + timedelta(days=i)
+            
+            isencao_existente = MotoristaIsencao.query.filter_by(
+                motorista_id=motorista.id,
+                data=dia,
+                tipo_checklist=tipo_checklist
+            ).first()
+
+            if not isencao_existente:
+                nova_isencao = MotoristaIsencao(
+                    motorista_id=motorista.id,
+                    data=dia,
+                    motivo=motivo,
+                    tipo_checklist=tipo_checklist,
+                    usuario_id=usuario_id
+                )
+                db.session.add(nova_isencao)
+                adicionadas += 1
+            else:
+                ignoradas += 1
+
+    db.session.commit()
+
+    if adicionadas > 0:
+        flash(f'{adicionadas} isenção(ões) registrada(s) com sucesso. {ignoradas} já existiam e foram ignoradas.', 'success')
+    else:
+        flash('Nenhuma nova isenção foi registrada (provavelmente já existiam).', 'info')
+
+    return redirect(url_for('admin.acompanhamento_diario'))
+
 
 @admin_bp.route('/relatorios_consolidados', methods=['GET', 'POST'])
 def relatorios_consolidados():
@@ -1467,56 +1677,80 @@ def lista_checklists_motorista():
     return render_template('motorista_lista_checklists.html', checklists_info=checklists_com_status)
 
 
-# app/routes.py
 
-@admin_bp.route('/checklists/<int:checklist_id>')
+@admin_bp.route('/checklists/<int:checklist_id>', methods=['GET'])
 @login_required()
 def view_checklist(checklist_id):
     """
-    Exibe a página de detalhes para gerenciar os itens de um checklist.
+    Exibe e gerencia os itens de um checklist, unificando as lógicas anteriores.
     """
     checklist = Checklist.query.get_or_404(checklist_id)
     
     # Validação de segurança
     user_role = session.get('role')
     user_unidade = session.get('unidade')
-    if user_role != 'admin' and checklist.unidade != user_unidade:
+    if user_role != 'admin' and checklist.unidade != user_unidade and checklist.unidade is not None:
         flash('Você não tem permissão para ver este checklist.', 'danger')
         return redirect(url_for('admin.checklists'))
 
-    # Busca os itens principais (que não são sub-itens)
-    itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+    # --- LÓGICA DE ORDENAÇÃO "NATURAL" ---
+    def natural_sort_key(s):
+        s_str = str(s or '0')
+        try:
+            return [int(c) for c in s_str.split('.')]
+        except ValueError:
+            return [s_str]
+
+    itens_principais_unsorted = checklist.itens.filter_by(parent_id=None).all()
+    itens_principais_sorted = sorted(itens_principais_unsorted, key=lambda item: natural_sort_key(item.ordem))
+    
+    # Prepara a lista final com sub-itens também ordenados
+    itens_com_subitens = []
+    for item in itens_principais_sorted:
+        sub_itens_unsorted = item.sub_itens.all()
+        sub_itens_sorted = sorted(sub_itens_unsorted, key=lambda sub: natural_sort_key(sub.ordem))
+        itens_com_subitens.append((item, sub_itens_sorted))
+
+    # --- LÓGICA PARA BUSCAR SETORES ---
+    setores_query = db.session.query(Usuario.setor).distinct().filter(Usuario.setor.isnot(None))
+    setores_disponiveis = sorted([s[0] for s in setores_query.all()])
 
     return render_template(
-        'checklist_detalhe.html', 
+        'checklist_detalhe.html', # Renderiza o template correto
         checklist=checklist, 
-        itens_principais=itens_principais
+        itens_com_subitens=itens_com_subitens,
+        setores_disponiveis=setores_disponiveis
     )
+
 
 @admin_bp.route('/checklists/add_item/<int:checklist_id>', methods=['POST'])
 @login_required()
 def add_checklist_item(checklist_id):
     """
     Adiciona um novo item ou sub-item a um checklist.
+    CORRIGIDO: Salva a ordem como texto para permitir "1.1", "1.2", etc.
     """
     checklist = Checklist.query.get_or_404(checklist_id)
     
     # Validação de segurança
     user_role = session.get('role')
     user_unidade = session.get('unidade')
-    if user_role != 'admin' and checklist.unidade != user_unidade:
+    if user_role != 'admin' and checklist.unidade != user_unidade and checklist.unidade is not None:
         flash('Você não tem permissão para modificar este checklist.', 'danger')
         return redirect(url_for('admin.checklists'))
 
+    # Captura os dados do formulário
     texto = request.form.get('texto')
     parent_id = request.form.get('parent_id')
-    ordem = request.form.get('ordem', 0, type=int)
+    # CORREÇÃO: Captura a ordem como string e substitui vírgula por ponto
+    ordem_str = request.form.get('ordem', '').replace(',', '.')
+    setor_responsavel = request.form.get('setor_responsavel')
 
     if not texto:
         flash('O texto do item não pode ser vazio.', 'warning')
         return redirect(url_for('admin.view_checklist', checklist_id=checklist_id))
 
-    # Lógica para evitar duplicar o bloco de extintores
+    # Lógica para evitar duplicar o bloco de extintores (inalterada)
     if texto == '__BLOCO_EXTINTORES__':
         item_existente = ChecklistItem.query.filter_by(checklist_id=checklist.id, texto='__BLOCO_EXTINTORES__').first()
         if item_existente:
@@ -1526,14 +1760,17 @@ def add_checklist_item(checklist_id):
     novo_item = ChecklistItem(
         texto=texto, 
         checklist_id=checklist.id,
-        ordem=ordem if not parent_id else 0, # Ordem só se aplica a itens pais
-        parent_id=int(parent_id) if parent_id else None
+        ordem=ordem_str,  # CORREÇÃO: Salva a string diretamente
+        parent_id=int(parent_id) if parent_id else None,
+        setor_responsavel=setor_responsavel if setor_responsavel else None
     )
     db.session.add(novo_item)
     db.session.commit()
     
     flash('Item adicionado com sucesso!', 'success')
     return redirect(url_for('admin.view_checklist', checklist_id=checklist_id))
+
+
 
 @admin_bp.route('/checklists/edit_item/<int:item_id>', methods=['POST'])
 @login_required()
@@ -1669,67 +1906,7 @@ def edit_checklist(checklist_id):
 
 
 
-@admin_bp.route('/checklist/<int:checklist_id>', methods=['GET', 'POST'])
-@login_required()
-def checklist_detalhe(checklist_id):
-    """
-    Exibe os detalhes de um checklist e ordena os itens de forma "natural" e segura.
-    CORRIGIDO: A função de ordenação agora lida com números e textos.
-    """
-    checklist = Checklist.query.get_or_404(checklist_id)
 
-    user_role = session.get('role')
-    user_unidade = session.get('unidade')
-    if user_role != 'admin' and checklist.unidade != user_unidade:
-        flash('Você não tem permissão para acessar este checklist.', 'danger')
-        return redirect(url_for('admin.checklists'))
-
-    if request.method == 'POST':
-        parent_id = request.form.get('parent_id')
-        texto = request.form.get('texto')
-        ordem_str = request.form.get('ordem', '0').replace(',', '.')
-        
-        if not texto:
-            flash('O texto do item é obrigatório.', 'danger')
-        else:
-            novo_item = ChecklistItem(
-                checklist_id=checklist.id,
-                texto=texto,
-                ordem=ordem_str,
-                parent_id=int(parent_id) if parent_id else None
-            )
-            db.session.add(novo_item)
-            db.session.commit()
-            flash('Item adicionado com sucesso.', 'success')
-        
-        return redirect(url_for('admin.checklist_detalhe', checklist_id=checklist_id))
-
-    # --- LÓGICA DE ORDENAÇÃO CORRIGIDA ---
-    def natural_sort_key(s):
-        # 1. Garante que o valor de entrada é uma string
-        s_str = str(s or '0')
-        try:
-            # 2. Tenta separar por ponto e converter em números
-            return [int(c) for c in s_str.split('.')]
-        except ValueError:
-            # 3. Se falhar, retorna um valor que ordena o texto de forma previsível
-            return [s_str]
-
-    itens_principais_unsorted = checklist.itens.filter_by(parent_id=None).all()
-    itens_principais_sorted = sorted(itens_principais_unsorted, key=lambda item: natural_sort_key(item.ordem))
-    
-    itens_com_subitens = []
-    for item in itens_principais_sorted:
-        sub_itens_unsorted = item.sub_itens.all()
-        sub_itens_sorted = sorted(sub_itens_unsorted, key=lambda sub: natural_sort_key(sub.ordem))
-        itens_com_subitens.append((item, sub_itens_sorted))
-
-    return render_template(
-        'checklist_detail.html', 
-        checklist=checklist, 
-        itens_com_subitens=itens_com_subitens,
-        ChecklistItem=ChecklistItem
-    )
 
 
 

@@ -1,8 +1,12 @@
-# Importa a função 'create_app' do nosso pacote 'app'
-from app import create_app
+# Importa a função 'create_app' e o objeto 'db' do nosso pacote 'app'
+from app import create_app, db
+from flask_migrate import Migrate
 
 # Cria a instância da aplicação Flask
 app = create_app()
+
+# Configura o Flask-Migrate
+migrate = Migrate(app, db)
 
 # Bloco de execução principal
 if __name__ == '__main__':

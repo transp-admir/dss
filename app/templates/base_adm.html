@@ -124,6 +124,19 @@
             border-color: var(--flash-info);
         }
 
+        .rodape {
+            position: fixed;
+            bottom: 0;
+            left: var(--sidebar-width);
+            width: calc(100% - var(--sidebar-width));
+            background-color: #f8f9fa;
+            text-align: center;
+            padding: 5px 0;
+            font-size: 0.8rem;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
@@ -133,6 +146,11 @@
             }
             .main-content {
                 margin-left: 0;
+                width: 100%;
+                padding-bottom: 50px; /* Add padding to avoid overlap with footer */
+            }
+            .rodape {
+                left: 0;
                 width: 100%;
             }
             .mobile-header {
@@ -218,6 +236,11 @@
             {% block content %}{% endblock %}
         </section>
     </main>
+
+    <!-- RODAPÉ -->
+    <div class="rodape">
+        Desenvolvido por 64Bits Informática &copy; {{ ano if ano else "2025" }}
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
