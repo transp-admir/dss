@@ -871,7 +871,7 @@ def resolver_pendencia():
     pendencia_id = request.form.get('pendencia_id')
     novo_status = request.form.get('status')
     observacao = request.form.get('observacao_admin')
-    numero_os = request.form.get('numero_os') # CAPTURA O NOVO CAMPO
+    numero_os = request.form.get('numero_os')
 
     pendencia = Pendencia.query.get(pendencia_id)
 
@@ -879,7 +879,7 @@ def resolver_pendencia():
         flash('Pendência não encontrada.', 'danger')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
-    # Verificação de segurança (já implementada)
+    # Verificação de segurança para unidade
     if user_role != 'admin' and pendencia.veiculo.unidade != user_unidade:
         flash('Você não tem permissão para resolver pendências de outra unidade.', 'danger')
         return redirect(url_for('admin.gerenciar_pendencias'))
@@ -891,19 +891,24 @@ def resolver_pendencia():
     # Atualiza os campos no objeto da pendência
     pendencia.status = novo_status
     pendencia.observacao_admin = observacao
-    pendencia.numero_os = numero_os # SALVA O NÚMERO DA OS
+    pendencia.numero_os = numero_os
     pendencia.data_resolucao = datetime.utcnow()
     
     db.session.commit()
 
-    flash(f'Pendência do item "{pendencia.item.texto}" atualizada com sucesso.', 'success')
+    # --- INÍCIO DA CORREÇÃO ---
+    # Verifica se o item de checklist associado à pendência ainda existe
+    # antes de tentar acessar seu texto.
+    if pendencia.item:
+        flash(f'Pendência do item "{pendencia.item.texto}" atualizada com sucesso.', 'success')
+    else:
+        # Se o item não existe (foi excluído), mostra uma mensagem genérica
+        # para evitar o erro e ainda informar o usuário.
+        flash(f'Pendência (ID: {pendencia.id}) atualizada com sucesso. O item original não foi encontrado.', 'success')
+    # --- FIM DA CORREÇÃO ---
+        
     return redirect(url_for('admin.gerenciar_pendencias'))
 
-
-# --- FIM DAS NOVAS ROTAS ---
-
-
-# Em app/routes.py, SUBSTITUA a função 'acompanhamento_diario' por esta:
 
 @admin_bp.route('/acompanhamento_diario')
 @login_required()
