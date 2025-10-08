@@ -9,7 +9,7 @@ from functools import wraps
 
 # --- IMPORTAÇÃO DOS MODELS DEFINIDOS NA APLICAÇÃO (BANCO DE DADOS ORM) ---
 from .models import (
-    Usuario, Motorista, Conteudo, Assinatura, Checklist, 
+    clean_cpf,Usuario, Motorista, Conteudo, Assinatura, Checklist, 
     ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
     ChecklistResposta, Pendencia, DocumentoFixo, ExtintorCheck,
     VeiculoIndisponibilidade, MotoristaIsencao, UnidadeConfig
@@ -205,21 +205,32 @@ def motorista_portal():
 
 @main_bp.route('/login/motorista', methods=['GET', 'POST'])
 def motorista_login():
-    """Página de login para motoristas."""
+    """Página de login para motoristas, com tratamento para CPF."""
     if request.method == 'POST':
-        login_user = request.form.get('login') #  o CPF
+        cpf_digitado = request.form.get('login')
         senha = request.form.get('senha')
-        motorista = Motorista.query.filter_by(cpf=login_user).first()
+
+        if not cpf_digitado or not senha:
+            flash('CPF e senha são obrigatórios.', 'warning')
+            return redirect(url_for('main.motorista_login'))
+
+        # Limpa o CPF vindo do formulário para bater com o formato do banco
+        cpf_limpo = clean_cpf(cpf_digitado)
         
+        # A busca no banco é feita com o CPF limpo
+        motorista = Motorista.query.filter_by(cpf=cpf_limpo).first()
+        
+        # A verificação de senha funciona, pois ela é gerada a partir do CPF limpo
         if motorista and motorista.check_password(senha):
             session['motorista_id'] = motorista.id
             flash(f'Bem-vindo, {motorista.nome}!', 'success')
             return redirect(url_for('main.motorista_portal'))
         else:
-            flash('CPF ou senha inválidos. Tente novamente.', 'error')
+            flash('CPF ou senha inválidos. Tente novamente.', 'danger')
             return redirect(url_for('main.motorista_login'))
             
     return render_template('login.html')
+
 
 # --- ROTAS DE GERENCIAMENTO DE VEÍCULOS E PLACAS ---
 
@@ -1383,10 +1394,13 @@ def add_motorista():
         flash('A unidade é obrigatória.', 'danger')
         return redirect(url_for('admin.motoristas'))
 
-    if Motorista.query.filter_by(cpf=cpf).first():
+    # CORREÇÃO: Verifica a existência usando o CPF limpo
+    cpf_limpo = clean_cpf(cpf)
+    if Motorista.query.filter_by(cpf=cpf_limpo).first():
         flash('Já existe um motorista com este CPF.', 'danger')
         return redirect(url_for('admin.motoristas'))
 
+    # A criação funciona, pois o modelo `Motorista` já limpa o CPF automaticamente
     novo_motorista = Motorista(
         nome=nome, 
         cpf=cpf, 
@@ -1398,13 +1412,13 @@ def add_motorista():
         veiculo_id=int(veiculo_id) if veiculo_id else None
     )
     
-    # LINHA ADICIONADA: Define a senha padrão (6 primeiros dígitos do CPF)
     novo_motorista.set_password(None)
     
     db.session.add(novo_motorista)
     db.session.commit()
     flash(f'Motorista {nome} adicionado com sucesso!', 'success')
     return redirect(url_for('admin.motoristas'))
+
 
 
 

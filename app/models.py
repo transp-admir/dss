@@ -2,16 +2,32 @@
 from .extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
+import re # Importe o módulo re
+
+# --- Helper para limpar CPF ---
+def clean_cpf(cpf_string):
+    """Remove todos os caracteres não numéricos de uma string."""
+    if not cpf_string:
+        return ""
+    return re.sub(r'[^0-9]', '', cpf_string)
 
 # --- MODELO DE USUÁRIO (ADMIN, MASTER, COMUM) ---
 class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), unique=True, nullable=False)
-    cpf = db.Column(db.String(14), unique=True, nullable=False)
+    _cpf = db.Column("cpf", db.String(14), unique=True, nullable=False)
     setor = db.Column(db.String(50))
     password_hash = db.Column(db.String(256))
     role = db.Column(db.String(20), nullable=False, default='comum') # admin, master, comum
     unidade = db.Column(db.String(100))
+
+    @property
+    def cpf(self):
+        return self._cpf
+
+    @cpf.setter
+    def cpf(self, value):
+        self._cpf = clean_cpf(value)
 
     @property
     def password(self):
@@ -59,11 +75,11 @@ class Veiculo(db.Model):
     def __repr__(self):
         return f'<Veiculo {self.nome_conjunto}>'
 
-# --- MODELO DE MOTORISTA ---
+# --- MODELO DE MOTORISTA (COM CPF CORRIGIDO) ---
 class Motorista(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
-    cpf = db.Column(db.String(14), unique=True, nullable=False)
+    _cpf = db.Column("cpf", db.String(14), unique=True, nullable=False)
     rg = db.Column(db.String(20))
     cnh = db.Column(db.String(20))
     frota = db.Column(db.String(50))
@@ -77,19 +93,37 @@ class Motorista(db.Model):
     assinaturas = db.relationship('Assinatura', backref='motorista', lazy=True)
     checklists_preenchidos = db.relationship('ChecklistPreenchido', backref='motorista', lazy='dynamic')
 
+    @property
+    def cpf(self):
+        return self._cpf
+
+    @cpf.setter
+    def cpf(self, value):
+        """Garante que o CPF seja sempre salvo como uma string de dígitos."""
+        self._cpf = clean_cpf(value)
+
     def set_password(self, password):
+        """Define a senha. Se nenhuma senha for fornecida, usa os 6 primeiros dígitos do CPF (já limpo)."""
         if not password:
+            # O self.cpf agora acessa o @property, que já está limpo
             password = self.cpf[:6]
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
+        """Verifica a senha. Se nenhuma senha existir, cria a primeira baseada no CPF."""
         if not self.password_hash:
             self.set_password(None)
-            db.session.commit()
+            # É importante comitar a sessão se a senha for criada na primeira verificação
+            try:
+                db.session.commit()
+            except:
+                db.session.rollback()
+                raise
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
         return f'<Motorista {self.nome}>'
+
 
 # --- MODELOS DE CONTEÚDO E ASSINATURA ---
 class Conteudo(db.Model):
@@ -150,26 +184,23 @@ class ChecklistPreenchido(db.Model):
     respostas = db.relationship('ChecklistResposta', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
     extintores_check = db.relationship('ExtintorCheck', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
 
-# --- INÍCIO DA ALTERAÇÃO ---
 class ChecklistResposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    checklist_preenchido_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)  # atualizado
+    checklist_preenchido_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('checklist_item.id'), nullable=False)
-    resposta = db.Column(db.String(50))  # 'CONFORME', 'NAO CONFORME', 'N/A'
+    resposta = db.Column(db.String(50))
     observacao = db.Column(db.Text)
     item = db.relationship('ChecklistItem')
 
-
 class ExtintorCheck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    preenchimento_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False) # Nome da coluna no banco
+    preenchimento_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)
     local = db.Column(db.String(100))
     tipo = db.Column(db.String(50))
     peso = db.Column(db.String(20))
     vencimento = db.Column(db.Date)
     trocado = db.Column(db.String(10))
     motivo_troca = db.Column(db.Text)
-# --- FIM DA ALTERAÇÃO ---
 
 class Pendencia(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -193,56 +224,32 @@ class DocumentoFixo(db.Model):
     nome_arquivo = db.Column(db.String(255), nullable=False)
     data_upload = db.Column(db.DateTime, default=datetime.utcnow)
 
-
-# --- NOVOS MODELOS E MODELOS RESTAURADOS ---
-
 class VeiculoIndisponibilidade(db.Model):
-    """Registra um período em que um veículo está indisponível para operação (e, portanto, para checklists)."""
     __tablename__ = 'veiculo_indisponibilidade'
     id = db.Column(db.Integer, primary_key=True)
     data_inicio = db.Column(db.Date, nullable=False, default=date.today)
-    data_fim = db.Column(db.Date, nullable=True) # Se nulo, a indisponibilidade é por tempo indeterminado.
-    motivo = db.Column(db.Text, nullable=False) # Ex: "Em manutenção", "Vendido", "Aguardando documentação"
-    
+    data_fim = db.Column(db.Date, nullable=True)
+    motivo = db.Column(db.Text, nullable=False)
     veiculo_id = db.Column(db.Integer, db.ForeignKey('veiculo.id'), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
-
     usuario = db.relationship('Usuario', backref='indisponibilidades_criadas')
 
-    def __repr__(self):
-        return f'<Indisponibilidade para Veiculo {self.veiculo_id} a partir de {self.data_inicio}>'
-
-# Para a funcionalidade de isentar um motorista individualmente do preenchimento
 class MotoristaIsencao(db.Model):
     __tablename__ = 'motorista_isencao'
     id = db.Column(db.Integer, primary_key=True)
     data = db.Column(db.Date, nullable=False)
     motivo = db.Column(db.String(255), nullable=False)
-    tipo_checklist = db.Column(db.String(50), nullable=False) # DIÁRIO, MENSAL, etc.
-
+    tipo_checklist = db.Column(db.String(50), nullable=False)
     motorista_id = db.Column(db.Integer, db.ForeignKey('motorista.id'), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
-
     motorista = db.relationship('Motorista', backref='isencoes')
     usuario = db.relationship('Usuario', backref='isencoes_criadas')
-
     __table_args__ = (db.UniqueConstraint('data', 'motorista_id', 'tipo_checklist', name='_data_motorista_tipo_uc'),)
-
-    def __repr__(self):
-        return f'<Isenção para {self.motorista.nome} em {self.data} do checklist {self.tipo_checklist}>'
 
 class UnidadeConfig(db.Model):
     __tablename__ = 'unidade_config'
     id = db.Column(db.Integer, primary_key=True)
-    
-    # Nome da unidade, deve ser único. Ex: 'São Paulo', 'Rio de Janeiro'
     unidade = db.Column(db.String(100), unique=True, nullable=False)
-    
-    # A configuração que o master irá controlar. 
-    # Por padrão, será False (desativado).
     motorista_pode_trocar_veiculo = db.Column(db.Boolean, nullable=False, default=False)
-
-    def __repr__(self):
-        return f'<UnidadeConfig {self.unidade}>'
