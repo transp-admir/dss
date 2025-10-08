@@ -27,7 +27,11 @@ def upgrade():
     # Alteração na tabela extintor_check
     with op.batch_alter_table('extintor_check', schema=None) as batch_op:
         batch_op.add_column(sa.Column('preenchimento_id', sa.Integer(), nullable=False))
-        batch_op.drop_constraint('fk_extintor_check_checklist_preenchido_id', type_='foreignkey')  # substitua pelo nome real da FK
+        # Tenta remover a constraint antiga, mas ignora se ela não existir
+        try:
+            batch_op.drop_constraint('fk_extintor_check_checklist_preenchido_id', type_='foreignkey')
+        except Exception:
+            pass
         batch_op.create_foreign_key('fk_extintor_check_preenchimento_id', 'checklist_preenchido', ['preenchimento_id'], ['id'])
         batch_op.drop_column('checklist_preenchido_id')
 
@@ -35,7 +39,7 @@ def downgrade():
     # Reversão da tabela extintor_check
     with op.batch_alter_table('extintor_check', schema=None) as batch_op:
         batch_op.add_column(sa.Column('checklist_preenchido_id', sa.INTEGER(), nullable=False))
-        batch_op.drop_constraint('fk_extintor_check_preenchimento_id', type_='foreignkey')  # nome da FK criada no upgrade
+        batch_op.drop_constraint('fk_extintor_check_preenchimento_id', type_='foreignkey')
         batch_op.create_foreign_key('fk_extintor_check_checklist_preenchido_id', 'checklist_preenchido', ['checklist_preenchido_id'], ['id'])
         batch_op.drop_column('preenchimento_id')
 
