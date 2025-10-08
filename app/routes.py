@@ -1467,6 +1467,8 @@ def add_motorista():
 
 
 
+# Em app/routes.py, substitua a função edit_motorista por esta:
+
 @admin_bp.route('/motoristas/edit/<int:motorista_id>', methods=['POST'])
 @login_required()
 def edit_motorista(motorista_id):
@@ -1479,16 +1481,29 @@ def edit_motorista(motorista_id):
         flash('Você não tem permissão para editar este motorista.', 'danger')
         return redirect(url_for('admin.motoristas'))
 
+    # --- INÍCIO DA LÓGICA DE ATUALIZAÇÃO DE SENHA ---
+    cpf_antigo = motorista.cpf
+    cpf_novo = request.form.get('cpf')
+
+    # Atualiza todos os outros campos primeiro
     motorista.nome = request.form.get('nome')
-    motorista.cpf = request.form.get('cpf')
     motorista.rg = request.form.get('rg')
     motorista.cnh = request.form.get('cnh')
     motorista.frota = request.form.get('frota')
     motorista.veiculo_id = int(request.form.get('veiculo_id')) if request.form.get('veiculo_id') else None
-    motorista.operacao = request.form.get('operacao') # LINHA ADICIONADA
+    motorista.operacao = request.form.get('operacao')
     
     if user_role == 'admin':
         motorista.unidade = request.form.get('unidade')
+    
+    # Agora, lida com a alteração do CPF
+    motorista.cpf = cpf_novo
+
+    # Se o CPF foi realmente alterado, redefine a senha para o novo padrão.
+    if cpf_novo != cpf_antigo:
+        motorista.set_password(None) # O método já usa o CPF do próprio objeto para gerar a senha
+        flash('O CPF foi alterado. A senha do motorista foi redefinida para os 6 primeiros dígitos do novo CPF.', 'info')
+    # --- FIM DA LÓGICA DE ATUALIZAÇÃO DE SENHA ---
 
     db.session.commit()
     flash(f'Dados do motorista {motorista.nome} atualizados com sucesso!', 'success')
