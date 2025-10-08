@@ -8,6 +8,42 @@
 
 {% block content %}
 <div class="container-fluid">
+
+    {# --- PAINEL DE CONFIGURAÇÃO PARA O MASTER DA UNIDADE --- #}
+    {% if session.role == 'master' and config_unidade %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm mb-4 border-left-primary">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Configurações da Unidade: {{ session.unidade }}</h6>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('admin.salvar_config_unidade') }}" method="POST">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" 
+                                   type="checkbox" 
+                                   role="switch" 
+                                   id="trocaVeiculoSwitch" 
+                                   name="motorista_pode_trocar_veiculo" 
+                                   {% if config_unidade.motorista_pode_trocar_veiculo %}checked{% endif %}>
+                            <label class="form-check-label" for="trocaVeiculoSwitch">
+                                <strong>Permitir que motoristas troquem de conjunto sozinhos</strong>
+                            </label>
+                        </div>
+                        <p class="form-text text-muted small">
+                            Se esta opção estiver <strong>ativada</strong>, os motoristas da sua unidade verão um botão para selecionar um novo conjunto na página de checklist. <br>
+                            Se estiver <strong>desativada</strong>, eles só poderão usar o conjunto que foi vinculado a eles manualmente por um administrador.
+                        </p>
+                        <hr>
+                        <button type="submit" class="btn btn-primary btn-sm">Salvar Configuração</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# --- PAINEL DE ATALHOS --- #}
     <div class="row">
         <div class="col-12">
             <div class="card shadow-sm">
@@ -40,7 +76,7 @@
                             </div>
                             <i class="fas fa-arrow-right"></i>
                         </a>
-                        <a href="https://drive.google.com/drive/folders/13MRtFBZGZhhKdw7VTmDPeGpBnH1kuMUI?usp=drive_link" target="_blank" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center list-group-item-highlight">
+                        <a href="URL_DA_PASTA_DO_GOOGLE_DRIVE" target="_blank" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center list-group-item-highlight">
                             <div>
                                 <i class="fas fa-video me-2"></i>
                                 <strong>Ver Tutoriais</strong>

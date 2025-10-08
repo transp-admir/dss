@@ -5,7 +5,7 @@ from functools import wraps
 from .models import (Usuario, Motorista, Conteudo, Assinatura, Checklist, 
                    ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
                    ChecklistResposta, Pendencia, DocumentoFixo, ExtintorCheck,
-                   VeiculoIndisponibilidade, MotoristaIsencao)
+                   VeiculoIndisponibilidade, MotoristaIsencao,UnidadeConfig)
 
 
 
@@ -29,6 +29,9 @@ from werkzeug.utils import secure_filename
 from collections import defaultdict
 from sqlalchemy import and_, or_
 from fpdf import FPDF
+
+# --- BLUEPRINT DA ÁREA PÚBLICA (MOTORISTAS) ---
+main_bp = Blueprint('main', __name__)
 
 # --- Classe Auxiliar para gerar o PDF com Cabeçalho e Rodapé ---
 class PDF(FPDF):
@@ -70,6 +73,76 @@ def login_required(required_role=["admin", "master", "comum"]):
         return decorated_function
     return decorator
 
+@admin_bp.route('/salvar_config_unidade', methods=['POST'])
+@login_required(required_role=["master"])
+def salvar_config_unidade():
+    user_unidade = session.get('unidade')
+    if not user_unidade:
+        flash('Sua conta não está associada a uma unidade.', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    # O valor do checkbox vem como 'on' se marcado, e não vem se desmarcado.
+    permissao_ativa = 'motorista_pode_trocar_veiculo' in request.form 
+    
+    config = UnidadeConfig.query.filter_by(unidade=user_unidade).first()
+    if config:
+        config.motorista_pode_trocar_veiculo = permissao_ativa
+        db.session.commit()
+        if permissao_ativa:
+            flash('Permissão para troca de veículo ATIVADA para os motoristas da sua unidade.', 'success')
+        else:
+            flash('Permissão para troca de veículo DESATIVADA para os motoristas da sua unidade.', 'info')
+    else:
+        flash('Configuração da unidade não encontrada.', 'danger')
+
+    return redirect(url_for('admin.dashboard'))
+
+
+@main_bp.route('/motorista/trocar_veiculo', methods=['POST'])
+def trocar_veiculo():
+    """
+    Processa a troca ou a primeira vinculação de um conjunto para o motorista,
+    respeitando a configuração da unidade.
+    """
+    if 'motorista_id' not in session:
+        return redirect(url_for('main.motorista_login'))
+
+    motorista_atual = Motorista.query.get(session['motorista_id'])
+    
+    # --- Verificação de Permissão ---
+    config_unidade = UnidadeConfig.query.filter_by(unidade=motorista_atual.unidade).first()
+    if not (config_unidade and config_unidade.motorista_pode_trocar_veiculo):
+        flash('A troca de veículo não está permitida para sua unidade. Fale com o administrador.', 'danger')
+        return redirect(url_for('main.lista_checklists_motorista'))
+    # --- Fim da Verificação ---
+
+    novo_veiculo_id = request.form.get('veiculo_id')
+
+    if not novo_veiculo_id:
+        flash('Você precisa selecionar um conjunto.', 'warning')
+        return redirect(url_for('main.lista_checklists_motorista'))
+
+    novo_veiculo = Veiculo.query.get(novo_veiculo_id)
+    if not novo_veiculo:
+        flash('Conjunto selecionado é inválido.', 'danger')
+        return redirect(url_for('main.lista_checklists_motorista'))
+
+    if motorista_atual.unidade != novo_veiculo.unidade:
+        flash(f'Você não tem permissão para se vincular a um conjunto da unidade {novo_veiculo.unidade}.', 'danger')
+        return redirect(url_for('main.lista_checklists_motorista'))
+
+    motorista_antigo = novo_veiculo.motorista
+    if motorista_antigo and motorista_antigo.id != motorista_atual.id:
+        motorista_antigo.veiculo_id = None
+        db.session.add(motorista_antigo)
+        flash(f'O conjunto {novo_veiculo.nome_conjunto} foi desvinculado do motorista anterior.', 'info')
+
+    motorista_atual.veiculo_id = novo_veiculo.id
+    db.session.commit()
+
+    flash(f'Você agora está vinculado ao conjunto {novo_veiculo.nome_conjunto}.', 'success')
+    return redirect(url_for('main.lista_checklists_motorista'))
+
 
 # --- Configuração de Upload ---
 UPLOAD_FOLDER = 'app/static/uploads'
@@ -79,8 +152,7 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- BLUEPRINT DA ÁREA PÚBLICA (MOTORISTAS) ---
-main_bp = Blueprint('main', __name__)
+
 
 @main_bp.route('/')
 def index():
@@ -559,6 +631,7 @@ def login():
             session['setor'] = user.setor  # Salva o setor do usuário na sessão
             # --- FIM DA CORREÇÃO ---
             flash('Login bem-sucedido!', 'success')
+            session.permanent = True  # ⏱️ ativa limite de tempo de sessão
             return redirect(url_for('admin.dashboard'))
         else:
             flash('Nome de usuário ou senha inválidos.', 'danger')
@@ -581,7 +654,20 @@ def admin_logout():
 @admin_bp.route('/dashboard')
 @login_required()
 def dashboard():
-    return render_template('adm.html')
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+    
+    config_unidade = None
+    if user_role == 'master' and user_unidade:
+        # Busca ou cria a configuração para a unidade do master
+        config_unidade = UnidadeConfig.query.filter_by(unidade=user_unidade).first()
+        if not config_unidade:
+            config_unidade = UnidadeConfig(unidade=user_unidade, motorista_pode_trocar_veiculo=False)
+            db.session.add(config_unidade)
+            db.session.commit()
+
+    return render_template('adm.html', config_unidade=config_unidade)
+
 
 
 
@@ -1602,28 +1688,51 @@ def add_checklist():
     return redirect(url_for('admin.checklists'))
 
 
+#
+# Em app/routes.py, substitua a função lista_checklists_motorista por esta:
+#
 @main_bp.route('/checklists_motorista')
 def lista_checklists_motorista():
     if 'motorista_id' not in session:
         return redirect(url_for('main.motorista_login'))
     
-    motorista_id = session['motorista_id']
-    motorista = Motorista.query.get(motorista_id)
-
+    motorista = Motorista.query.get(session['motorista_id'])
     if not motorista:
         flash('Seus dados de motorista não foram encontrados.', 'danger')
         return redirect(url_for('main.motorista_login'))
         
     motorista_unidade = motorista.unidade
     
-    # FILTRO ATUALIZADO: Adiciona a condição 'Checklist.ativo == True'.
-    checklists = Checklist.query.filter(
-        Checklist.ativo == True,  # <-- Garante que apenas checklists ativos apareçam.
-        Checklist.itens.any(),
-        or_(
-            Checklist.unidade == motorista_unidade,
-            Checklist.unidade == None
+    # --- Lógica de Permissão de Troca ---
+    config = UnidadeConfig.query.filter_by(unidade=motorista_unidade).first()
+    troca_permitida = config.motorista_pode_trocar_veiculo if config else False
+    
+    veiculos_para_troca = []
+    # Só busca veículos se a troca for permitida
+    if troca_permitida:
+        # CORREÇÃO: Busca TODOS os veículos da unidade do motorista.
+        query_veiculos = Veiculo.query.filter(Veiculo.unidade == motorista_unidade)
+        
+        # Se o motorista já tem um veículo, exclui o próprio veículo da lista de opções de troca.
+        if motorista.veiculo:
+            query_veiculos = query_veiculos.filter(Veiculo.id != motorista.veiculo.id)
+            
+        veiculos_para_troca = query_veiculos.order_by(Veiculo.nome_conjunto).all()
+
+    # Se o motorista não tem veículo, ele é direcionado à tela de seleção
+    if not motorista.veiculo:
+        return render_template(
+            'motorista_lista_checklists.html', 
+            motorista_sem_veiculo=True,
+            veiculos_disponiveis=veiculos_para_troca, # Nome da variável atualizado aqui
+            troca_permitida=troca_permitida
         )
+
+    # --- Lógica Padrão para Listar Checklists (inalterada) ---
+    checklists = Checklist.query.filter(
+        Checklist.ativo == True,
+        Checklist.itens.any(),
+        or_(Checklist.unidade == motorista_unidade, Checklist.unidade == None)
     ).order_by(Checklist.tipo, Checklist.codigo).all()
     
     checklists_com_status = []
@@ -1632,33 +1741,27 @@ def lista_checklists_motorista():
     for checklist in checklists:
         preenchido_no_periodo = False
         status_texto = "Pendente"
-
-        # Lógica para verificar o status (Diário)
         if checklist.tipo == 'DIÁRIO':
             preenchimento = ChecklistPreenchido.query.filter(
                 and_(
-                    ChecklistPreenchido.motorista_id == motorista_id,
+                    ChecklistPreenchido.motorista_id == motorista.id,
                     ChecklistPreenchido.checklist_id == checklist.id,
                     db.func.date(ChecklistPreenchido.data_preenchimento) == hoje
                 )
             ).first()
             if preenchimento:
-                preenchido_no_periodo = True
-                status_texto = "Preenchido Hoje"
-
-        # Lógica para verificar o status (Mensal)
+                preenchido_no_periodo = True; status_texto = "Preenchido Hoje"
         elif checklist.tipo == 'MENSAL':
             preenchimento = ChecklistPreenchido.query.filter(
                 and_(
-                    ChecklistPreenchido.motorista_id == motorista_id,
+                    ChecklistPreenchido.motorista_id == motorista.id,
                     ChecklistPreenchido.checklist_id == checklist.id,
                     db.func.extract('year', ChecklistPreenchido.data_preenchimento) == hoje.year,
                     db.func.extract('month', ChecklistPreenchido.data_preenchimento) == hoje.month
                 )
             ).first()
             if preenchimento:
-                preenchido_no_periodo = True
-                status_texto = "Preenchido este Mês"
+                preenchido_no_periodo = True; status_texto = "Preenchido este Mês"
         
         checklists_com_status.append({
             'checklist': checklist, 
@@ -1666,7 +1769,14 @@ def lista_checklists_motorista():
             'status': status_texto
         })
 
-    return render_template('motorista_lista_checklists.html', checklists_info=checklists_com_status)
+    return render_template(
+        'motorista_lista_checklists.html', 
+        checklists_info=checklists_com_status,
+        motorista_sem_veiculo=False,
+        veiculo_atual=motorista.veiculo,
+        veiculos_disponiveis=veiculos_para_troca, # Nome da variável atualizado aqui
+        troca_permitida=troca_permitida
+    )
 
 
 

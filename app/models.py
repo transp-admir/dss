@@ -232,3 +232,17 @@ class MotoristaIsencao(db.Model):
 
     def __repr__(self):
         return f'<Isenção para {self.motorista.nome} em {self.data} do checklist {self.tipo_checklist}>'
+
+class UnidadeConfig(db.Model):
+    __tablename__ = 'unidade_config'
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Nome da unidade, deve ser único. Ex: 'São Paulo', 'Rio de Janeiro'
+    unidade = db.Column(db.String(100), unique=True, nullable=False)
+    
+    # A configuração que o master irá controlar. 
+    # Por padrão, será False (desativado).
+    motorista_pode_trocar_veiculo = db.Column(db.Boolean, nullable=False, default=False)
+
+    def __repr__(self):
+        return f'<UnidadeConfig {self.unidade}>'

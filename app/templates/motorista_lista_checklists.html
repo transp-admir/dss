@@ -1,51 +1,181 @@
 {% extends "base_motorista.html" %}
 
-{% block title %}Checklists Disponíveis{% endblock %}
+{% block title %}Meus Checklists{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4">Meus Checklists</h2>
 
+    {# Exibe mensagens de feedback (flashes) #}
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">{{ message }}</div>
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
             {% endfor %}
         {% endif %}
     {% endwith %}
 
-    <div class="list-group">
-        {% if checklists_info %}
-            {% for info in checklists_info %}
-                {% set checklist = info.checklist %}
-                {% set status = info.status %}
-                {% set preenchido = info.preenchido %}
-                
-                <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                    <div class="flex-grow-1">
-                        <h5 class="mb-1">
-                            {{ checklist.tipo }} - {{ checklist.codigo }}
-                            {% if preenchido %}
-                                <span class="badge bg-success ms-2">{{ status }}</span>
-                            {% else %}
-                                <span class="badge bg-danger ms-2">Pendente</span>
-                            {% endif %}
-                        </h5>
-                        <small>Revisão: {{ checklist.revisao }} | Data do Modelo: {{ checklist.data.strftime('%d/%m/%Y') }}</small>
-                    </div>
-                    
-                    <a href="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) if not preenchido else '#' }}" 
-                       class="btn {{ 'btn-secondary disabled' if preenchido else 'btn-primary' }}" 
-                       aria-disabled="{{ 'true' if preenchido else 'false' }}">
-                        {% if preenchido %}Concluído{% else %}Preencher{% endif %}
-                    </a>
-                </div>
-            {% endfor %}
-        {% else %}
-            <div class="list-group-item">
-                <p class="text-center mb-0">Nenhum checklist disponível no momento.</p>
+    {# --- LÓGICA PRINCIPAL --- #}
+    {# Caso 1: Motorista está SEM veículo vinculado #}
+    {% if motorista_sem_veiculo %}
+        <div class="card shadow-sm border-left-warning">
+            <div class="card-header py-3">
+                <h4 class="m-0 font-weight-bold text-primary">Vincular Conjunto</h4>
             </div>
-        {% endif %}
+            <div class="card-body">
+                {# Caso 1a: Master PERMITE que o motorista escolha um veículo #}
+                {% if troca_permitida %}
+                    <h5 class="card-title">Selecione um conjunto para começar</h5>
+                    <p>Você não está vinculado a nenhum conjunto. Para preencher os checklists, por favor, selecione um dos conjuntos disponíveis abaixo.</p>
+                    
+                    <form action="{{ url_for('main.trocar_veiculo') }}" method="POST">
+                        <div class="mb-3">
+                            <label for="veiculoSelect" class="form-label"><strong>Conjuntos Disponíveis na sua Unidade</strong></label>
+                            <select class="form-select form-select-lg" id="veiculoSelect" name="veiculo_id" required>
+                                <option value="" selected disabled>-- Escolha um conjunto --</option>
+                                {% for veiculo in veiculos_disponiveis %}
+                                    <option value="{{ veiculo.id }}">
+                                        {{ veiculo.nome_conjunto }}
+                                        {% if veiculo.motorista %}
+                                            (Em uso por: {{ veiculo.motorista.nome }})
+                                        {% else %}
+                                            (Disponível)
+                                        {% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary" {% if not veiculos_disponiveis %}disabled{% endif %}>Vincular a este Conjunto</button>
+                    </form>
+
+                    {# Mensagem caso não haja nenhum veículo livre #}
+                    {% if not veiculos_disponiveis %}
+                        <div class="alert alert-info mt-3">
+                            Nenhum conjunto disponível na sua unidade no momento. Por favor, tente novamente mais tarde ou contate o administrador.
+                        </div>
+                    {% endif %}
+
+                {# Caso 1b: Master NÃO PERMITE a troca. Motorista precisa de ajuda. #}
+                {% else %}
+                    <div class="alert alert-danger">
+                        <h5 class="alert-heading">Nenhum Conjunto Vinculado!</h5>
+                        <p>Você não está associado a nenhum conjunto. Por favor, contate o administrador da sua unidade para que ele vincule um conjunto ao seu cadastro.</p>
+                        <hr>
+                        <p class="mb-0">Você não poderá preencher checklists até que um conjunto seja vinculado a você.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+    {# Caso 2: Motorista JÁ TEM um veículo vinculado #}
+    {% else %}
+        {# Mostra o conjunto atual e o botão de troca (se permitido) #}
+        <div class="card shadow-sm mb-4">
+             <div class="card-body">
+                 <div class="d-flex justify-content-between align-items-center flex-wrap">
+                     <div>
+                         <h5 class="card-title mb-1 text-muted">Seu Conjunto Atual</h5>
+                         <p class="card-text fs-4 fw-bold text-primary mb-0">{{ veiculo_atual.nome_conjunto }}</p>
+                     </div>
+                     {# Botão de troca só aparece se a permissão estiver ativa #}
+                     {% if troca_permitida %}
+                         <button class="btn btn-outline-primary mt-2 mt-md-0" data-bs-toggle="modal" data-bs-target="#trocarVeiculoModal">
+                             <i class="fas fa-exchange-alt me-1"></i> Trocar Conjunto
+                         </button>
+                     {% endif %}
+                 </div>
+             </div>
+        </div>
+
+        {# Título da seção de checklists #}
+        <h2 class="mb-4">Meus Checklists</h2>
+
+        {# Lista de checklists disponíveis (código original) #}
+        <div class="list-group">
+            {% if checklists_info %}
+                {% for info in checklists_info %}
+                    {% set checklist = info.checklist %}
+                    {% set status = info.status %}
+                    {% set preenchido = info.preenchido %}
+                    
+                    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <div class="flex-grow-1">
+                            <h5 class="mb-1">
+                                {{ checklist.tipo }} - {{ checklist.codigo }}
+                                {% if preenchido %}
+                                    <span class="badge bg-success ms-2">{{ status }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger ms-2">Pendente</span>
+                                {% endif %}
+                            </h5>
+                            <small>Revisão: {{ checklist.revisao }} | Data do Modelo: {{ checklist.data.strftime('%d/%m/%Y') }}</small>
+                        </div>
+                        
+                        <a href="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) if not preenchido else '#' }}" 
+                           class="btn {{ 'btn-secondary disabled' if preenchido else 'btn-primary' }}" 
+                           aria-disabled="{{ 'true' if preenchido else 'false' }}">
+                            {% if preenchido %}Concluído{% else %}Preencher{% endif %}
+                        </a>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="list-group-item">
+                    <p class="text-center mb-0">Nenhum checklist disponível no momento.</p>
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+
+    {# --- MODAL PARA TROCA DE VEÍCULO --- #}
+    {# Só é renderizado se o motorista tem um veículo e a troca é permitida #}
+    {% if not motorista_sem_veiculo and troca_permitida %}
+    <div class="modal fade" id="trocarVeiculoModal" tabindex="-1" aria-labelledby="trocarVeiculoModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="trocarVeiculoModalLabel">Trocar de Conjunto</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <form action="{{ url_for('main.trocar_veiculo') }}" method="POST">
+              <div class="modal-body">
+                <p>Seu conjunto atual é <strong>{{ veiculo_atual.nome_conjunto }}</strong>. Selecione um novo conjunto da lista abaixo.</p>
+                
+                <div class="mb-3">
+                    <label for="veiculoSelectModal" class="form-label"><strong>Conjuntos Disponíveis</strong></label>
+                    <select class="form-select" id="veiculoSelectModal" name="veiculo_id" required>
+                        <option value="" selected disabled>-- Escolha um novo conjunto --</option>
+                        {% for veiculo in veiculos_disponiveis %}
+                            <option value="{{ veiculo.id }}">
+                                {{ veiculo.nome_conjunto }}
+                                {% if veiculo.motorista %}
+                                    (Em uso por: {{ veiculo.motorista.nome }})
+                                {% else %}
+                                    (Disponível)
+                                {% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% if not veiculos_disponiveis %}
+                    <div class="alert alert-warning">
+                        Nenhum outro conjunto disponível para troca na sua unidade no momento.
+                    </div>
+                {% endif %}
+
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary" {% if not veiculos_disponiveis %}disabled{% endif %}>Confirmar Troca</button>
+              </div>
+          </form>
+        </div>
+      </div>
     </div>
+    {% endif %}
+
 </div>
 {% endblock %}
