@@ -18,7 +18,7 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                 <i class="fas fa-car-crash me-2"></i> Declarar Veículo Indisponível
             </button>
             <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#modalIsencaoMotorista">
-                <i class="fas fa-user-clock me-2"></i> Isentar Motorista
+                <i class="fas fa-user-clock me-2"></i> Liberar Motorista(s)
             </button>
         </div>
     </div>
@@ -96,7 +96,7 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
     </div>
 </div>
 
-<!-- Modal para Declarar Veículo Indisponível -->
+<!-- MODAL: Declarar Veículo Indisponível (CORRIGIDO) -->
 <div class="modal fade" id="modalIndisponibilidade" tabindex="-1" aria-labelledby="modalIndisponibilidadeLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -119,7 +119,7 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="data_inicio_indisp" class="form-label">Data de Início</label>
-                            <input type="date" class="form-control" id="data_inicio_indisp" name="data_inicio" value="{{ data_hoje.strftime('%Y-%m-%d') }}" required>
+                            <input type="date" class="form-control" id="data_inicio_indisp" name="data_inicio" required>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="data_fim_indisp" class="form-label">Data Final (opcional)</label>
@@ -140,21 +140,29 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
     </div>
 </div>
 
-<!-- Modal para Isentar Motorista -->
+<!-- MODAL: Liberar Motorista(s) do Checklist (UNIFICADO) -->
 <div class="modal fade" id="modalIsencaoMotorista" tabindex="-1" aria-labelledby="modalIsencaoMotoristaLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form action="{{ url_for('admin.registrar_isencao_motorista') }}" method="POST">
+            <form action="{{ url_for('admin.registrar_isencao_periodo') }}" method="POST">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="modalIsencaoMotoristaLabel">Isentar Motorista do Checklist</h5>
+                    <h5 class="modal-title" id="modalIsencaoMotoristaLabel">Liberar Motorista(s) do Checklist</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="small text-muted">Use esta opção para isentar um motorista por um ou mais dias (ex: atestado médico, folga, férias).</p>
+                    <p class="small text-muted">Use para liberar um ou todos os motoristas por um período (ex: feriado, atestado).</p>
+                    
+                    <!-- Campo escondido para enviar o tipo de checklist. Nesta página, será sempre DIÁRIO -->
+                    <input type="hidden" name="tipo_checklist" value="DIÁRIO">
+
                     <div class="mb-3">
                         <label for="motorista_id_isencao" class="form-label">Motorista</label>
                         <select class="form-select" id="motorista_id_isencao" name="motorista_id" required>
                             <option value="" disabled selected>Selecione um motorista...</option>
+                            <!-- Apenas Master ou Admin podem liberar todos de uma vez -->
+                            {% if session.get('role') in ['admin', 'master'] %}
+                                <option value="todos">-- TODOS OS MOTORISTAS DA UNIDADE --</option>
+                            {% endif %}
                             {% for motorista in motoristas_para_formulario %}
                                 <option value="{{ motorista.id }}">{{ motorista.nome }}</option>
                             {% endfor %}
@@ -163,21 +171,21 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                      <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="data_inicio_isencao" class="form-label">Data de Início</label>
-                            <input type="date" class="form-control" id="data_inicio_isencao" name="data_inicio" value="{{ data_hoje.strftime('%Y-%m-%d') }}" required>
+                            <input type="date" class="form-control" id="data_inicio_isencao" name="data_inicio" required>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="data_fim_isencao" class="form-label">Data Final (opcional)</label>
-                            <input type="date" class="form-control" id="data_fim_isencao" name="data_fim">
+                            <label for="data_fim_isencao" class="form-label">Data Final</label>
+                            <input type="date" class="form-control" id="data_fim_isencao" name="data_fim" required>
                         </div>
                     </div>
                     <div class="mb-3">
                         <label for="motivo_isencao" class="form-label">Motivo</label>
-                        <input type="text" class="form-control" id="motivo_isencao" name="motivo" placeholder="Ex: Atestado Médico" required>
+                        <input type="text" class="form-control" id="motivo_isencao" name="motivo" placeholder="Ex: Feriado Nacional" required>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar Isenção</button>
+                    <button type="submit" class="btn btn-primary">Salvar Liberação</button>
                 </div>
             </form>
         </div>

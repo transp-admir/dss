@@ -1,37 +1,64 @@
-from flask import (Blueprint, render_template, request, 
-                   redirect, url_for, session, flash, jsonify, Response)
+# --- IMPORTAÇÕES DO FLASK PARA CRIAÇÃO DE ROTAS, RENDERIZAÇÃO DE TEMPLATES E MANIPULAÇÃO DE REQUISIÇÕES ---
+from flask import (
+    Blueprint, render_template, request, 
+    redirect, url_for, session, flash, jsonify, Response
+)
+
+# --- IMPORTAÇÃO DE FUNÇÃO PARA CRIAÇÃO DE DECORADORES PERSONALIZADOS ---
 from functools import wraps
 
-from .models import (Usuario, Motorista, Conteudo, Assinatura, Checklist, 
-                   ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
-                   ChecklistResposta, Pendencia, DocumentoFixo, ExtintorCheck,
-                   VeiculoIndisponibilidade, MotoristaIsencao,UnidadeConfig)
+# --- IMPORTAÇÃO DOS MODELS DEFINIDOS NA APLICAÇÃO (BANCO DE DADOS ORM) ---
+from .models import (
+    Usuario, Motorista, Conteudo, Assinatura, Checklist, 
+    ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
+    ChecklistResposta, Pendencia, DocumentoFixo, ExtintorCheck,
+    VeiculoIndisponibilidade, MotoristaIsencao, UnidadeConfig
+)
 
-
-
-# No topo de app/routes.py
+# --- IMPORTAÇÃO DE FUNÇÕES DE DATA E HORA ---
 from datetime import datetime, date, timedelta
 
-
-
-# --- BLUEPRINT DA ÁREA ADMINISTRATIVA ---
+# --- DEFINIÇÃO DO BLUEPRINT DA ÁREA ADMINISTRATIVA ---
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
+# --- IMPORTAÇÃO DE TIPOS NUMÉRICOS PARA TRATAMENTO DE VALORES DECIMAIS ---
 from decimal import Decimal, InvalidOperation
+
+# --- IMPORTAÇÃO DE BIBLIOTECA PARA MANIPULAÇÃO DE DADOS EM TABELAS ---
 import pandas as pd
+
+# --- IMPORTAÇÃO DE BIBLIOTECA PARA TRABALHO COM FLUXO DE DADOS EM MEMÓRIA ---
 import io
+
+# --- IMPORTAÇÃO DE FUNÇÃO PARA SERVIR ARQUIVOS ESTÁTICOS ---
 from flask import send_from_directory
+
+# --- IMPORTAÇÃO DA EXTENSÃO DO BANCO DE DADOS SQLALCHEMY ---
 from .extensions import db
-from datetime import datetime, date
+
+# --- IMPORTAÇÃO DE EXPRESSÕES REGULARES PARA VALIDAÇÃO DE DADOS ---
 import re
+
+# --- IMPORTAÇÃO DE FUNÇÕES DO SISTEMA OPERACIONAL PARA MANIPULAÇÃO DE ARQUIVOS ---
 import os
+
+# --- IMPORTAÇÃO DE FUNÇÃO PARA SEGURANÇA DE NOMES DE ARQUIVOS UPLOAD ---
 from werkzeug.utils import secure_filename
+
+# --- IMPORTAÇÃO DE ESTRUTURA DE DADOS PARA AGRUPAMENTO DE VALORES ---
 from collections import defaultdict
+
+# --- IMPORTAÇÃO DE OPERADORES LÓGICOS PARA CONSULTAS SQLALCHEMY ---
 from sqlalchemy import and_, or_
+
+# --- IMPORTAÇÃO DE BIBLIOTECA PARA GERAÇÃO DE DOCUMENTOS PDF ---
 from fpdf import FPDF
 
-# --- BLUEPRINT DA ÁREA PÚBLICA (MOTORISTAS) ---
+# --- DEFINIÇÃO DO BLUEPRINT DA ÁREA PÚBLICA (ACESSO DE MOTORISTAS) ---
 main_bp = Blueprint('main', __name__)
+
+DOCUMENTOS_UPLOAD_FOLDER = 'app/static/uploads/documentos_fixos'
+DOCUMENTOS_ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'png'}
 
 # --- Classe Auxiliar para gerar o PDF com Cabeçalho e Rodapé ---
 class PDF(FPDF):
@@ -73,6 +100,7 @@ def login_required(required_role=["admin", "master", "comum"]):
         return decorated_function
     return decorator
 
+#Rota para ativar/desativar opcao do motorista selecionar o conjunto
 @admin_bp.route('/salvar_config_unidade', methods=['POST'])
 @login_required(required_role=["master"])
 def salvar_config_unidade():
@@ -172,15 +200,14 @@ def motorista_portal():
         session.pop('motorista_id', None)
         flash('Não foi possível encontrar seus dados. Faça login novamente.', 'warning')
         return redirect(url_for('main.motorista_login'))
-
-    # Assumindo que você tenha um template 'motorista_portal.html'
     return render_template('motorista_portal.html', motorista=motorista)
+
 
 @main_bp.route('/login/motorista', methods=['GET', 'POST'])
 def motorista_login():
     """Página de login para motoristas."""
     if request.method == 'POST':
-        login_user = request.form.get('login') # Pode ser o CPF
+        login_user = request.form.get('login') #  o CPF
         senha = request.form.get('senha')
         motorista = Motorista.query.filter_by(cpf=login_user).first()
         
@@ -193,12 +220,6 @@ def motorista_login():
             return redirect(url_for('main.motorista_login'))
             
     return render_template('login.html')
-#-----------------------------------------------------------------------
-# ROTA PARA LISTAR E BAIXAR DOCUMENTOS FIXOS (MOTORISTA)
-#-----------------------------------------------------------------------
-
-
-
 
 # --- ROTAS DE GERENCIAMENTO DE VEÍCULOS E PLACAS ---
 
@@ -284,6 +305,7 @@ def add_veiculo():
     flash(f'Conjunto "{nome_conjunto}" adicionado com sucesso.', 'success')
     return redirect(url_for('admin.veiculos'))
 
+
 @admin_bp.route('/veiculos/edit/<int:veiculo_id>', methods=['POST'])
 @login_required()
 def edit_veiculo(veiculo_id):
@@ -310,16 +332,18 @@ def edit_veiculo(veiculo_id):
     flash(f'Conjunto "{veiculo.nome_conjunto}" atualizado com sucesso.', 'success')
     return redirect(url_for('admin.veiculos'))
 
+
+
 @admin_bp.route('/placas/add', methods=['POST'])
 @login_required()
 def add_placa():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
     
-    numero_placa = request.form.get('numero') # Corrigido para 'numero'
-    tipo = request.form.get('tipo')           # Corrigido para 'tipo'
+    numero_placa = request.form.get('numero') 
+    tipo = request.form.get('tipo')           
     unidade = request.form.get('unidade')
-    operacao = request.form.get('operacao')   # NOVO CAMPO
+    operacao = request.form.get('operacao')
 
     if not numero_placa or not tipo:
         flash('Número da placa e tipo são obrigatórios.', 'danger')
@@ -340,7 +364,7 @@ def add_placa():
         numero=numero_placa.upper(), 
         tipo=tipo,
         unidade=unidade,
-        operacao=operacao # NOVO CAMPO
+        operacao=operacao
     )
     db.session.add(nova_placa)
     db.session.commit()
@@ -360,9 +384,6 @@ def delete_veiculo(veiculo_id):
     if user_role != 'admin' and veiculo.unidade != user_unidade:
         flash('Você não tem permissão para excluir este veículo.', 'danger')
         return redirect(url_for('admin.veiculos'))
-
-    # Apenas deletamos o veículo. O banco de dados cuida do resto.
-    # A lógica de "desvincular" não é necessária aqui.
     db.session.delete(veiculo)
     db.session.commit()
     flash(f'Conjunto "{veiculo.nome_conjunto}" foi excluído.', 'info')
@@ -396,7 +417,6 @@ def delete_placa(placa_id):
     db.session.delete(placa)
     db.session.commit()
     
-    # CORRIGIDO: Usa placa.numero
     flash(f'Placa {placa.numero} excluída com sucesso.', 'info')
     return redirect(url_for('admin.veiculos'))
 
@@ -404,11 +424,6 @@ def delete_placa(placa_id):
 #-----------------------------------------------------------------------
 # ROTA PARA ACESSAR DOCUMENTOS FIXOS (MOTORISTA E ADMIN)
 #-----------------------------------------------------------------------
-from flask import send_from_directory
-
-
-#-----------------------------------------------------------------------
-
 
 @main_bp.route('/logout')
 def logout():
@@ -432,6 +447,8 @@ def lista_conteudos():
                            conteudos=conteudos, 
                            assinaturas_motorista=assinaturas_motorista)
 
+
+
 @main_bp.route('/conteudo/<int:conteudo_id>/ver', methods=['GET', 'POST'])
 def ver_conteudo(conteudo_id):
     if 'motorista_id' not in session:
@@ -442,7 +459,6 @@ def ver_conteudo(conteudo_id):
     # Verifica se já existe uma assinatura para este motorista e conteúdo
     assinatura = Assinatura.query.filter_by(motorista_id=motorista_id, conteudo_id=conteudo_id).first()
 
-    # Se a requisição for POST (envio do formulário)
     if request.method == 'POST':
         # E se ainda não houver uma assinatura registrada
         if not assinatura:
@@ -462,12 +478,11 @@ def ver_conteudo(conteudo_id):
                 conteudo_id=conteudo_id,
                 tempo_leitura=tempo_leitura_segundos,
                 resposta_motorista=resposta_usuario,
-                assinatura_imagem=assinatura_imagem_data  # Incluindo a assinatura
+                assinatura_imagem=assinatura_imagem_data 
             )
             db.session.add(nova_assinatura)
             db.session.commit()
 
-            # LÓGICA ANTIGA RESTAURADA: Verifica se a resposta está correta e envia a mensagem
             if resposta_usuario.strip().lower() == conteudo.resposta_correta.strip().lower():
                 flash('Conteúdo assinado! Sua resposta está correta.', 'success')
             else:
@@ -475,19 +490,11 @@ def ver_conteudo(conteudo_id):
             
             return redirect(url_for('main.lista_conteudos'))
     
-    # Se a requisição for GET, apenas exibe a página
     return render_template('conteudo_motorista.html', 
                            conteudo=conteudo, 
                            assinatura=assinatura)
 
 
-
-
-# Adicione esta importação no topo do seu arquivo app/routes.py,
-# junto com as outras importações de models.
-from .models import ExtintorCheck 
-
-# ... (restante do seu código)
 
 @main_bp.route('/checklist/preencher/<int:checklist_id>', methods=['GET', 'POST'])
 def preencher_checklist(checklist_id):
@@ -545,7 +552,6 @@ def preencher_checklist(checklist_id):
                 db.session.add(nova_resposta)
                 respostas_adicionadas.append(nova_resposta)
 
-        # --- NOVA LÓGICA PARA SALVAR DADOS DOS EXTINTORES ---
         for i in range(5): # Loop para os 5 blocos de extintores
             local = request.form.get(f'extintor-{i}-local')
             tipo = request.form.get(f'extintor-{i}-tipo')
@@ -578,7 +584,6 @@ def preencher_checklist(checklist_id):
 
         db.session.flush()
 
-        # Lógica para criar pendências (permanece a mesma)
         for resposta in respostas_adicionadas:
             if resposta.resposta == 'NAO CONFORME':
                 pendencia_existente = Pendencia.query.filter_by(
@@ -598,7 +603,6 @@ def preencher_checklist(checklist_id):
         flash('Checklist enviado com sucesso!', 'success')
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    # A parte 'GET' da função permanece a mesma
     itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
     pendencias_abertas = set()
     if veiculo_do_motorista:
@@ -627,9 +631,7 @@ def login():
             session['admin_user'] = user.nome
             session['role'] = user.role
             session['unidade'] = user.unidade
-            # --- LINHA CRÍTICA ADICIONADA ---
-            session['setor'] = user.setor  # Salva o setor do usuário na sessão
-            # --- FIM DA CORREÇÃO ---
+            session['setor'] = user.setor
             flash('Login bem-sucedido!', 'success')
             session.permanent = True  # ⏱️ ativa limite de tempo de sessão
             return redirect(url_for('admin.dashboard'))
@@ -659,7 +661,6 @@ def dashboard():
     
     config_unidade = None
     if user_role == 'master' and user_unidade:
-        # Busca ou cria a configuração para a unidade do master
         config_unidade = UnidadeConfig.query.filter_by(unidade=user_unidade).first()
         if not config_unidade:
             config_unidade = UnidadeConfig(unidade=user_unidade, motorista_pode_trocar_veiculo=False)
@@ -671,7 +672,7 @@ def dashboard():
 
 
 
-# --- ROTAS DE GERENCIAMENTO DE USUÁRIOS (COM NOVAS REGRAS) ---
+# --- ROTAS DE GERENCIAMENTO DE USUÁRIOS ---
 
 @admin_bp.route('/usuarios', methods=['GET'])
 @login_required(required_role=["admin", "master"])
@@ -695,6 +696,8 @@ def gerenciar_usuarios():
 
     return render_template('admin_usuarios.html', usuarios=usuarios, unidades_disponiveis=unidades_disponiveis)
 
+
+
 @admin_bp.route('/usuarios/add', methods=['POST'])
 @login_required(required_role=["admin", "master"])
 def add_usuario():
@@ -706,7 +709,7 @@ def add_usuario():
     setor = request.form.get('setor')
     password = request.form.get('password')
     role = request.form.get('role')
-    unidade = request.form.get('unidade_usuario') # Nome do campo do formulário
+    unidade = request.form.get('unidade_usuario') 
 
     # Validação
     if not all([nome, cpf, password, role, unidade]):
@@ -738,6 +741,7 @@ def add_usuario():
     db.session.commit()
     flash(f'Usuário {nome} adicionado com sucesso!', 'success')
     return redirect(url_for('admin.gerenciar_usuarios'))
+
 
 @admin_bp.route('/usuarios/edit/<int:usuario_id>', methods=['POST'])
 @login_required(required_role=["admin", "master"])
@@ -816,10 +820,6 @@ def delete_usuario(usuario_id):
 #-----------------------------------------------------------------------
 # ROTA PARA GERENCIAR DOCUMENTOS FIXOS (ADMIN)
 #-----------------------------------------------------------------------
-
-# Defina esta constante no início do arquivo, junto com as outras configurações
-DOCUMENTOS_UPLOAD_FOLDER = 'app/static/uploads/documentos_fixos'
-DOCUMENTOS_ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'png'}
 
 def allowed_document_file(filename):
     return '.' in filename and \
@@ -915,7 +915,7 @@ def gerenciar_pendencias():
         query = query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
                      .filter(ChecklistItem.setor_responsavel == user_setor)
 
-    # Filtra por um veículo específico, se solicitado (funcionalidade mantida)
+    # Filtra por um veículo específico, se solicitado
     veiculo_id_str = request.args.get('veiculo_id')
     veiculo_id = int(veiculo_id_str) if veiculo_id_str else None
     if veiculo_id:
@@ -928,7 +928,7 @@ def gerenciar_pendencias():
     for pendencia in pendencias:
         pendencias_agrupadas[pendencia.veiculo].append(pendencia)
 
-    # Busca veículos para popular o filtro da página (lógica de unidade aqui está correta)
+    # Busca veículos para popular o filtro da página
     user_unidade = session.get('unidade')
     veiculos_query = Veiculo.query
     if user_role != 'admin':
@@ -950,7 +950,6 @@ def gerenciar_pendencias():
 @login_required()
 def resolver_pendencia():
     user_role = session.get('role')
-    # --- CORREÇÃO: Usar o 'setor' salvo na sessão ---
     user_setor = session.get('setor')
 
     pendencia_id = request.form.get('pendencia_id')
@@ -971,7 +970,7 @@ def resolver_pendencia():
         flash('Esta pendência já foi resolvida ou finalizada.', 'warning')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
-    # Atualiza a pendência (código inalterado)
+    # Atualiza a pendência
     pendencia.status = request.form.get('status')
     pendencia.observacao_admin = request.form.get('observacao_admin')
     pendencia.numero_os = request.form.get('numero_os')
@@ -990,7 +989,7 @@ def acompanhamento_diario():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
-    # --- Lógica de busca e status (permanece a mesma) ---
+    # --- Lógica de busca e status  ---
     checklist_diario_query = Checklist.query.filter(Checklist.tipo == 'DIÁRIO', Checklist.ativo == True)
     if user_role != 'admin':
         checklist_diario_query = checklist_diario_query.filter(or_(Checklist.unidade == user_unidade, Checklist.unidade == None))
@@ -1027,7 +1026,6 @@ def acompanhamento_diario():
     else:
         flash('Nenhum checklist "DIÁRIO" ativo foi configurado para sua unidade.', 'warning')
 
-    # --- NOVA LÓGICA ---
     # Busca veículos e motoristas para popular os formulários dos modais
     veiculos_para_formulario = veiculos_query.order_by(Veiculo.nome_conjunto).all()
     motoristas_para_formulario = motoristas_query.order_by(Motorista.nome).all()
@@ -1037,7 +1035,6 @@ def acompanhamento_diario():
         veiculos_status=veiculos_status,
         checklist_diario=checklist_diario,
         data_hoje=hoje,
-        # NOVAS VARIÁVEIS ENVIADAS AO TEMPLATE:
         veiculos_para_formulario=veiculos_para_formulario,
         motoristas_para_formulario=motoristas_para_formulario
     )
@@ -1086,64 +1083,6 @@ def registrar_indisponibilidade():
 
 
 # ROTA PARA REGISTRAR ISENÇÃO DE MOTORISTA (COM PERÍODO)
-@admin_bp.route('/isencao/registrar', methods=['POST'])
-@login_required()
-def registrar_isencao_motorista():
-    user_id = session.get('user_id')
-    
-    motorista_id = request.form.get('motorista_id')
-    data_inicio_str = request.form.get('data_inicio')
-    data_fim_str = request.form.get('data_fim') # Campo novo
-    motivo = request.form.get('motivo')
-
-    if not all([motorista_id, data_inicio_str, motivo]):
-        flash('Motorista, data de início e motivo são obrigatórios.', 'danger')
-        return redirect(url_for('admin.acompanhamento_diario'))
-
-    data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
-    # Se a data fim não for preenchida, usa a data de início
-    data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date() if data_fim_str else data_inicio
-
-    if data_fim < data_inicio:
-        flash('A data final não pode ser anterior à data inicial.', 'danger')
-        return redirect(url_for('admin.acompanhamento_diario'))
-        
-    delta = data_fim - data_inicio
-    dias_a_isentar = [data_inicio + timedelta(days=i) for i in range(delta.days + 1)]
-
-    adicionadas = 0
-    ignoradas = 0
-    for dia in dias_a_isentar:
-        isencao_existente = MotoristaIsencao.query.filter_by(
-            motorista_id=motorista_id,
-            data=dia,
-            tipo_checklist='DIÁRIO'
-        ).first()
-
-        if not isencao_existente:
-            nova_isencao = MotoristaIsencao(
-                motorista_id=motorista_id,
-                data=dia,
-                motivo=motivo,
-                tipo_checklist='DIÁRIO',
-                usuario_id=user_id
-            )
-            db.session.add(nova_isencao)
-            adicionadas += 1
-        else:
-            ignoradas += 1
-
-    db.session.commit()
-    
-    if adicionadas > 0:
-        flash(f'{adicionadas} dia(s) de isenção registrados com sucesso para o motorista.', 'success')
-    if ignoradas > 0:
-        flash(f'{ignoradas} dia(s) de isenção já existiam e foram ignorados.', 'info')
-
-    return redirect(url_for('admin.acompanhamento_diario'))
-
-
-
 
 @admin_bp.route('/isencoes/registrar_periodo', methods=['POST'])
 @login_required(required_role=["admin", "master"])
@@ -1416,6 +1355,8 @@ def motoristas():
                            veiculos_disponiveis=veiculos_disponiveis,
                            unidades_disponiveis=unidades_disponiveis)
 
+
+
 @admin_bp.route('/motoristas/add', methods=['POST'])
 @login_required()
 def add_motorista():
@@ -1467,8 +1408,6 @@ def add_motorista():
 
 
 
-# Em app/routes.py, substitua a função edit_motorista por esta:
-
 @admin_bp.route('/motoristas/edit/<int:motorista_id>', methods=['POST'])
 @login_required()
 def edit_motorista(motorista_id):
@@ -1481,7 +1420,7 @@ def edit_motorista(motorista_id):
         flash('Você não tem permissão para editar este motorista.', 'danger')
         return redirect(url_for('admin.motoristas'))
 
-    # --- INÍCIO DA LÓGICA DE ATUALIZAÇÃO DE SENHA ---
+    
     cpf_antigo = motorista.cpf
     cpf_novo = request.form.get('cpf')
 
@@ -1503,7 +1442,7 @@ def edit_motorista(motorista_id):
     if cpf_novo != cpf_antigo:
         motorista.set_password(None) # O método já usa o CPF do próprio objeto para gerar a senha
         flash('O CPF foi alterado. A senha do motorista foi redefinida para os 6 primeiros dígitos do novo CPF.', 'info')
-    # --- FIM DA LÓGICA DE ATUALIZAÇÃO DE SENHA ---
+    
 
     db.session.commit()
     flash(f'Dados do motorista {motorista.nome} atualizados com sucesso!', 'success')
@@ -1531,7 +1470,7 @@ def delete_motorista(motorista_id):
     flash(f'Motorista {motorista.nome} excluído com sucesso.', 'info')
     return redirect(url_for('admin.motoristas'))
 
-# Em app/routes.py, ADICIONE esta nova função:
+
 
 @admin_bp.route('/motoristas/desvincular/<int:motorista_id>', methods=['POST'])
 @login_required()
@@ -1585,14 +1524,14 @@ def add_conteudo():
         # Verifica se a parte do arquivo está na requisição
         if 'arquivo' not in request.files:
             flash('Nenhum campo de arquivo encontrado no formulário.', 'error')
-            return redirect(url_for('admin.conteudo')) # CORRIGIDO
+            return redirect(url_for('admin.conteudo'))
 
         file = request.files['arquivo']
         
         # Verifica se um arquivo foi realmente selecionado
         if file.filename == '':
             flash('Nenhum arquivo selecionado. Por favor, escolha um arquivo para enviar.', 'error')
-            return redirect(url_for('admin.conteudo')) # CORRIGIDO
+            return redirect(url_for('admin.conteudo')) 
 
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
@@ -1603,7 +1542,7 @@ def add_conteudo():
             recurso_link = os.path.join('uploads', filename).replace('\\', '/')
         else:
             flash('Tipo de arquivo não permitido.', 'danger')
-            return redirect(url_for('admin.conteudo')) # CORRIGIDO
+            return redirect(url_for('admin.conteudo')) 
 
     # Cria o novo conteúdo se tudo estiver OK
     novo_conteudo = Conteudo(
@@ -1653,7 +1592,7 @@ def checklists():
     )
 
 
-# 1. FUNÇÃO CORRIGIDA PARA ADICIONAR CHECKLISTS (ADMIN)
+
 @admin_bp.route('/checklists/add', methods=['POST'])
 @login_required()
 def add_checklist():
@@ -1703,9 +1642,7 @@ def add_checklist():
     return redirect(url_for('admin.checklists'))
 
 
-#
-# Em app/routes.py, substitua a função lista_checklists_motorista por esta:
-#
+
 @main_bp.route('/checklists_motorista')
 def lista_checklists_motorista():
     if 'motorista_id' not in session:
@@ -1725,7 +1662,7 @@ def lista_checklists_motorista():
     veiculos_para_troca = []
     # Só busca veículos se a troca for permitida
     if troca_permitida:
-        # CORREÇÃO: Busca TODOS os veículos da unidade do motorista.
+        #  Busca TODOS os veículos da unidade do motorista.
         query_veiculos = Veiculo.query.filter(Veiculo.unidade == motorista_unidade)
         
         # Se o motorista já tem um veículo, exclui o próprio veículo da lista de opções de troca.
@@ -1739,7 +1676,7 @@ def lista_checklists_motorista():
         return render_template(
             'motorista_lista_checklists.html', 
             motorista_sem_veiculo=True,
-            veiculos_disponiveis=veiculos_para_troca, # Nome da variável atualizado aqui
+            veiculos_disponiveis=veiculos_para_troca,
             troca_permitida=troca_permitida
         )
 
@@ -1789,7 +1726,7 @@ def lista_checklists_motorista():
         checklists_info=checklists_com_status,
         motorista_sem_veiculo=False,
         veiculo_atual=motorista.veiculo,
-        veiculos_disponiveis=veiculos_para_troca, # Nome da variável atualizado aqui
+        veiculos_disponiveis=veiculos_para_troca, 
         troca_permitida=troca_permitida
     )
 
@@ -1845,7 +1782,7 @@ def view_checklist(checklist_id):
 def add_checklist_item(checklist_id):
     """
     Adiciona um novo item ou sub-item a um checklist.
-    CORRIGIDO: Salva a ordem como texto para permitir "1.1", "1.2", etc.
+     Salva a ordem como texto para permitir "1.1", "1.2", etc.
     """
     checklist = Checklist.query.get_or_404(checklist_id)
     
@@ -1859,7 +1796,7 @@ def add_checklist_item(checklist_id):
     # Captura os dados do formulário
     texto = request.form.get('texto')
     parent_id = request.form.get('parent_id')
-    # CORREÇÃO: Captura a ordem como string e substitui vírgula por ponto
+    # Captura a ordem como string e substitui vírgula por ponto
     ordem_str = request.form.get('ordem', '').replace(',', '.')
     setor_responsavel = request.form.get('setor_responsavel')
 
@@ -1877,7 +1814,7 @@ def add_checklist_item(checklist_id):
     novo_item = ChecklistItem(
         texto=texto, 
         checklist_id=checklist.id,
-        ordem=ordem_str,  # CORREÇÃO: Salva a string diretamente
+        ordem=ordem_str,  
         parent_id=int(parent_id) if parent_id else None,
         setor_responsavel=setor_responsavel if setor_responsavel else None
     )
@@ -1995,11 +1932,6 @@ def edit_checklist(checklist_id):
 
 
 
-
-
-
-
-
 @admin_bp.route('/checklists/preenchidos')
 @login_required()
 def checklists_preenchidos():
@@ -2016,6 +1948,9 @@ def checklists_preenchidos():
     preenchidos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
     
     return render_template('checklists_preenchidos.html', preenchidos=preenchidos)
+
+
+
 @admin_bp.route('/checklist/preenchido/<int:preenchido_id>')
 @login_required()
 def view_checklist_preenchido(preenchido_id):
@@ -2186,11 +2121,6 @@ def importacao_pagina():
     return render_template('admin_importacao.html')
 
 
-# Substitua a sua função 'importar_dados' por esta versão corrigida
-
-# Substitua a sua função 'importar_dados' por esta versão melhorada
-
-# Substitua a sua função 'importar_dados' por esta versão COMPLETA e CORRIGIDA
 
 @admin_bp.route('/importacao/<string:tipo>', methods=['POST'])
 @login_required(required_role=["admin"])
@@ -2391,6 +2321,8 @@ def lista_documentos_motorista():
     documentos = DocumentoFixo.query.order_by(DocumentoFixo.data_upload.desc()).all()
     
     return render_template('motorista_documentos.html', documentos=documentos)
+
+
 
 @main_bp.route('/documentos/acessar/<int:documento_id>')
 def acessar_documento(documento_id):
