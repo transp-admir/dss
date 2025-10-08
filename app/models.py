@@ -76,6 +76,7 @@ class Veiculo(db.Model):
         return f'<Veiculo {self.nome_conjunto}>'
 
 # --- MODELO DE MOTORISTA (COM CPF CORRIGIDO) ---
+# --- MODELO DE MOTORISTA (COM CPF CORRIGIDO) ---
 class Motorista(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
@@ -95,6 +96,7 @@ class Motorista(db.Model):
 
     @property
     def cpf(self):
+        # Esta property é apenas para exibição, não para lógica interna.
         return self._cpf
 
     @cpf.setter
@@ -103,26 +105,22 @@ class Motorista(db.Model):
         self._cpf = clean_cpf(value)
 
     def set_password(self, password):
-        """Define a senha. Se nenhuma senha for fornecida, usa os 6 primeiros dígitos do CPF (já limpo)."""
+        """Define a senha. Se nenhuma senha for fornecida, usa os 6 primeiros dígitos do CPF bruto."""
         if not password:
-            # O self.cpf agora acessa o @property, que já está limpo
-            password = self.cpf[:6]
+            # AQUI ESTÁ A CORREÇÃO: Usamos self._cpf para pegar o dado bruto e limpo,
+            # em vez de self.cpf, que poderia estar formatado.
+            password = self._cpf[:6]
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
-        """Verifica a senha. Se nenhuma senha existir, cria a primeira baseada no CPF."""
+        """Verifica a senha."""
         if not self.password_hash:
-            self.set_password(None)
-            # É importante comitar a sessão se a senha for criada na primeira verificação
-            try:
-                db.session.commit()
-            except:
-                db.session.rollback()
-                raise
+            return False
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
         return f'<Motorista {self.nome}>'
+
 
 
 # --- MODELOS DE CONTEÚDO E ASSINATURA ---

@@ -218,7 +218,8 @@ def motorista_login():
         cpf_limpo = clean_cpf(cpf_digitado)
         
         # A busca no banco é feita com o CPF limpo
-        motorista = Motorista.query.filter_by(cpf=cpf_limpo).first()
+        motorista = Motorista.query.filter_by(_cpf=cpf_limpo).first()
+
         
         # A verificação de senha funciona, pois ela é gerada a partir do CPF limpo
         if motorista and motorista.check_password(senha):
