@@ -75,8 +75,6 @@ class Veiculo(db.Model):
     def __repr__(self):
         return f'<Veiculo {self.nome_conjunto}>'
 
-# --- MODELO DE MOTORISTA (COM CPF CORRIGIDO) ---
-# --- MODELO DE MOTORISTA (COM CPF CORRIGIDO) ---
 class Motorista(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
@@ -87,6 +85,7 @@ class Motorista(db.Model):
     unidade = db.Column(db.String(100))
     operacao = db.Column(db.String(100))
     password_hash = db.Column(db.String(256))
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
     
     veiculo_id = db.Column(db.Integer, db.ForeignKey('veiculo.id'), nullable=True, unique=True)
     veiculo = db.relationship('Veiculo', back_populates='motorista')

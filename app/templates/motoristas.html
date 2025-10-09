@@ -5,9 +5,22 @@
 {% block header %}Gerenciamento de Motoristas{% endblock %}
 
 {% block content %}
+<style>
+    /* Estilo para destacar motoristas inativos na tabela */
+    .motorista-inativo td {
+        background-color: #f8f9fa !important; /* Fundo cinza claro */
+        text-decoration: line-through;       /* Texto riscado */
+        color: #6c757d;                      /* Cor do texto mais suave */
+    }
+    /* Garante que badges e ícones dentro de uma linha inativa não sejam riscados */
+    .motorista-inativo .badge, .motorista-inativo .btn {
+        text-decoration: none !important;
+    }
+</style>
+
 <div class="container-fluid">
 
-    <!-- Card para Adicionar Novo Motorista -->
+    {# Card para Adicionar Novo Motorista (Correto e Mantido) #}
     <div class="card shadow mb-4">
         <div class="card-header py-3">
             <h6 class="m-0 font-weight-bold text-primary">Adicionar Novo Motorista</h6>
@@ -15,52 +28,31 @@
         <div class="card-body">
             <form action="{{ url_for('admin.add_motorista') }}" method="POST">
                 <div class="row mb-3">
-                    <div class="col-md-4">
-                        <label for="nome" class="form-label">Nome Completo</label>
-                        <input type="text" class="form-control" id="nome" name="nome" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="cpf" class="form-label">CPF</label>
-                        <input type="text" class="form-control" id="cpf" name="cpf" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="rg" class="form-label">RG</label>
-                        <input type="text" class="form-control" id="rg" name="rg">
-                    </div>
+                    <div class="col-md-4"><label for="nome" class="form-label">Nome Completo</label><input type="text" class="form-control" id="nome" name="nome" required></div>
+                    <div class="col-md-4"><label for="cpf" class="form-label">CPF</label><input type="text" class="form-control" id="cpf" name="cpf" required></div>
+                    <div class="col-md-4"><label for="rg" class="form-label">RG</label><input type="text" class="form-control" id="rg" name="rg"></div>
                 </div>
                 <div class="row mb-3">
-                    <div class="col-md-3">
-                        <label for="cnh" class="form-label">CNH</label>
-                        <input type="text" class="form-control" id="cnh" name="cnh">
-                    </div>
+                    <div class="col-md-3"><label for="cnh" class="form-label">CNH</label><input type="text" class="form-control" id="cnh" name="cnh"></div>
                     <div class="col-md-3">
                         <label for="unidade" class="form-label">Unidade</label>
                         {% if session.role == 'admin' %}
                             <input type="text" class="form-control" id="unidade" name="unidade" list="unidades_list" placeholder="Digite ou selecione" required>
                             <datalist id="unidades_list">
-                                {% for u in unidades_disponiveis %}
-                                    <option value="{{ u }}">
-                                {% endfor %}
+                                {% for u in unidades_disponiveis %}<option value="{{ u }}">{% endfor %}
                             </datalist>
                         {% else %}
                             <input type="text" class="form-control" id="unidade" name="unidade" value="{{ session.unidade }}" readonly>
                         {% endif %}
                     </div>
-                    <div class="col-md-3">
-                        <label for="operacao" class="form-label">Operação</label>
-                        <input type="text" class="form-control" id="operacao" name="operacao">
-                    </div>
-                    <div class="col-md-3">
-                        <label for="frota" class="form-label">Frota</label>
-                        <input type="text" class="form-control" id="frota" name="frota">
-                    </div>
+                    <div class="col-md-3"><label for="operacao" class="form-label">Operação</label><input type="text" class="form-control" id="operacao" name="operacao"></div>
+                    <div class="col-md-3"><label for="frota" class="form-label">Frota</label><input type="text" class="form-control" id="frota" name="frota"></div>
                 </div>
                 <div class="row mb-3">
                     <div class="col-md-12">
-                        <label for="veiculo_id" class="form-label">Vincular Conjunto Disponível</label>
+                        <label for="veiculo_id" class="form-label">Conjunto Vinculado</label>
                         <select id="veiculo_id" name="veiculo_id" class="form-select">
                             <option value="">-- Nenhum --</option>
-                            {# ATUALIZADO: Loop usa a nova variável 'veiculos_disponiveis' #}
                             {% for veiculo in veiculos_disponiveis %}
                                 <option value="{{ veiculo.id }}">{{ veiculo.nome_conjunto }}</option>
                             {% endfor %}
@@ -72,7 +64,7 @@
         </div>
     </div>
 
-    <!-- Tabela de Motoristas Existentes -->
+    {# Tabela de Motoristas (COM TODAS AS AÇÕES CORRIGIDAS) #}
     <div class="card shadow mb-4">
         <div class="card-header py-3">
             <h6 class="m-0 font-weight-bold text-primary">Motoristas Cadastrados</h6>
@@ -87,33 +79,48 @@
                             <th>Unidade</th>
                             <th>Operação</th>
                             <th>Conjunto</th>
-                            <th class="text-center">Ações</th>
+                            <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for motorista in motoristas %}
-                        <tr>
-                            <td>{{ motorista.nome }}</td>
+                        <tr class="{% if not motorista.ativo %}motorista-inativo{% endif %}">
+                            <td>
+                                {{ motorista.nome }}
+                                {% if not motorista.ativo %}<span class="badge bg-secondary ms-2">Inativo</span>{% endif %}
+                            </td>
                             <td>{{ motorista.cpf }}</td>
                             <td>{{ motorista.unidade }}</td>
                             <td>{{ motorista.operacao or 'N/A' }}</td>
-                            <td>{{ motorista.veiculo.nome_conjunto if motorista.veiculo else 'N/A' }}</td>
-                            <td class="text-center text-nowrap">
-                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal-{{ motorista.id }}" title="Editar Motorista">
+                            <td>
+                                {% if motorista.veiculo %}
+                                    {{ motorista.veiculo.nome_conjunto }}
+                                    <!-- BOTÃO DESVINCULAR (Restaurado) -->
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-2" data-bs-toggle="modal" data-bs-target="#desvincularModal-{{ motorista.id }}" title="Desvincular Conjunto">
+                                        <i class="fas fa-unlink"></i>
+                                    </button>
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td>
+                                <!-- 1. Botão EDITAR (Mantido) -->
+                                <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#editModal-{{ motorista.id }}" title="Editar Motorista">
                                     <i class="fas fa-edit"></i>
                                 </button>
-
-                                {# NOVO: Botão de Desvincular que só aparece se houver um conjunto vinculado #}
-                                {% if motorista.veiculo %}
-                                <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#desvincularModal-{{ motorista.id }}" title="Desvincular Conjunto">
-                                    <i class="fas fa-unlink"></i>
-                                </button>
-                                {% endif %}
-
-                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ motorista.id }}" title="Desativar Motorista">
-                                    <i class="fas fa-user-slash"></i>
-                                </button>
-
+                                
+                                <!-- 2. Botão ATIVAR/DESATIVAR (Substitui o Excluir) -->
+                                <form action="{{ url_for('admin.toggle_motorista_status', motorista_id=motorista.id) }}" method="POST" class="d-inline">
+                                    {% if motorista.ativo %}
+                                        <button type="submit" class="btn btn-warning btn-sm" title="Desativar Motorista">
+                                            <i class="fas fa-user-slash"></i>
+                                        </button>
+                                    {% else %}
+                                        <button type="submit" class="btn btn-success btn-sm" title="Ativar Motorista">
+                                            <i class="fas fa-user-check"></i>
+                                        </button>
+                                    {% endif %}
+                                </form>
                             </td>
                         </tr>
                         {% endfor %}
@@ -124,130 +131,72 @@
     </div>
 </div>
 
-<!-- Modais de Edição, Exclusão e Desvinculação -->
+{# --- MODAIS (Todos Restaurados e Corrigidos) --- #}
 {% for motorista in motoristas %}
-<!-- Modal de Edição -->
-<div class="modal fade" id="editModal-{{ motorista.id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <form action="{{ url_for('admin.edit_motorista', motorista_id=motorista.id) }}" method="POST">
-                <div class="modal-header">
-                    <h5 class="modal-title">Editar Motorista: {{ motorista.nome }}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                     <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Nome Completo</label>
-                            <input type="text" class="form-control" name="nome" value="{{ motorista.nome }}" required>
+    {# MODAL DE EDIÇÃO (Corpo Restaurado) #}
+    <div class="modal fade" id="editModal-{{ motorista.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form action="{{ url_for('admin.edit_motorista', motorista_id=motorista.id) }}" method="POST">
+                    <div class="modal-header"><h5 class="modal-title">Editar Motorista: {{ motorista.nome }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label">Nome Completo</label><input type="text" class="form-control" name="nome" value="{{ motorista.nome }}" required></div>
+                            <div class="col-md-6"><label class="form-label">CPF</label><input type="text" class="form-control" name="cpf" value="{{ motorista.cpf }}" required></div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">CPF</label>
-                            <input type="text" class="form-control" name="cpf" value="{{ motorista.cpf }}" required>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label">RG</label><input type="text" class="form-control" name="rg" value="{{ motorista.rg or '' }}"></div>
+                            <div class="col-md-6"><label class="form-label">CNH</label><input type="text" class="form-control" name="cnh" value="{{ motorista.cnh or '' }}"></div>
                         </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">RG</label>
-                            <input type="text" class="form-control" name="rg" value="{{ motorista.rg or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">CNH</label>
-                            <input type="text" class="form-control" name="cnh" value="{{ motorista.cnh or '' }}">
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                         <div class="col-md-6">
-                            <label class="form-label">Unidade</label>
-                            {% if session.role == 'admin' %}
-                                <input type="text" class="form-control" name="unidade" value="{{ motorista.unidade }}" list="unidades_list" required>
-                            {% else %}
-                                <input type="text" class="form-control" name="unidade" value="{{ motorista.unidade }}" readonly>
-                            {% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Operação</label>
-                            <input type="text" class="form-control" name="operacao" value="{{ motorista.operacao or '' }}">
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Frota</label>
-                            <input type="text" class="form-control" name="frota" value="{{ motorista.frota or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Conjunto Vinculado</label>
-                            {# LÓGICA ATUALIZADA para o dropdown de edição #}
-                            <select name="veiculo_id" class="form-select">
-                                <option value="">-- Nenhum --</option>
-                                
-                                {# Se o motorista já tem um conjunto, ele deve aparecer na lista como selecionado #}
-                                {% if motorista.veiculo %}
-                                    <option value="{{ motorista.veiculo.id }}" selected>{{ motorista.veiculo.nome_conjunto }} (Atual)</option>
+                        <div class="row mb-3">
+                             <div class="col-md-6">
+                                <label class="form-label">Unidade</label>
+                                {% if session.role == 'admin' %}
+                                    <input type="text" class="form-control" name="unidade" value="{{ motorista.unidade }}" list="unidades_list" required>
+                                {% else %}
+                                    <input type="text" class="form-control" name="unidade" value="{{ motorista.unidade }}" readonly>
                                 {% endif %}
-
-                                {# Agora, lista todos os outros veículos que estão disponíveis #}
-                                {% for veiculo in veiculos_disponiveis %}
-                                    <option value="{{ veiculo.id }}">{{ veiculo.nome_conjunto }}</option>
-                                {% endfor %}
-                            </select>
+                            </div>
+                            <div class="col-md-6"><label class="form-label">Operação</label><input type="text" class="form-control" name="operacao" value="{{ motorista.operacao or '' }}"></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label">Frota</label><input type="text" class="form-control" name="frota" value="{{ motorista.frota or '' }}"></div>
+                            <div class="col-md-6">
+                                <label class="form-label">Conjunto Vinculado</label>
+                                <select name="veiculo_id" class="form-select">
+                                    <option value="">-- Nenhum --</option>
+                                    {% if motorista.veiculo %}<option value="{{ motorista.veiculo.id }}" selected>{{ motorista.veiculo.nome_conjunto }}</option>{% endif %}
+                                    {% for veiculo in veiculos_disponiveis %}<option value="{{ veiculo.id }}">{{ veiculo.nome_conjunto }}</option>{% endfor %}
+                                </select>
+                            </div>
                         </div>
                     </div>
-                </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {# MODAL DE DESVINCULAR (Restaurado) #}
+    {% if motorista.veiculo %}
+    <div class="modal fade" id="desvincularModal-{{ motorista.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">Confirmar Desvinculação</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                <div class="modal-body"><p>Tem certeza que deseja desvincular o conjunto <strong>{{ motorista.veiculo.nome_conjunto }}</strong> do motorista <strong>{{ motorista.nome }}</strong>?</p></div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                    <form action="{{ url_for('admin.desvincular_conjunto', motorista_id=motorista.id) }}" method="POST" style="display: inline;">
+                        <button type="submit" class="btn btn-danger">Sim, Desvincular</button>
+                    </form>
                 </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal de Exclusão -->
-<div class="modal fade" id="deleteModal-{{ motorista.id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Confirmar Exclusão</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                Tem certeza que deseja excluir o motorista <strong>{{ motorista.nome }}</strong>? Esta ação não pode ser desfeita.
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <form action="{{ url_for('admin.delete_motorista', motorista_id=motorista.id) }}" method="POST" style="display: inline;">
-                    <button type="submit" class="btn btn-danger">Sim, Excluir</button>
-                </form>
             </div>
         </div>
     </div>
-</div>
-
-{# NOVO: Modal para confirmar a desvinculação do conjunto #}
-{% if motorista.veiculo %}
-<div class="modal fade" id="desvincularModal-{{ motorista.id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Confirmar Desvinculação</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>Tem certeza que deseja desvincular o conjunto <strong>{{ motorista.veiculo.nome_conjunto }}</strong> do motorista <strong>{{ motorista.nome }}</strong>?</p>
-                <p class="text-info"><i class="fas fa-info-circle me-2"></i>O conjunto ficará disponível para ser vinculado a outro motorista.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <form action="{{ url_for('admin.desvincular_conjunto', motorista_id=motorista.id) }}" method="POST" style="display: inline;">
-                    <button type="submit" class="btn btn-info">Sim, Desvincular</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
+    {% endif %}
 {% endfor %}
 
 {% endblock %}

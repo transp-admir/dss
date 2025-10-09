@@ -1397,7 +1397,7 @@ def add_motorista():
 
     # CORREÇÃO: Verifica a existência usando o CPF limpo
     cpf_limpo = clean_cpf(cpf)
-    if Motorista.query.filter_by(_cpf=cpf_limpo).first():
+    if Motorista.query.filter_by(_cpf=cpf_limpo).first:
         flash('Já existe um motorista com este CPF.', 'danger')
         return redirect(url_for('admin.motoristas'))
 
@@ -1465,25 +1465,36 @@ def edit_motorista(motorista_id):
 
 
 
-@admin_bp.route('/motoristas/delete/<int:motorista_id>', methods=['POST'])
+@admin_bp.route('/motoristas/toggle/<int:motorista_id>', methods=['POST'])
 @login_required()
-def delete_motorista(motorista_id):
+def toggle_motorista_status(motorista_id):
+    """
+    Ativa ou desativa um motorista. Esta função substitui a exclusão.
+    """
     motorista = Motorista.query.get_or_404(motorista_id)
-
+    
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
-    # Se não for admin, verifica se o motorista pertence à sua unidade
+    # Verificação de segurança: Apenas admin ou master da mesma unidade podem alterar.
     if user_role != 'admin' and motorista.unidade != user_unidade:
-        flash('Você não tem permissão para excluir este motorista.', 'danger')
+        flash('Você não tem permissão para alterar o status deste motorista.', 'danger')
         return redirect(url_for('admin.motoristas'))
 
-    # (Lógica futura opcional: verificar se o motorista tem assinaturas antes de excluir)
+    # Inverte o status do motorista (True -> False, False -> True)
+    motorista.ativo = not motorista.ativo
     
-    db.session.delete(motorista)
+    # REGRA DE NEGÓCIO: Se estiver desativando, desvincule o veículo.
+    if not motorista.ativo and motorista.veiculo:
+        motorista.veiculo_id = None
+        
     db.session.commit()
-    flash(f'Motorista {motorista.nome} excluído com sucesso.', 'info')
+    
+    status = "ativado" if motorista.ativo else "desativado"
+    flash(f'Motorista {motorista.nome} foi {status} com sucesso.', 'success')
+    
     return redirect(url_for('admin.motoristas'))
+
 
 
 
