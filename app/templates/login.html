@@ -5,25 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DSS</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
-    <style>
-        .flash-success { color: green; }
-        .flash-warning { color: orange; }
-        .flash-danger  { color: red; }
-        .flash-error   { color: red; }
-        .flashes { margin-bottom: 20px; }
-    </style>
 </head>
 <body>
     <div class="login-container">
         <h2>CENTRAL DO MOTORISTA</h2>
         <p>Faça login para continuar.</p>
-        <p>Please log in to access this page.</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 <div class="flashes">
                     {% for category, message in messages %}
-                        <div class="flash-{{ category }}">{{ message }}</div>
+                        <div class="flash flash-{{ category }}">{{ message }}</div>
                     {% endfor %}
                 </div>
             {% endif %}
@@ -41,9 +33,11 @@
             <button type="submit">Entrar</button>
         </form>
 
-        <p style="text-align: center; margin-top: 20px;">
-            <a href="{{ url_for('main.index') }}">Voltar ao Portal</a>
-        </p>
+        
+    </div>
+
+    <div class="rodape">
+        Desenvolvido por 64Bits Informática &copy; {{ ano if ano else "2025" }}
     </div>
 </body>
 </html>

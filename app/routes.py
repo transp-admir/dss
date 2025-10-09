@@ -1397,7 +1397,7 @@ def add_motorista():
 
     # CORREÇÃO: Verifica a existência usando o CPF limpo
     cpf_limpo = clean_cpf(cpf)
-    if Motorista.query.filter_by(cpf=cpf_limpo).first():
+    if Motorista.query.filter_by(_cpf=cpf_limpo).first():
         flash('Já existe um motorista com este CPF.', 'danger')
         return redirect(url_for('admin.motoristas'))
 

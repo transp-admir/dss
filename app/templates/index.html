@@ -134,6 +134,24 @@
             .logo-sub { font-size: 1rem; }
         }
 
+                .rodape {
+            position: fixed;
+            bottom: 0;
+            left: var(--sidebar-width);
+            width: calc(100% - var(--sidebar-width));
+            background-color: #f8f9fa;
+            text-align: center;
+            padding: 5px 0;
+            font-size: 0.8rem;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .rodape {
+                left: 0;
+                width: 100%;
+            }
+
     </style>
 </head>
 <body>
@@ -157,6 +175,10 @@
                 </a>
             </div>
         </div>
+    </div>
+
+    <div class="rodape">
+        Desenvolvido por 64Bits Informática &copy; {{ ano if ano else "2025" }}
     </div>
 
 </body>

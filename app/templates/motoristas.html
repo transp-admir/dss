@@ -110,9 +110,10 @@
                                 </button>
                                 {% endif %}
 
-                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ motorista.id }}" title="Excluir Motorista">
-                                    <i class="fas fa-trash"></i>
+                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ motorista.id }}" title="Desativar Motorista">
+                                    <i class="fas fa-user-slash"></i>
                                 </button>
+
                             </td>
                         </tr>
                         {% endfor %}

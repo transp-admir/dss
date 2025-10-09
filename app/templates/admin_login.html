@@ -10,8 +10,7 @@
    <div class="login-container">
        <h2>Área Administrativa</h2>
        <p>Faça login para continuar.</p>
-       <p>Please log in to access this page.</p>
-
+       
        {% with messages = get_flashed_messages(with_categories=true) %}
            {% if messages %}
                <div class="flashes">
@@ -37,5 +36,9 @@
              </form>
         <p style="text-align: center; margin-top: 20px;"><a href="{{ url_for('main.index') }}">Voltar ao Portal</a></p>
          </div>
+
+         <div class="rodape">
+            Desenvolvido por 64Bits Informática &copy; {{ ano if ano else "2025" }}
+        </div>
      </body>
      </html>
