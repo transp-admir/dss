@@ -1,26 +1,28 @@
 body {
     font-family: Arial, sans-serif;
     /* Imagem de fundo que ocupa todo o espaço (para Desktop) */
-    background-image: url('../images/background.jpg'); 
-    background-size: cover;
+    background-color: #031E5C; /* Cor de fundo adicionada */
+    background-image: url('../images/admir.png'); /* Caminho da imagem alterado */
+    background-size: auto; /* Evita que o logo seja esticado */
     background-position: center;
     background-repeat: no-repeat;
     
-    /* Sistema de alinhamento para DESKTOP */
+    /* Sistema de alinhamento para DESKTOP (inalterado) */
     display: flex;
     justify-content: center;
     align-items: flex-start;
     height: 100vh;
     margin: 0;
     
-    /* Espaçamento do topo para DESKTOP */
+    /* Espaçamento do topo para DESKTOP (inalterado) */
     padding-top: 10vh; 
     box-sizing: border-box;
     transition: background 0.3s ease-in-out;
 }
 
 .login-container {
-    background-color: rgba(255, 255, 255, 0.97); 
+    /* MUDANÇA: O painel agora tem um fundo branco com transparência para revelar o logo */
+    background-color: rgba(255, 255, 255, 0.60); 
     padding: 2.5rem;
     border-radius: 10px;
     box-shadow: 0 5px 20px rgba(0,0,0,0.25);
@@ -80,7 +82,6 @@ button:hover {
     background-color: #a92723;
 }
 
-/* Mensagens Flash (Alerta) */
 .flashes {
     padding: 0;
     list-style: none;
@@ -102,29 +103,17 @@ button:hover {
     border-color: #f5c6cb;
 }
 
-/* =============================================== */
-/* ===   MEDIA QUERY PARA DISPOSITIVOS MÓVEIS   === */
-/* =============================================== */
 @media (max-width: 768px) {
-    
     body {
-        /* **MUDANÇA**: Remove a imagem e define um fundo branco sólido */
         background-image: none;
         background-color: #ffffff;
-
-        /* Centraliza o conteúdo verticalmente na tela */
         align-items: center; 
-        
-        /* Remove o espaçamento do topo */
         padding-top: 0; 
     }
 
     .login-container {
-        /* **MUDANÇA**: O card agora é transparente, sem sombra, mesclando-se com o fundo */
         background-color: transparent;
         box-shadow: none;
-        
-        /* Ajusta a largura e o padding para a tela menor */
         max-width: 90%; 
         padding: 1rem; 
     }
@@ -148,6 +137,6 @@ button:hover {
 }
 
 .rodape {
-        left: 0;
-        width: 100%;
-    }
+    left: 0;
+    width: 100%;
+}
