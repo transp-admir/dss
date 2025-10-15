@@ -249,4 +249,5 @@ class UnidadeConfig(db.Model):
     __tablename__ = 'unidade_config'
     id = db.Column(db.Integer, primary_key=True)
     unidade = db.Column(db.String(100), unique=True, nullable=False)
-    motorista_pode_trocar_veiculo = db.Column(db.Boolean, nullable=False, default=False)
+    # Define o nível de permissão para troca: NENHUMA, UNIDADE, OPERACAO
+    motorista_pode_trocar_veiculo = db.Column(db.String(20), nullable=False, default='NENHUMA')

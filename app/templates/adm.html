@@ -19,20 +19,27 @@
                 </div>
                 <div class="card-body">
                     <form action="{{ url_for('admin.salvar_config_unidade') }}" method="POST">
-                        <div class="form-check form-switch mb-2">
-                            <input class="form-check-input" 
-                                   type="checkbox" 
-                                   role="switch" 
-                                   id="trocaVeiculoSwitch" 
-                                   name="motorista_pode_trocar_veiculo" 
-                                   {% if config_unidade.motorista_pode_trocar_veiculo %}checked{% endif %}>
-                            <label class="form-check-label" for="trocaVeiculoSwitch">
-                                <strong>Permitir que motoristas troquem de conjunto sozinhos</strong>
+                        <div class="form-group mb-3">
+                            <label for="trocaVeiculoSelect" class="form-label">
+                                <strong>Permissão para Troca de Conjunto pelo Motorista</strong>
                             </label>
+                            <select class="form-select" id="trocaVeiculoSelect" name="motorista_pode_trocar_veiculo">
+                                <option value="NENHUMA" {% if config_unidade.motorista_pode_trocar_veiculo == 'NENHUMA' %}selected{% endif %}>
+                                    Não permitir troca
+                                </option>
+                                <option value="UNIDADE" {% if config_unidade.motorista_pode_trocar_veiculo == 'UNIDADE' %}selected{% endif %}>
+                                    Permitir troca com veículos da mesma Unidade
+                                </option>
+                                <option value="OPERACAO" {% if config_unidade.motorista_pode_trocar_veiculo == 'OPERACAO' %}selected{% endif %}>
+                                    Permitir troca com veículos da mesma Operação
+                                </option>
+                            </select>
                         </div>
                         <p class="form-text text-muted small">
-                            Se esta opção estiver <strong>ativada</strong>, os motoristas da sua unidade verão um botão para selecionar um novo conjunto na página de checklist. <br>
-                            Se estiver <strong>desativada</strong>, eles só poderão usar o conjunto que foi vinculado a eles manualmente por um administrador.
+                            Defina o nível de autonomia que os motoristas têm para trocar de conjunto na tela de checklist.
+                            <br><strong>Não permitir:</strong> O motorista só pode usar o conjunto vinculado a ele pelo administrador.
+                            <br><strong>Mesma Unidade:</strong> O motorista pode escolher qualquer conjunto livre da mesma Unidade.
+                            <br><strong>Mesma Operação:</strong> O motorista pode escolher qualquer conjunto livre da mesma Operação (mais restrito que Unidade).
                         </p>
                         <hr>
                         <button type="submit" class="btn btn-primary btn-sm">Salvar Configuração</button>
@@ -76,7 +83,7 @@
                             </div>
                             <i class="fas fa-arrow-right"></i>
                         </a>
-                        <a href="https://drive.google.com/drive/folders/13MRtFBZGZhhKdw7VTmDPeGpBnH1kuMUI?usp=drive_link" target="_blank" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center list-group-item-highlight">
+                        <a href="URL_DA_PASTA_DO_GOOGLE_DRIVE" target="_blank" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center list-group-item-highlight">
                             <div>
                                 <i class="fas fa-video me-2"></i>
                                 <strong>Ver Tutoriais</strong>

@@ -109,17 +109,24 @@ def salvar_config_unidade():
         flash('Sua conta não está associada a uma unidade.', 'danger')
         return redirect(url_for('admin.dashboard'))
 
-    # O valor do checkbox vem como 'on' se marcado, e não vem se desmarcado.
-    permissao_ativa = 'motorista_pode_trocar_veiculo' in request.form 
+    # Captura o valor selecionado no dropdown ('NENHUMA', 'UNIDADE', 'OPERACAO')
+    nova_permissao = request.form.get('motorista_pode_trocar_veiculo')
     
+    # Validação para garantir que o valor é um dos esperados
+    if nova_permissao not in ['NENHUMA', 'UNIDADE', 'OPERACAO']:
+        flash('Valor de permissão inválido.', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
     config = UnidadeConfig.query.filter_by(unidade=user_unidade).first()
     if config:
-        config.motorista_pode_trocar_veiculo = permissao_ativa
+        config.motorista_pode_trocar_veiculo = nova_permissao
         db.session.commit()
-        if permissao_ativa:
-            flash('Permissão para troca de veículo ATIVADA para os motoristas da sua unidade.', 'success')
+        
+        # Mensagem de feedback mais descritiva
+        if nova_permissao == 'NENHUMA':
+            flash('Troca de veículo DESATIVADA para os motoristas da sua unidade.', 'info')
         else:
-            flash('Permissão para troca de veículo DESATIVADA para os motoristas da sua unidade.', 'info')
+            flash(f'Permissão de troca de veículo definida como "{nova_permissao}" para a sua unidade.', 'success')
     else:
         flash('Configuração da unidade não encontrada.', 'danger')
 
@@ -130,16 +137,18 @@ def salvar_config_unidade():
 def trocar_veiculo():
     """
     Processa a troca ou a primeira vinculação de um conjunto para o motorista,
-    respeitando a configuração da unidade.
+    respeitando a configuração da unidade (NENHUMA, UNIDADE, OPERACAO).
     """
     if 'motorista_id' not in session:
         return redirect(url_for('main.motorista_login'))
 
     motorista_atual = Motorista.query.get(session['motorista_id'])
     
-    # --- Verificação de Permissão ---
+    # --- Verificação de Permissão (Atualizada) ---
     config_unidade = UnidadeConfig.query.filter_by(unidade=motorista_atual.unidade).first()
-    if not (config_unidade and config_unidade.motorista_pode_trocar_veiculo):
+    permissao = config_unidade.motorista_pode_trocar_veiculo if config_unidade else 'NENHUMA'
+
+    if permissao == 'NENHUMA':
         flash('A troca de veículo não está permitida para sua unidade. Fale com o administrador.', 'danger')
         return redirect(url_for('main.lista_checklists_motorista'))
     # --- Fim da Verificação ---
@@ -155,9 +164,15 @@ def trocar_veiculo():
         flash('Conjunto selecionado é inválido.', 'danger')
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    if motorista_atual.unidade != novo_veiculo.unidade:
-        flash(f'Você não tem permissão para se vincular a um conjunto da unidade {novo_veiculo.unidade}.', 'danger')
+    # --- Validação Adicional com Base na Permissão ---
+    if permissao == 'UNIDADE' and motorista_atual.unidade != novo_veiculo.unidade:
+        flash(f'Você só tem permissão para se vincular a conjuntos da sua unidade ({motorista_atual.unidade}).', 'danger')
         return redirect(url_for('main.lista_checklists_motorista'))
+    
+    if permissao == 'OPERACAO' and motorista_atual.operacao != novo_veiculo.operacao:
+        flash(f'Você só tem permissão para se vincular a conjuntos da sua operação ({motorista_atual.operacao}).', 'danger')
+        return redirect(url_for('main.lista_checklists_motorista'))
+    # --- Fim da Validação Adicional ---
 
     motorista_antigo = novo_veiculo.motorista
     if motorista_antigo and motorista_antigo.id != motorista_atual.id:
@@ -170,7 +185,6 @@ def trocar_veiculo():
 
     flash(f'Você agora está vinculado ao conjunto {novo_veiculo.nome_conjunto}.', 'success')
     return redirect(url_for('main.lista_checklists_motorista'))
-
 
 # --- Configuração de Upload ---
 UPLOAD_FOLDER = 'app/static/uploads'
@@ -1681,16 +1695,27 @@ def lista_checklists_motorista():
         
     motorista_unidade = motorista.unidade
     
-    # --- Lógica de Permissão de Troca ---
+    # --- Lógica de Permissão de Troca (Atualizada) ---
     config = UnidadeConfig.query.filter_by(unidade=motorista_unidade).first()
-    troca_permitida = config.motorista_pode_trocar_veiculo if config else False
+    # O valor da permissão agora é o texto 'NENHUMA', 'UNIDADE', ou 'OPERACAO'
+    permissao_troca = config.motorista_pode_trocar_veiculo if config else 'NENHUMA'
     
     veiculos_para_troca = []
-    # Só busca veículos se a troca for permitida
-    if troca_permitida:
-        #  Busca TODOS os veículos da unidade do motorista.
-        query_veiculos = Veiculo.query.filter(Veiculo.unidade == motorista_unidade)
+    # Só busca veículos se a troca for permitida (não for 'NENHUMA')
+    if permissao_troca != 'NENHUMA':
         
+        query_veiculos = Veiculo.query # Query base
+        
+        # Filtra com base no nível da permissão
+        if permissao_troca == 'UNIDADE':
+            query_veiculos = query_veiculos.filter(Veiculo.unidade == motorista.unidade)
+        elif permissao_troca == 'OPERACAO':
+            # Garante que o motorista e o veículo tenham uma operação definida
+            if motorista.operacao:
+                query_veiculos = query_veiculos.filter(Veiculo.operacao == motorista.operacao)
+            else:
+                query_veiculos = query_veiculos.filter(Veiculo.id == -1) # Retorna uma query vazia se o motorista não tem operação
+
         # Se o motorista já tem um veículo, exclui o próprio veículo da lista de opções de troca.
         if motorista.veiculo:
             query_veiculos = query_veiculos.filter(Veiculo.id != motorista.veiculo.id)
@@ -1703,7 +1728,8 @@ def lista_checklists_motorista():
             'motorista_lista_checklists.html', 
             motorista_sem_veiculo=True,
             veiculos_disponiveis=veiculos_para_troca,
-            troca_permitida=troca_permitida
+            # Passa a permissão como string para o template
+            troca_permitida=permissao_troca 
         )
 
     # --- Lógica Padrão para Listar Checklists (inalterada) ---
@@ -1753,9 +1779,9 @@ def lista_checklists_motorista():
         motorista_sem_veiculo=False,
         veiculo_atual=motorista.veiculo,
         veiculos_disponiveis=veiculos_para_troca, 
-        troca_permitida=troca_permitida
+        # Passa a permissão como string para o template
+        troca_permitida=permissao_troca
     )
-
 
 
 @admin_bp.route('/checklists/<int:checklist_id>', methods=['GET'])
