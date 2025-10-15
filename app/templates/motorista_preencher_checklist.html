@@ -118,7 +118,7 @@
                         {% if item.sub_itens %}
                             {% for sub_item in item.sub_itens.order_by('ordem') %}
                                 <li class="list-group-item {% if sub_item.id in pendencias_abertas %}list-group-item-warning{% endif %}">
-                                    <div class="mb-2">{{ sub_item.texto }} {% if sub_item.id in pendencias_abertas %}<span class="badge bg-danger ms-1">Pendência</span>{% endif %}</div>
+                                    <div class="mb-2"><strong>{{ sub_item.ordem }}</strong> - {{ sub_item.texto }} {% if sub_item.id in pendencias_abertas %}<span class="badge bg-danger ms-1">Pendência</span>{% endif %}</div>
                                     <div class="btn-group w-100" role="group">
                                         <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off" required>
                                         <label class="btn btn-outline-success" for="conforme-{{ sub_item.id }}">Conforme</label>
