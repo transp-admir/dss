@@ -1018,7 +1018,10 @@ def acompanhamento_diario():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
-    # --- Lógica de busca e status  ---
+    # --- DEFINIÇÃO DOS FUSOS HORÁRIOS ---
+    brt_tz = timezone(timedelta(hours=-3))
+    utc_tz = timezone.utc
+
     checklist_diario_query = Checklist.query.filter(Checklist.tipo == 'DIÁRIO', Checklist.ativo == True)
     if user_role != 'admin':
         checklist_diario_query = checklist_diario_query.filter(or_(Checklist.unidade == user_unidade, Checklist.unidade == None))
@@ -1034,9 +1037,21 @@ def acompanhamento_diario():
     
     veiculos_status = []
     if checklist_diario:
+        # --- CORREÇÃO DA CONSULTA POR DATA PARA CONSIDERAR O FUSO HORÁRIO ---
+        start_of_today_brt = datetime.combine(hoje, datetime.min.time(), tzinfo=brt_tz)
+        end_of_today_brt = datetime.combine(hoje, datetime.max.time(), tzinfo=brt_tz)
+        start_of_today_utc = start_of_today_brt.astimezone(utc_tz)
+        end_of_today_utc = end_of_today_brt.astimezone(utc_tz)
+
         indisponibilidades_hoje = {ind.veiculo_id: ind.motivo for ind in VeiculoIndisponibilidade.query.filter(VeiculoIndisponibilidade.data_inicio <= hoje, or_(VeiculoIndisponibilidade.data_fim >= hoje, VeiculoIndisponibilidade.data_fim == None)).all()}
         isencoes_hoje = {isen.motorista_id: isen.motivo for isen in MotoristaIsencao.query.filter(MotoristaIsencao.data == hoje, MotoristaIsencao.tipo_checklist == 'DIÁRIO').all()}
-        preenchimentos_hoje = {p.veiculo_id: p for p in ChecklistPreenchido.query.filter(ChecklistPreenchido.checklist_id == checklist_diario.id, db.func.date(ChecklistPreenchido.data_preenchimento) == hoje).all()}
+        
+        preenchimentos_hoje = {
+            p.veiculo_id: p for p in ChecklistPreenchido.query.filter(
+                ChecklistPreenchido.checklist_id == checklist_diario.id,
+                ChecklistPreenchido.data_preenchimento.between(start_of_today_utc, end_of_today_utc)
+            ).all()
+        }
 
         for veiculo in veiculos:
             status_info = {'veiculo': veiculo, 'status': 'Pendente', 'detalhe': '', 'classe_css': 'table-warning'}
@@ -1046,16 +1061,22 @@ def acompanhamento_diario():
                 status_info.update({'status': 'Sem Motorista', 'detalhe': 'Vincule um motorista ao veículo', 'classe_css': 'table-info'})
             elif veiculo.id in preenchimentos_hoje:
                 preenchimento = preenchimentos_hoje[veiculo.id]
-                status_info.update({'status': 'Preenchido', 'detalhe': f"por {preenchimento.motorista.nome} às {preenchimento.data_preenchimento.strftime('%H:%M')}", 'classe_css': 'table-success'})
+                
+                # --- CORREÇÃO DA HORA PARA EXIBIÇÃO ---
+                hora_utc = preenchimento.data_preenchimento.replace(tzinfo=utc_tz)
+                hora_local = hora_utc.astimezone(brt_tz)
+                hora_local_str = hora_local.strftime('%H:%M')
+                
+                status_info.update({'status': 'Preenchido', 'detalhe': f"por {preenchimento.motorista.nome} às {hora_local_str}", 'classe_css': 'table-success'})
             elif veiculo.motorista and veiculo.motorista.id in isencoes_hoje:
                 status_info.update({'status': 'Isento', 'detalhe': f"Motorista isento: {isencoes_hoje[veiculo.motorista.id]}", 'classe_css': 'table-light'})
             else:
-                status_info.update({'status': 'Pendente', 'detalhe': f"Motorista: {veiculo.motorista.nome}", 'classe_css': 'table-danger'})
+                motorista_nome = veiculo.motorista.nome if veiculo.motorista else "N/A"
+                status_info.update({'status': 'Pendente', 'detalhe': f"Motorista: {motorista_nome}", 'classe_css': 'table-danger'})
             veiculos_status.append(status_info)
     else:
         flash('Nenhum checklist "DIÁRIO" ativo foi configurado para sua unidade.', 'warning')
 
-    # Busca veículos e motoristas para popular os formulários dos modais
     veiculos_para_formulario = veiculos_query.order_by(Veiculo.nome_conjunto).all()
     motoristas_para_formulario = motoristas_query.order_by(Motorista.nome).all()
 
@@ -1067,6 +1088,7 @@ def acompanhamento_diario():
         veiculos_para_formulario=veiculos_para_formulario,
         motoristas_para_formulario=motoristas_para_formulario
     )
+
 
 
 # ROTA PARA REGISTRAR INDISPONIBILIDADE DE VEÍCULO
@@ -1201,43 +1223,54 @@ def relatorios_consolidados():
     if 'admin_user' not in session:
         return redirect(url_for('admin.login'))
 
+    # --- DEFINIÇÃO DOS FUSOS HORÁRIOS ---
+    brt_tz = timezone(timedelta(hours=-3))
+    utc_tz = timezone.utc
+
     veiculos = Veiculo.query.order_by(Veiculo.nome_conjunto).all()
     resultados_agrupados = None
+    filtros = request.form if request.method == 'POST' else {}
 
     if request.method == 'POST':
         tipo_checklist = request.form.get('tipo_checklist')
         veiculo_id = request.form.get('veiculo_id')
         data_inicio_str = request.form.get('data_inicio')
         data_fim_str = request.form.get('data_fim')
-
-        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date() if data_inicio_str else None
-        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date() if data_fim_str else None
-
+        
         query = ChecklistPreenchido.query.join(Checklist).join(Veiculo)
+
+        # Ajusta a query de data para considerar o fuso horário
+        if data_inicio_str:
+            data_inicio_brt = datetime.strptime(data_inicio_str, '%Y-%m-%d').replace(tzinfo=brt_tz)
+            data_inicio_utc = data_inicio_brt.astimezone(utc_tz)
+            query = query.filter(ChecklistPreenchido.data_preenchimento >= data_inicio_utc)
+        if data_fim_str:
+            data_fim_brt = datetime.combine(datetime.strptime(data_fim_str, '%Y-%m-%d'), datetime.max.time()).replace(tzinfo=brt_tz)
+            data_fim_utc = data_fim_brt.astimezone(utc_tz)
+            query = query.filter(ChecklistPreenchido.data_preenchimento <= data_fim_utc)
 
         if tipo_checklist:
             query = query.filter(Checklist.tipo == tipo_checklist)
-        
         if veiculo_id and veiculo_id != 'todos':
             query = query.filter(ChecklistPreenchido.veiculo_id == veiculo_id)
 
-        if data_inicio:
-            query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) >= data_inicio)
-        if data_fim:
-            query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) <= data_fim)
-
         preenchimentos = query.order_by(Veiculo.nome_conjunto, ChecklistPreenchido.data_preenchimento.desc()).all()
 
+        # --- CORREÇÃO: Anexa o objeto de data/hora local ao objeto de preenchimento ---
+        for p in preenchimentos:
+            p.data_preenchimento_local = p.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz)
+        
+        # Agrupa usando a data local
         resultados_agrupados = defaultdict(lambda: defaultdict(list))
         for p in preenchimentos:
             if p.veiculo:
-                data = p.data_preenchimento.date()
-                resultados_agrupados[p.veiculo.nome_conjunto][data].append(p)
+                data_local = p.data_preenchimento_local.date()
+                resultados_agrupados[p.veiculo.nome_conjunto][data_local].append(p)
             
     return render_template('admin_relatorios_consolidados.html', 
                            veiculos=veiculos,
                            resultados=resultados_agrupados,
-                           filtros=request.form)
+                           filtros=filtros)
 
 
 
@@ -2462,7 +2495,7 @@ def gerar_relatorio_pdf():
                     mimetype='application/pdf',
                     headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
 
-                    
+
 
 @admin_bp.route('/relatorio/status_diario')
 @login_required()

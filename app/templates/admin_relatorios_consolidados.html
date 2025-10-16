@@ -66,13 +66,16 @@
                 {% for veiculo_nome, datas in resultados.items() %}
                     <h4 class="mt-4 border-bottom pb-2">{{ veiculo_nome }}</h4>
                     {% for data, preenchimentos in datas.items() %}
+                        {# A data aqui já vem correta da rota, então não precisa de conversão #}
                         <h5 class="text-muted ms-3 mt-3">{{ data.strftime('%d/%m/%Y') }}</h5>
                         <ul class="list-group ms-3">
                             {% for p in preenchimentos %}
                                 <li class="list-group-item">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span>
-                                            <strong>{{ p.checklist.codigo }}</strong> ({{ p.checklist.tipo }}) - Preenchido por <strong>{{ p.motorista.nome }}</strong> às {{ p.data_preenchimento.strftime('%H:%M') }}
+                                            <strong>{{ p.checklist.codigo }}</strong> ({{ p.checklist.tipo }}) - Preenchido por <strong>{{ p.motorista.nome }}</strong> às 
+                                            {# --- ESTA É A LINHA CORRIGIDA --- #}
+                                            <strong>{{ p.data_preenchimento_local.strftime('%H:%M') }}</strong>
                                         </span>
                                         <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ p.id }}" aria-expanded="false" aria-controls="collapse-{{ p.id }}">
                                             Ver Detalhes
@@ -157,7 +160,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Nota: a rota 'admin.gerar_relatorio_status_diario' será criada no próximo passo.
             const url = new URL("{{ url_for('admin.gerar_relatorio_status_diario') }}", window.location.origin);
             url.searchParams.set('veiculo_id', veiculoId);
             url.searchParams.set('data_inicio', dataInicio);
