@@ -1237,114 +1237,6 @@ def relatorios_consolidados():
                            filtros=request.form)
 
 
-@admin_bp.route('/gerar_relatorio_pdf')
-def gerar_relatorio_pdf():
-    if 'admin_user' not in session:
-        return redirect(url_for('admin.login'))
-
-    # 1. Captura e processa filtros
-    tipo_checklist = request.args.get('tipo_checklist')
-    veiculo_id = request.args.get('veiculo_id')
-    data_inicio_str = request.args.get('data_inicio')
-    data_fim_str = request.args.get('data_fim')
-
-    query = ChecklistPreenchido.query.join(Checklist).join(Veiculo)
-
-    if data_inicio_str:
-        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
-        query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) >= data_inicio)
-    if data_fim_str:
-        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-        query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) <= data_fim)
-    if tipo_checklist:
-        query = query.filter(Checklist.tipo == tipo_checklist)
-    
-    veiculo_obj = None
-    if veiculo_id and veiculo_id != 'todos':
-        query = query.filter(ChecklistPreenchido.veiculo_id == veiculo_id)
-        veiculo_obj = Veiculo.query.get(veiculo_id)
-
-    preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
-    
-    # Estrutura de itens do primeiro checklist (base para o layout)
-    itens_principais = []
-    if preenchimentos:
-        checklist_base = Checklist.query.get(preenchimentos[0].checklist_id)
-        if checklist_base:
-            itens_principais = checklist_base.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
-
-    # Inicia a construção do PDF
-    titulo = f"Relatório - {veiculo_obj.nome_conjunto if veiculo_obj else 'Geral'}"
-    pdf = PDF(title=titulo, orientation='P', unit='mm', format='A4')
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-
-    # Agrupa preenchimentos por data
-    dados_agrupados = defaultdict(list)
-    for p in preenchimentos:
-        dados_agrupados[p.data_preenchimento.date()].append(p)
-
-    for data, preenchs in sorted(dados_agrupados.items()):
-        pdf.set_font('Arial', 'B', 12)
-        pdf.cell(0, 10, f"Data do Checklist: {data.strftime('%d/%m/%Y')}", 0, 1, 'L')
-
-        for p in preenchs:
-            pdf.set_font('Arial', 'I', 10)
-            pdf.cell(0, 8, f"Preenchido por: {p.motorista.nome} às {p.data_preenchimento.strftime('%H:%M')}", 0, 1, 'L')
-            pdf.ln(2) # Pequeno espaço
-
-            item_counter = 1 # Inicia o contador sequencial de itens
-
-            for item_principal in itens_principais:
-                # Renderiza o cabeçalho da categoria (Item Principal)
-                pdf.set_font('Arial', 'B', 10)
-                pdf.set_fill_color(224, 224, 224) # Cinza claro
-                pdf.cell(0, 7, item_principal.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'C', 1)
-
-                # Renderiza o cabeçalho da tabela
-                pdf.set_font('Arial', 'B', 9)
-                pdf.cell(15, 7, 'Item', 1, 0, 'C', 1)
-                pdf.cell(135, 7, 'Descrição', 1, 0, 'C', 1)
-                pdf.cell(40, 7, 'Resposta', 1, 1, 'C', 1)
-
-                pdf.set_font('Arial', '', 9)
-                if not item_principal.sub_itens:
-                    continue # Se não houver sub-itens, apenas o cabeçalho é mostrado
-
-                for sub_item in item_principal.sub_itens:
-                    resposta_obj = next((r for r in p.respostas if r.item_id == sub_item.id), None)
-                    
-                    h = 6 # Altura base da célula
-                    x_start = pdf.get_x()
-                    y_start = pdf.get_y()
-
-                    # Célula do Item (com contador)
-                    pdf.cell(15, h, str(item_counter), 1, 0, 'C')
-
-                    # Célula da Descrição (com multi_cell para quebra de linha)
-                    pdf.multi_cell(135, h, sub_item.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
-                    
-                    # Armazena a posição Y final após a descrição
-                    y_end = pdf.get_y()
-
-                    # Reposiciona para a mesma linha da descrição para desenhar a resposta
-                    pdf.set_xy(x_start + 150, y_start)
-                    pdf.cell(40, y_end - y_start, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
-
-                    # Se houver observação, renderiza abaixo
-                    if resposta_obj and resposta_obj.observacao:
-                        pdf.set_font('Arial', 'I', 8)
-                        pdf.set_fill_color(245, 245, 245)
-                        pdf.multi_cell(0, 5, f"Obs: {resposta_obj.observacao.encode('latin-1', 'replace').decode('latin-1')}", 1, 'L', 1)
-                        pdf.set_font('Arial', '', 9)
-
-                    item_counter += 1
-            pdf.ln(10) # Espaço entre os preenchimentos de um mesmo dia
-
-    # Gera e retorna o PDF para download
-    return Response(bytes(pdf.output(dest='S')),
-                    mimetype='application/pdf',
-                    headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
 
 
 
@@ -2397,6 +2289,117 @@ def acessar_documento(documento_id):
 
 #relatorio de status diario
 
+@admin_bp.route('/gerar_relatorio_pdf')
+def gerar_relatorio_pdf():
+    if 'admin_user' not in session:
+        return redirect(url_for('admin.login'))
+
+    # 1. Captura e processa filtros
+    tipo_checklist = request.args.get('tipo_checklist')
+    veiculo_id = request.args.get('veiculo_id')
+    data_inicio_str = request.args.get('data_inicio')
+    data_fim_str = request.args.get('data_fim')
+
+    query = ChecklistPreenchido.query.join(Checklist).join(Veiculo)
+
+    if data_inicio_str:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) >= data_inicio)
+    if data_fim_str:
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) <= data_fim)
+    if tipo_checklist:
+        query = query.filter(Checklist.tipo == tipo_checklist)
+    
+    veiculo_obj = None
+    if veiculo_id and veiculo_id != 'todos':
+        query = query.filter(ChecklistPreenchido.veiculo_id == veiculo_id)
+        veiculo_obj = Veiculo.query.get(veiculo_id)
+
+    preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
+    
+    # Estrutura de itens do primeiro checklist (base para o layout)
+    itens_principais = []
+    if preenchimentos:
+        checklist_base = Checklist.query.get(preenchimentos[0].checklist_id)
+        if checklist_base:
+            itens_principais = checklist_base.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+
+    # Inicia a construção do PDF
+    titulo = f"Relatório - {veiculo_obj.nome_conjunto if veiculo_obj else 'Geral'}"
+    pdf = PDF(title=titulo, orientation='P', unit='mm', format='A4')
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    # Agrupa preenchimentos por data
+    dados_agrupados = defaultdict(list)
+    for p in preenchimentos:
+        dados_agrupados[p.data_preenchimento.date()].append(p)
+
+    for data, preenchs in sorted(dados_agrupados.items()):
+        pdf.set_font('Arial', 'B', 12)
+        pdf.cell(0, 10, f"Data do Checklist: {data.strftime('%d/%m/%Y')}", 0, 1, 'L')
+
+        for p in preenchs:
+            pdf.set_font('Arial', 'I', 10)
+            pdf.cell(0, 8, f"Preenchido por: {p.motorista.nome} às {p.data_preenchimento.strftime('%H:%M')}", 0, 1, 'L')
+            pdf.ln(2) # Pequeno espaço
+
+            item_counter = 1 # Inicia o contador sequencial de itens
+
+            for item_principal in itens_principais:
+                # Renderiza o cabeçalho da categoria (Item Principal)
+                pdf.set_font('Arial', 'B', 10)
+                pdf.set_fill_color(224, 224, 224) # Cinza claro
+                pdf.cell(0, 7, item_principal.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'C', 1)
+
+                # Renderiza o cabeçalho da tabela
+                pdf.set_font('Arial', 'B', 9)
+                pdf.cell(15, 7, 'Item', 1, 0, 'C', 1)
+                pdf.cell(135, 7, 'Descrição', 1, 0, 'C', 1)
+                pdf.cell(40, 7, 'Resposta', 1, 1, 'C', 1)
+
+                pdf.set_font('Arial', '', 9)
+                if not item_principal.sub_itens:
+                    continue # Se não houver sub-itens, apenas o cabeçalho é mostrado
+
+                for sub_item in item_principal.sub_itens:
+                    resposta_obj = next((r for r in p.respostas if r.item_id == sub_item.id), None)
+                    
+                    h = 6 # Altura base da célula
+                    x_start = pdf.get_x()
+                    y_start = pdf.get_y()
+
+                    # Célula do Item (com contador)
+                    pdf.cell(15, h, str(item_counter), 1, 0, 'C')
+
+                    # Célula da Descrição (com multi_cell para quebra de linha)
+                    pdf.multi_cell(135, h, sub_item.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
+                    
+                    # Armazena a posição Y final após a descrição
+                    y_end = pdf.get_y()
+
+                    # Reposiciona para a mesma linha da descrição para desenhar a resposta
+                    pdf.set_xy(x_start + 150, y_start)
+                    pdf.cell(40, y_end - y_start, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
+
+                    # Se houver observação, renderiza abaixo
+                    if resposta_obj and resposta_obj.observacao:
+                        pdf.set_font('Arial', 'I', 8)
+                        pdf.set_fill_color(245, 245, 245)
+                        pdf.multi_cell(0, 5, f"Obs: {resposta_obj.observacao.encode('latin-1', 'replace').decode('latin-1')}", 1, 'L', 1)
+                        pdf.set_font('Arial', '', 9)
+
+                    item_counter += 1
+            pdf.ln(10) # Espaço entre os preenchimentos de um mesmo dia
+
+    # *** CORREÇÃO DEFINITIVA DO AssertionError APLICADA AQUI ***
+    # Converte o bytearray do FPDF para bytes, que é o que o Flask/Werkzeug espera.
+    return Response(bytes(pdf.output()),
+                    mimetype='application/pdf',
+                    headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
+
+
 @admin_bp.route('/relatorio/status_diario')
 @login_required()
 def gerar_relatorio_status_diario():
@@ -2445,7 +2448,6 @@ def gerar_relatorio_status_diario():
     if user_role != 'admin':
         checklist_diario_query = checklist_diario_query.filter(or_(Checklist.unidade == user_unidade, Checklist.unidade == None))
     
-    # CORREÇÃO APLICADA AQUI: Usando .all() na query para gerar a lista de IDs
     checklist_diario_ids = [c.id for c in checklist_diario_query.all()]
 
     preenchimentos = {
@@ -2463,7 +2465,7 @@ def gerar_relatorio_status_diario():
         for dia in pd.date_range(i.data_inicio, i.data_fim or data_fim)
         if data_inicio <= dia.date() <= data_fim
     }
-
+    
     # --- 4. Processamento e Geração do Relatório ---
     report_data = []
     dias_no_periodo = [data_inicio + timedelta(days=i) for i in range((data_fim - data_inicio).days + 1)]
@@ -2490,7 +2492,7 @@ def gerar_relatorio_status_diario():
                     'classe_css': 'status-indisponivel',
                     'assinatura': None
                 }
-            # 3. Se nenhuma das anteriores, o status é 'Não Preenchido' sem atribuir culpa.
+            # 3. Se nenhuma das anteriores, o status é 'Não Preenchido'.
             else:
                  status_info = {
                     'status': 'Não Preenchido',
