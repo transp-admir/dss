@@ -55,6 +55,7 @@ from sqlalchemy import and_, or_
 from fpdf import FPDF
 
 import base64
+import tempfile
 
 # --- DEFINIÇÃO DO BLUEPRINT DA ÁREA PÚBLICA (ACESSO DE MOTORISTAS) ---
 main_bp = Blueprint('main', __name__)
@@ -2407,22 +2408,30 @@ def gerar_relatorio_pdf():
             x_motorista = pdf.get_x()
             x_responsavel = x_motorista + 95
 
-            if p.assinatura_motorista:
+            # --- CORREÇÃO: Salvar imagem em arquivo temporário ---
+            def render_signature(signature_data, x_pos, y_pos):
+                temp_file = None
                 try:
-                    img_data = re.sub('^data:image/.+;base64,', '', p.assinatura_motorista)
+                    img_data = re.sub('^data:image/.+;base64,', '', signature_data)
                     img_bytes = base64.b64decode(img_data)
-                    pdf.image(io.BytesIO(img_bytes), x=x_motorista + 5, y=y_signatures, w=80, h=30, type='PNG')
-                except Exception:
-                    pdf.text(x_motorista + 5, y_signatures + 15, "(Erro ao carregar assinatura)")
+                    
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                    temp_file.write(img_bytes)
+                    temp_file.close()
 
+                    pdf.image(temp_file.name, x=x_pos, y=y_pos, w=80, h=30)
+                except Exception:
+                    pdf.text(x_pos + 5, y_pos + 15, "(Erro ao carregar assinatura)")
+                finally:
+                    if temp_file:
+                        os.remove(temp_file.name)
+
+            if p.assinatura_motorista:
+                render_signature(p.assinatura_motorista, x_motorista + 5, y_signatures)
+            
             if p.assinatura_responsavel:
-                try:
-                    img_data_resp = re.sub('^data:image/.+;base64,', '', p.assinatura_responsavel)
-                    img_bytes_resp = base64.b64decode(img_data_resp)
-                    pdf.image(io.BytesIO(img_bytes_resp), x=x_responsavel, y=y_signatures, w=80, h=30, type='PNG')
-                except Exception:
-                    pdf.text(x_responsavel + 5, y_signatures + 15, "(Erro ao carregar assinatura)")
-
+                render_signature(p.assinatura_responsavel, x_responsavel, y_signatures)
+            
             pdf.line(x_motorista + 5, y_signatures + 32, x_motorista + 85, y_signatures + 32)
             pdf.set_xy(x_motorista + 5, y_signatures + 33)
             pdf.set_font('Arial', 'I', 8)
@@ -2433,22 +2442,16 @@ def gerar_relatorio_pdf():
                 pdf.set_xy(x_responsavel, y_signatures + 33)
                 pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
 
-    # --- *** CORREÇÃO DE COMPATIBILIDADE (SERVIDOR vs. LOCAL) *** ---
-    pdf_output = pdf.output()
-
-    # No servidor (versão antiga fpdf), a saída é string. Localmente (fpdf2), é bytearray.
+    # Lógica de compatibilidade para a saída do PDF
+    pdf_output = pdf.output(dest='S')
     if isinstance(pdf_output, str):
-        # Se for string (servidor), codifica para bytes usando 'latin-1'.
         response_bytes = pdf_output.encode('latin-1')
     else:
-        # Se for bytearray (local), apenas garante que é do tipo bytes.
         response_bytes = bytes(pdf_output)
 
     return Response(response_bytes,
                     mimetype='application/pdf',
                     headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
-
-
 
 @admin_bp.route('/relatorio/status_diario')
 @login_required()
