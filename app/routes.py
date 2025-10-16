@@ -2337,12 +2337,9 @@ def gerar_relatorio_pdf():
         dados_agrupados[p.data_preenchimento.date()].append(p)
 
     laudo_count = 0
-    total_laudos = sum(len(v) for v in dados_agrupados.values())
-
     for data, preenchs in sorted(dados_agrupados.items()):
         for p in preenchs:
             laudo_count += 1
-            # Adiciona uma quebra de página antes de cada laudo, exceto o primeiro
             if laudo_count > 1:
                 pdf.add_page()
 
@@ -2363,7 +2360,6 @@ def gerar_relatorio_pdf():
                 pdf.cell(60, 7, 'Resposta', 1, 1, 'C', 1)
                 pdf.set_font('Arial', '', 9)
 
-                # Chave de ordenação mais robusta para "1.1", "1.10", etc.
                 def natural_sort_key(text):
                     return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', str(text or '0'))]
 
@@ -2385,12 +2381,10 @@ def gerar_relatorio_pdf():
                         pdf.set_font('Arial', '', 9)
                     item_counter += 1
             
-            # --- LÓGICA DE QUEBRA DE PÁGINA INTELIGENTE ---
-            altura_bloco_assinatura = 60 # Altura estimada do bloco de obs + assinaturas
+            altura_bloco_assinatura = 60
             if pdf.get_y() + altura_bloco_assinatura > pdf.page_break_trigger:
                 pdf.add_page()
 
-            # --- SEÇÃO DE OBSERVAÇÕES E ASSINATURAS ---
             pdf.ln(5)
             pdf.set_font('Arial', 'B', 11)
             pdf.cell(0, 8, 'Observações Gerais e Assinaturas', 0, 1, 'L')
@@ -2439,9 +2433,21 @@ def gerar_relatorio_pdf():
                 pdf.set_xy(x_responsavel, y_signatures + 33)
                 pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
 
-    return Response(bytes(pdf.output()),
+    # --- *** CORREÇÃO DE COMPATIBILIDADE (SERVIDOR vs. LOCAL) *** ---
+    pdf_output = pdf.output()
+
+    # No servidor (versão antiga fpdf), a saída é string. Localmente (fpdf2), é bytearray.
+    if isinstance(pdf_output, str):
+        # Se for string (servidor), codifica para bytes usando 'latin-1'.
+        response_bytes = pdf_output.encode('latin-1')
+    else:
+        # Se for bytearray (local), apenas garante que é do tipo bytes.
+        response_bytes = bytes(pdf_output)
+
+    return Response(response_bytes,
                     mimetype='application/pdf',
                     headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
+
 
 
 @admin_bp.route('/relatorio/status_diario')
