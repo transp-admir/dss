@@ -35,6 +35,11 @@
         margin-bottom: 0.5rem;
         display: block;
     }
+    /* Adiciona um destaque visual para campos inválidos */
+    .item-invalido {
+        border: 2px solid #dc3545; /* Vermelho do Bootstrap para perigo */
+        border-radius: .25rem;
+    }
 </style>
 {% endblock %}
 
@@ -44,7 +49,7 @@
 {% endblock %}
 
 {% block content %}
-<form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}">
+<form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}" id="checklist-form">
 
     {% if not veiculo %}
         <div class="alert alert-danger" role="alert">
@@ -56,9 +61,9 @@
         </div>
 
         {% for item in itens_principais %}
-            {# Lógica para renderizar o bloco de extintores #}
+            {# ... (bloco de extintores inalterado) ... #}
             {% if item.texto == '__BLOCO_EXTINTORES__' %}
-                <div class="card mt-4 mb-3">
+                 <div class="card mt-4 mb-3">
                     <div class="card-header">
                         <h5>Controle de Extintores</h5>
                     </div>
@@ -104,10 +109,8 @@
                         {% endfor %}
                     </div>
                 </div>
-
-            {# Lógica para renderizar itens normais #}
             {% else %}
-                <div class="card mb-3">
+                <div class="card mb-3 checklist-item-card">
                     <div class="card-header fw-bold {% if item.id in pendencias_abertas %}bg-warning text-dark{% endif %}">
                         {{ item.ordem }}. {{ item.texto }}
                         {% if item.id in pendencias_abertas %}
@@ -117,10 +120,10 @@
                     <ul class="list-group list-group-flush">
                         {% if item.sub_itens %}
                             {% for sub_item in item.sub_itens.order_by('ordem') %}
-                                <li class="list-group-item {% if sub_item.id in pendencias_abertas %}list-group-item-warning{% endif %}">
+                                <li class="list-group-item sub-item {% if sub_item.id in pendencias_abertas %}list-group-item-warning{% endif %}" data-ordem="{{ sub_item.ordem }}">
                                     <div class="mb-2"><strong>{{ sub_item.ordem }}</strong> - {{ sub_item.texto }} {% if sub_item.id in pendencias_abertas %}<span class="badge bg-danger ms-1">Pendência</span>{% endif %}</div>
                                     <div class="btn-group w-100" role="group">
-                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off" required>
+                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off">
                                         <label class="btn btn-outline-success" for="conforme-{{ sub_item.id }}">Conforme</label>
 
                                         <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="nao-conforme-{{ sub_item.id }}" value="NAO CONFORME" autocomplete="off">
@@ -133,9 +136,9 @@
                                 </li>
                             {% endfor %}
                         {% else %}
-                            <li class="list-group-item">
+                             <li class="list-group-item single-item" data-ordem="{{ item.ordem }}">
                                 <div class="btn-group w-100" role="group">
-                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conforme-{{ item.id }}" value="CONFORME" autocomplete="off" required>
+                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conforme-{{ item.id }}" value="CONFORME" autocomplete="off">
                                     <label class="btn btn-outline-success" for="conforme-{{ item.id }}">Conforme</label>
 
                                     <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="nao-conforme-{{ item.id }}" value="NAO CONFORME" autocomplete="off">
@@ -152,7 +155,7 @@
             {% endif %}
         {% endfor %}
 
-        <!-- Observações Gerais -->
+        <!-- ... (Observações Gerais, Termo, Assinaturas inalterados) ... -->
         <div class="card mt-4">
             <div class="card-header">
                 <h5>Observações Gerais</h5>
@@ -173,7 +176,6 @@
             </div>
         </div>
 
-        <!-- Termo de Ciência -->
         <div class="card mt-4">
             <div class="card-header bg-light">
                 <h5 class="mb-0">Termo de Ciência e Responsabilidade</h5>
@@ -188,7 +190,6 @@
             </div>
         </div>
 
-        <!-- Seção de Assinaturas -->
         <div class="row mt-4">
             <div class="col-md-6 mb-3 mb-md-0">
                 <div class="card h-100">
@@ -196,7 +197,7 @@
                         <h5>Assinatura do Motorista (Obrigatória)</h5>
                     </div>
                     <div class="card-body text-center">
-                        <div style="border: 1px solid #ced4da; border-radius: .25rem; position: relative; height: 200px; margin: 0 auto; max-width: 400px;">
+                        <div id="signature-pad-motorista-wrapper" style="border: 1px solid #ced4da; border-radius: .25rem; position: relative; height: 200px; margin: 0 auto; max-width: 400px;">
                             <canvas id="signature-canvas-motorista" style="width: 100%; height: 100%;"></canvas>
                         </div>
                         <input type="hidden" name="assinatura_motorista" id="assinatura_motorista_input">
@@ -234,61 +235,111 @@
 {% if veiculo %}
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        // Configuração dos pads de assinatura
-        const canvasMotorista = document.getElementById('signature-canvas-motorista');
-        const signaturePadMotorista = new SignaturePad(canvasMotorista, { backgroundColor: 'rgb(255, 255, 255)' });
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('checklist-form');
+    if (!form) return;
 
-        const canvasResponsavel = document.getElementById('signature-canvas-responsavel');
-        const signaturePadResponsavel = new SignaturePad(canvasResponsavel, { backgroundColor: 'rgb(255, 255, 255)' });
+    // Configuração dos pads de assinatura
+    const canvasMotorista = document.getElementById('signature-canvas-motorista');
+    const signaturePadMotorista = new SignaturePad(canvasMotorista, { backgroundColor: 'rgb(255, 255, 255)' });
+    const signaturePadWrapper = document.getElementById('signature-pad-motorista-wrapper');
 
-        function resizeCanvases() {
-            const ratio = Math.max(window.devicePixelRatio || 1, 1);
-            [canvasMotorista, canvasResponsavel].forEach(canvas => {
-                if(canvas) {
-                    canvas.width = canvas.offsetWidth * ratio;
-                    canvas.height = canvas.offsetHeight * ratio;
-                    canvas.getContext("2d").scale(ratio, ratio);
-                }
-            });
-            signaturePadMotorista.clear();
-            signaturePadResponsavel.clear();
-        }
+    const canvasResponsavel = document.getElementById('signature-canvas-responsavel');
+    const signaturePadResponsavel = new SignaturePad(canvasResponsavel, { backgroundColor: 'rgb(255, 255, 255)' });
 
-        window.addEventListener("resize", resizeCanvases);
-        resizeCanvases();
-
-        document.getElementById('clear-signature-motorista').addEventListener('click', () => signaturePadMotorista.clear());
-        document.getElementById('clear-signature-responsavel').addEventListener('click', () => signaturePadResponsavel.clear());
-
-        // Máscara de data para os campos de vencimento
-        document.querySelectorAll('.date-mask').forEach(input => {
-            input.addEventListener('input', function (e) {
-                let v = e.target.value.replace(/\D/g, '');
-                v = v.replace(/(\d{2})(\d)/, '$1/$2');
-                v = v.replace(/(\d{2})\/(\d{2})(\d)/, '$1/$2/$3');
-                e.target.value = v.slice(0, 10);
-            });
+    function resizeCanvases() {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        [canvasMotorista, canvasResponsavel].forEach(canvas => {
+            if (canvas) {
+                canvas.width = canvas.offsetWidth * ratio;
+                canvas.height = canvas.offsetHeight * ratio;
+                canvas.getContext("2d").scale(ratio, ratio);
+            }
         });
+        signaturePadMotorista.clear();
+        signaturePadResponsavel.clear();
+    }
 
-        // Validação no envio do formulário
-        document.querySelector('form').addEventListener('submit', function (event) {
-            // Assinatura do motorista é OBRIGATÓRIA
-            if (signaturePadMotorista.isEmpty()) {
-                alert("A assinatura do Motorista é obrigatória.");
-                event.preventDefault();
-                return;
-            }
-            document.getElementById('assinatura_motorista_input').value = signaturePadMotorista.toDataURL('image/png');
+    window.addEventListener("resize", resizeCanvases);
+    resizeCanvases();
 
-            // Assinatura do responsável é OPCIONAL
-            if (!signaturePadResponsavel.isEmpty()) {
-                document.getElementById('assinatura_responsavel_input').value = signaturePadResponsavel.toDataURL('image/png');
-            } else {
-                document.getElementById('assinatura_responsavel_input').value = '';
-            }
+    document.getElementById('clear-signature-motorista').addEventListener('click', () => signaturePadMotorista.clear());
+    document.getElementById('clear-signature-responsavel').addEventListener('click', () => signaturePadResponsavel.clear());
+
+    // Máscara de data
+    document.querySelectorAll('.date-mask').forEach(input => {
+        input.addEventListener('input', e => {
+            let v = e.target.value.replace(/\D/g, '');
+            v = v.replace(/(\d{2})(\d)/, '$1/$2');
+            v = v.replace(/(\d{2})\/(\d{2})(\d)/, '$1/$2/$3');
+            e.target.value = v.slice(0, 10);
         });
     });
+
+    // Evento de submit do formulário
+    form.addEventListener('submit', function (event) {
+        event.preventDefault(); // Previne o envio imediato
+
+        // Limpa a marcação de erros anterior
+        document.querySelectorAll('.item-invalido').forEach(el => el.classList.remove('item-invalido'));
+        signaturePadWrapper.style.border = '1px solid #ced4da';
+
+        const itensNaoPreenchidos = [];
+        let primeiroItemInvalido = null;
+
+        // Valida itens e sub-itens
+        document.querySelectorAll('.sub-item, .single-item').forEach(item => {
+            const ordem = item.dataset.ordem;
+            const radios = item.querySelectorAll('input[type="radio"]');
+            const isChecked = Array.from(radios).some(radio => radio.checked);
+
+            if (!isChecked) {
+                itensNaoPreenchidos.push(ordem);
+                item.classList.add('item-invalido');
+                if (!primeiroItemInvalido) {
+                    primeiroItemInvalido = item;
+                }
+            }
+        });
+
+        // Valida assinatura do motorista
+        const isAssinaturaVazia = signaturePadMotorista.isEmpty();
+        if (isAssinaturaVazia) {
+            signaturePadWrapper.style.border = '2px solid #dc3545';
+            if (!primeiroItemInvalido) {
+                primeiroItemInvalido = signaturePadWrapper;
+            }
+        }
+
+        // Monta e exibe a mensagem de erro
+        let mensagemErro = '';
+        if (itensNaoPreenchidos.length > 0) {
+            mensagemErro += `Por favor, preencha os seguintes itens obrigatórios: ${itensNaoPreenchidos.join(', ')}.\n`;
+        }
+        if (isAssinaturaVazia) {
+            mensagemErro += 'A assinatura do Motorista é obrigatória.';
+        }
+
+        if (mensagemErro) {
+            alert(mensagemErro);
+            if (primeiroItemInvalido) {
+                primeiroItemInvalido.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            return; // Interrompe o processo
+        }
+
+        // Se tudo estiver OK, preenche os inputs das assinaturas e envia o form
+        document.getElementById('assinatura_motorista_input').value = signaturePadMotorista.toDataURL('image/png');
+        if (!signaturePadResponsavel.isEmpty()) {
+            document.getElementById('assinatura_responsavel_input').value = signaturePadResponsavel.toDataURL('image/png');
+        } else {
+            document.getElementById('assinatura_responsavel_input').value = '';
+        }
+
+        // Envia o formulário
+        form.submit();
+    });
+});
 </script>
 {% endif %}
 
