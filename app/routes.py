@@ -56,6 +56,7 @@ from fpdf import FPDF
 
 import base64
 import tempfile
+from datetime import timezone, timedelta
 
 # --- DEFINIÇÃO DO BLUEPRINT DA ÁREA PÚBLICA (ACESSO DE MOTORISTAS) ---
 main_bp = Blueprint('main', __name__)
@@ -539,32 +540,39 @@ def preencher_checklist(checklist_id):
             flash('Você não está vinculado a um veículo. Contate o administrador.', 'danger')
             return redirect(url_for('main.lista_checklists_motorista'))
 
-        # Captura as assinaturas e outros campos
+        # --- CORREÇÃO PRINCIPAL: CAPTURA A HORA DO DISPOSITIVO DO USUÁRIO ---
+        data_preenchimento_str = request.form.get('data_preenchimento_local')
+        if data_preenchimento_str:
+            # Converte a string ISO 8601 enviada pelo navegador para um objeto datetime
+            data_preenchimento = datetime.fromisoformat(data_preenchimento_str.replace('Z', '+00:00'))
+        else:
+            # Fallback para a hora do servidor, caso o javascript falhe
+            data_preenchimento = datetime.utcnow()
+
         assinatura_motorista_data = request.form.get('assinatura_motorista')
         assinatura_responsavel_data = request.form.get('assinatura_responsavel')
         outros_problemas = request.form.get('outros_problemas')
         solucoes_adotadas = request.form.get('solucoes_adotadas')
         pendencias_gerais = request.form.get('pendencias_gerais')
 
-        # Validação da assinatura obrigatória do motorista
         if not assinatura_motorista_data:
             flash('A assinatura do motorista é obrigatória.', 'danger')
             return redirect(url_for('main.preencher_checklist', checklist_id=checklist_id))
 
-        # Cria o objeto ChecklistPreenchido
         novo_preenchimento = ChecklistPreenchido(
             motorista_id=motorista.id,
             veiculo_id=veiculo_do_motorista.id,
             checklist_id=checklist.id,
+            data_preenchimento=data_preenchimento,  # <-- USA A DATA/HORA CORRETA
             assinatura_motorista=assinatura_motorista_data,
-            assinatura_responsavel=assinatura_responsavel_data, # Salva a assinatura opcional
+            assinatura_responsavel=assinatura_responsavel_data,
             outros_problemas=outros_problemas,
             solucoes_adotadas=solucoes_adotadas,
             pendencias_gerais=pendencias_gerais
         )
         db.session.add(novo_preenchimento)
 
-        # Salva as respostas dos itens normais
+        # (O restante da função continua igual para salvar as respostas e pendências)
         respostas_adicionadas = []
         for key in request.form:
             if key.startswith('resposta-'):
@@ -581,7 +589,7 @@ def preencher_checklist(checklist_id):
                 db.session.add(nova_resposta)
                 respostas_adicionadas.append(nova_resposta)
 
-        for i in range(5): # Loop para os 5 blocos de extintores
+        for i in range(5):
             local = request.form.get(f'extintor-{i}-local')
             tipo = request.form.get(f'extintor-{i}-tipo')
             peso = request.form.get(f'extintor-{i}-peso')
@@ -589,25 +597,17 @@ def preencher_checklist(checklist_id):
             trocado = request.form.get(f'extintor-{i}-trocado')
             motivo_troca = request.form.get(f'extintor-{i}-motivo')
 
-            # Só salva se houver algum dado preenchido (além do tipo padrão)
             if peso or vencimento_str or motivo_troca:
                 vencimento_data = None
                 if vencimento_str:
                     try:
-                        # Converte a data do formato DD/MM/AAAA para o formato do banco
                         vencimento_data = datetime.strptime(vencimento_str, '%d/%m/%Y').date()
                     except ValueError:
-                        # Ignora data inválida, mas continua salvando o resto
                         pass
-
                 novo_extintor = ExtintorCheck(
                     preenchimento=novo_preenchimento,
-                    local=local,
-                    tipo=tipo,
-                    peso=peso,
-                    vencimento=vencimento_data,
-                    trocado=trocado,
-                    motivo_troca=motivo_troca
+                    local=local, tipo=tipo, peso=peso,
+                    vencimento=vencimento_data, trocado=trocado, motivo_troca=motivo_troca
                 )
                 db.session.add(novo_extintor)
 
@@ -2333,9 +2333,15 @@ def gerar_relatorio_pdf():
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
+    # --- DEFINIÇÃO DOS FUSOS HORÁRIOS ---
+    brt_tz = timezone(timedelta(hours=-3))
+    utc_tz = timezone.utc
+
     dados_agrupados = defaultdict(list)
     for p in preenchimentos:
-        dados_agrupados[p.data_preenchimento.date()].append(p)
+        # Agrupa pela data local correta
+        data_local = p.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz)
+        dados_agrupados[data_local.date()].append(p)
 
     laudo_count = 0
     for data, preenchs in sorted(dados_agrupados.items()):
@@ -2343,13 +2349,20 @@ def gerar_relatorio_pdf():
             laudo_count += 1
             if laudo_count > 1:
                 pdf.add_page()
+            
+            # --- CORREÇÃO: CONVERTE A HORA DE UTC (DO BANCO) PARA BRT (EXIBIÇÃO) ---
+            hora_utc = p.data_preenchimento.replace(tzinfo=utc_tz)
+            hora_local_obj = hora_utc.astimezone(brt_tz)
+            data_local_str = hora_local_obj.strftime('%d/%m/%Y')
+            hora_local_str = hora_local_obj.strftime('%H:%M')
 
             pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 10, f"Data do Checklist: {data.strftime('%d/%m/%Y')}", 0, 1, 'L')
+            pdf.cell(0, 10, f"Data do Checklist: {data_local_str}", 0, 1, 'L')
             pdf.set_font('Arial', 'I', 10)
-            pdf.cell(0, 8, f"Preenchido por: {p.motorista.nome} às {p.data_preenchimento.strftime('%H:%M')}", 0, 1, 'L')
+            pdf.cell(0, 8, f"Preenchido por: {p.motorista.nome} às {hora_local_str}", 0, 1, 'L')
             pdf.ln(2)
 
+            # (O restante do código para renderizar os itens e assinaturas continua o mesmo)
             item_counter = 1
             for item_principal in itens_principais:
                 pdf.set_font('Arial', 'B', 10)
@@ -2397,7 +2410,7 @@ def gerar_relatorio_pdf():
             
             pdf.set_font('Arial', '', 9)
             if obs_text:
-                full_obs_text = "\\n".join(obs_text)
+                full_obs_text = "\n".join(obs_text)
                 pdf.multi_cell(0, 5, full_obs_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
             else:
                 pdf.cell(0, 8, "Nenhuma observação geral registrada.", 1, 1, 'C')
@@ -2408,22 +2421,19 @@ def gerar_relatorio_pdf():
             x_motorista = pdf.get_x()
             x_responsavel = x_motorista + 95
 
-            # --- CORREÇÃO: Salvar imagem em arquivo temporário ---
             def render_signature(signature_data, x_pos, y_pos):
                 temp_file = None
                 try:
                     img_data = re.sub('^data:image/.+;base64,', '', signature_data)
                     img_bytes = base64.b64decode(img_data)
-                    
                     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
                     temp_file.write(img_bytes)
                     temp_file.close()
-
                     pdf.image(temp_file.name, x=x_pos, y=y_pos, w=80, h=30)
                 except Exception:
                     pdf.text(x_pos + 5, y_pos + 15, "(Erro ao carregar assinatura)")
                 finally:
-                    if temp_file:
+                    if temp_file and os.path.exists(temp_file.name):
                         os.remove(temp_file.name)
 
             if p.assinatura_motorista:
@@ -2442,7 +2452,6 @@ def gerar_relatorio_pdf():
                 pdf.set_xy(x_responsavel, y_signatures + 33)
                 pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
 
-    # Lógica de compatibilidade para a saída do PDF
     pdf_output = pdf.output(dest='S')
     if isinstance(pdf_output, str):
         response_bytes = pdf_output.encode('latin-1')
@@ -2452,6 +2461,8 @@ def gerar_relatorio_pdf():
     return Response(response_bytes,
                     mimetype='application/pdf',
                     headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
+
+                    
 
 @admin_bp.route('/relatorio/status_diario')
 @login_required()

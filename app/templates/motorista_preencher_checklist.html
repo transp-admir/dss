@@ -50,6 +50,9 @@
 
 {% block content %}
 <form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}" id="checklist-form">
+    
+    <!-- CAMPO OCULTO PARA A DATA/HORA LOCAL -->
+    <input type="hidden" name="data_preenchimento_local" id="data_preenchimento_local_input">
 
     {% if not veiculo %}
         <div class="alert alert-danger" role="alert">
@@ -335,6 +338,9 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             document.getElementById('assinatura_responsavel_input').value = '';
         }
+
+        // *** ADICIONA A DATA/HORA LOCAL ANTES DE ENVIAR ***
+        document.getElementById('data_preenchimento_local_input').value = new Date().toISOString();
 
         // Envia o formulário
         form.submit();
