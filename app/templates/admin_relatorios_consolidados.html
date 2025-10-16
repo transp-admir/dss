@@ -12,7 +12,7 @@
     <div class="card-body">
         <form method="POST" id="filtro-form">
             <div class="row g-3 align-items-end">
-                <div class="col-md-3">
+                <div class="col-lg-2 col-md-4">
                     <label for="tipo_checklist" class="form-label">Tipo de Checklist</label>
                     <select class="form-select" id="tipo_checklist" name="tipo_checklist">
                         <option value="">Todos</option>
@@ -21,7 +21,7 @@
                         <option value="MENSAL" {% if filtros.get('tipo_checklist') == 'MENSAL' %}selected{% endif %}>MENSAL</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-lg-3 col-md-4">
                     <label for="veiculo_id" class="form-label">Veículo</label>
                     <select class="form-select" id="veiculo_id" name="veiculo_id">
                         <option value="todos">Todos os Veículos</option>
@@ -30,17 +30,26 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-lg-2 col-md-4">
                     <label for="data_inicio" class="form-label">Data de Início</label>
                     <input type="date" class="form-control" id="data_inicio" name="data_inicio" value="{{ filtros.get('data_inicio', '') }}">
                 </div>
-                <div class="col-md-2">
+                <div class="col-lg-2 col-md-6">
                     <label for="data_fim" class="form-label">Data de Fim</label>
                     <input type="date" class="form-control" id="data_fim" name="data_fim" value="{{ filtros.get('data_fim', '') }}">
                 </div>
-                <div class="col-md-2 d-flex">
+                <div class="col-lg-3 col-md-6 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100 me-2">Buscar</button>
-                    <button type="button" id="export-pdf-btn" class="btn btn-danger w-100">PDF</button>
+                    <div class="btn-group w-100">
+                        <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            Gerar
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" id="export-pdf-btn">PDF Detalhado</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" id="status-diario-btn">Relatório de Status</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </form>
@@ -105,25 +114,56 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const exportButton = document.getElementById('export-pdf-btn');
-
-    if (exportButton) {
-        exportButton.addEventListener('click', function() {
-            // Pega os valores dos filtros
+    // Botão para o PDF detalhado existente
+    const exportPdfButton = document.getElementById('export-pdf-btn');
+    if (exportPdfButton) {
+        exportPdfButton.addEventListener('click', function(e) {
+            e.preventDefault();
             const tipoChecklist = document.getElementById('tipo_checklist').value;
             const veiculoId = document.getElementById('veiculo_id').value;
             const dataInicio = document.getElementById('data_inicio').value;
             const dataFim = document.getElementById('data_fim').value;
 
-            // Monta a URL para a rota de geração de PDF
             const url = new URL("{{ url_for('admin.gerar_relatorio_pdf') }}", window.location.origin);
             url.searchParams.set('tipo_checklist', tipoChecklist);
             url.searchParams.set('veiculo_id', veiculoId);
             url.searchParams.set('data_inicio', dataInicio);
             url.searchParams.set('data_fim', dataFim);
 
-            // Redireciona para a URL, o que vai iniciar o download do PDF
-            window.location.href = url.toString();
+            window.open(url.toString(), '_blank'); // Abre em nova aba
+        });
+    }
+
+    // Novo botão para o relatório de Status Diário
+    const statusDiarioButton = document.getElementById('status-diario-btn');
+    if (statusDiarioButton) {
+        statusDiarioButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            const veiculoId = document.getElementById('veiculo_id').value;
+            let dataInicio = document.getElementById('data_inicio').value;
+            let dataFim = document.getElementById('data_fim').value;
+
+            // Validação de data
+            if (dataInicio && dataFim) {
+                const dateInicio = new Date(dataInicio + 'T00:00:00'); // Adiciona tempo para evitar problemas de fuso
+                const dateFim = new Date(dataFim + 'T00:00:00');
+                const diffTime = Math.abs(dateFim - dateInicio);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                // 3 meses ~ 93 dias
+                if (diffDays > 93) {
+                    alert('O intervalo máximo para este relatório é de 3 meses.');
+                    return;
+                }
+            }
+            
+            // Nota: a rota 'admin.gerar_relatorio_status_diario' será criada no próximo passo.
+            const url = new URL("{{ url_for('admin.gerar_relatorio_status_diario') }}", window.location.origin);
+            url.searchParams.set('veiculo_id', veiculoId);
+            url.searchParams.set('data_inicio', dataInicio);
+            url.searchParams.set('data_fim', dataFim);
+
+            window.open(url.toString(), '_blank'); // Abre o relatório em uma nova aba
         });
     }
 });

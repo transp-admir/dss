@@ -2393,3 +2393,145 @@ def acessar_documento(documento_id):
         path=documento.nome_arquivo, 
         as_attachment=as_attachment
     )
+
+
+#relatorio de status diario
+
+@admin_bp.route('/relatorio/status_diario')
+@login_required()
+def gerar_relatorio_status_diario():
+    """
+    Gera um relatório diário de status de preenchimento (Preenchido, Não Preenchido, Isento, etc.).
+    """
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+
+    # --- 1. Captura e Validação de Filtros ---
+    veiculo_id_str = request.args.get('veiculo_id')
+    data_inicio_str = request.args.get('data_inicio')
+    data_fim_str = request.args.get('data_fim')
+
+    # Regra: Se datas não forem fornecidas, usa o mês corrente.
+    if not data_inicio_str or not data_fim_str:
+        hoje = date.today()
+        data_inicio = hoje.replace(day=1)
+        # Encontra o último dia do mês
+        proximo_mes = hoje.replace(day=28) + timedelta(days=4)
+        data_fim = proximo_mes - timedelta(days=proximo_mes.day)
+    else:
+        try:
+            data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Formato de data inválido.', 'danger')
+            return "Erro: Formato de data inválido.", 400
+
+    # Regra: Validação do intervalo máximo de 3 meses (~93 dias)
+    if (data_fim - data_inicio).days > 93:
+        flash('O intervalo para este relatório não pode exceder 3 meses.', 'danger')
+        return "Erro: O intervalo não pode exceder 3 meses.", 400
+
+    # --- 2. Seleção de Veículos ---
+    veiculos_query = Veiculo.query
+    if user_role != 'admin':
+        veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
+
+    if veiculo_id_str and veiculo_id_str != 'todos':
+        veiculos_query = veiculos_query.filter(Veiculo.id == int(veiculo_id_str))
+    
+    veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
+    veiculos_selecionados_nomes = ", ".join([v.nome_conjunto for v in veiculos]) if veiculo_id_str != 'todos' else None
+
+    # --- 3. Coleta de Dados em Massa (para otimização) ---
+    veiculo_ids = [v.id for v in veiculos]
+    
+    # Busca o checklist 'DIÁRIO' relevante para a unidade
+    checklist_diario_query = Checklist.query.filter(Checklist.tipo == 'DIÁRIO', Checklist.ativo == True)
+    if user_role != 'admin':
+        checklist_diario_query = checklist_diario_query.filter(or_(Checklist.unidade == user_unidade, Checklist.unidade == None))
+    checklists_diarios = checklist_diario_query.all()
+    checklist_diario_ids = [c.id for c in checklists_diarios]
+
+    # Pre-fetching de dados para evitar múltiplas consultas ao banco dentro do loop
+    preenchimentos = {
+        (p.veiculo_id, p.data_preenchimento.date()): p
+        for p in ChecklistPreenchido.query.filter(
+            ChecklistPreenchido.checklist_id.in_(checklist_diario_ids),
+            ChecklistPreenchido.veiculo_id.in_(veiculo_ids),
+            db.func.date(ChecklistPreenchido.data_preenchimento).between(data_inicio, data_fim)
+        ).all()
+    }
+
+    indisponibilidades = {
+        (i.veiculo_id, dia.date()): i.motivo
+        for i in VeiculoIndisponibilidade.query.filter(VeiculoIndisponibilidade.veiculo_id.in_(veiculo_ids))
+        for dia in pd.date_range(i.data_inicio, i.data_fim or data_fim)
+        if data_inicio <= dia.date() <= data_fim
+    }
+
+    isencoes = {
+        (i.motorista_id, i.data): i.motivo
+        for i in MotoristaIsencao.query.filter(
+            MotoristaIsencao.tipo_checklist == 'DIÁRIO',
+            MotoristaIsencao.data.between(data_inicio, data_fim)
+        ).join(Motorista).filter(Motorista.veiculo_id.in_(veiculo_ids))
+    }
+
+    # --- 4. Processamento e Geração do Relatório ---
+    report_data = []
+    total_dias = (data_fim - data_inicio).days + 1
+
+    for dia_offset in range(total_dias):
+        dia_atual = data_inicio + timedelta(days=dia_offset)
+        
+        for veiculo in veiculos:
+            status_info = {}
+            status_key = (veiculo.id, dia_atual)
+
+            # 1. Verifica se foi preenchido
+            if status_key in preenchimentos:
+                p = preenchimentos[status_key]
+                status_info = {
+                    'status': 'Preenchido',
+                    'detalhe': f"por {p.motorista.nome} às {p.data_preenchimento.strftime('%H:%M')}",
+                    'classe_css': 'status-preenchido',
+                    'assinatura': p.assinatura_motorista
+                }
+            # 2. Verifica se o veículo estava indisponível
+            elif status_key in indisponibilidades:
+                status_info = {
+                    'status': 'Indisponível',
+                    'detalhe': indisponibilidades[status_key],
+                    'classe_css': 'status-indisponivel',
+                    'assinatura': None
+                }
+            # 3. Verifica se o motorista (se houver) estava isento
+            elif veiculo.motorista and (veiculo.motorista.id, dia_atual) in isencoes:
+                status_info = {
+                    'status': 'Isento',
+                    'detalhe': f"Motorista isento: {isencoes.get((veiculo.motorista.id, dia_atual))}",
+                    'classe_css': 'status-isento',
+                    'assinatura': None
+                }
+            # 4. Se nenhuma das anteriores, está pendente
+            else:
+                 status_info = {
+                    'status': 'Não Preenchido',
+                    'detalhe': f"Motorista: {veiculo.motorista.nome if veiculo.motorista else 'N/A'}",
+                    'classe_css': 'status-nao-preenchido',
+                    'assinatura': None
+                }
+            
+            report_data.append({
+                'data': dia_atual,
+                'veiculo': veiculo,
+                **status_info
+            })
+
+    return render_template(
+        'admin_relatorio_status_diario.html',
+        report_data=report_data,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        veiculos_selecionados_nomes=veiculos_selecionados_nomes
+    )
