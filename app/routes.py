@@ -54,6 +54,8 @@ from sqlalchemy import and_, or_
 # --- IMPORTAÇÃO DE BIBLIOTECA PARA GERAÇÃO DE DOCUMENTOS PDF ---
 from fpdf import FPDF
 
+import base64
+
 # --- DEFINIÇÃO DO BLUEPRINT DA ÁREA PÚBLICA (ACESSO DE MOTORISTAS) ---
 main_bp = Blueprint('main', __name__)
 
@@ -2318,83 +2320,125 @@ def gerar_relatorio_pdf():
 
     preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
     
-    # Estrutura de itens do primeiro checklist (base para o layout)
-    itens_principais = []
-    if preenchimentos:
-        checklist_base = Checklist.query.get(preenchimentos[0].checklist_id)
-        if checklist_base:
-            itens_principais = checklist_base.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+    if not preenchimentos:
+        flash('Nenhum checklist preenchido encontrado para os filtros selecionados.', 'warning')
+        return redirect(url_for('admin.relatorios_consolidados'))
 
-    # Inicia a construção do PDF
+    checklist_base = Checklist.query.get(preenchimentos[0].checklist_id)
+    itens_principais = checklist_base.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+
     titulo = f"Relatório - {veiculo_obj.nome_conjunto if veiculo_obj else 'Geral'}"
     pdf = PDF(title=titulo, orientation='P', unit='mm', format='A4')
-    pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
 
-    # Agrupa preenchimentos por data
     dados_agrupados = defaultdict(list)
     for p in preenchimentos:
         dados_agrupados[p.data_preenchimento.date()].append(p)
 
-    for data, preenchs in sorted(dados_agrupados.items()):
-        pdf.set_font('Arial', 'B', 12)
-        pdf.cell(0, 10, f"Data do Checklist: {data.strftime('%d/%m/%Y')}", 0, 1, 'L')
+    laudo_count = 0
+    total_laudos = sum(len(v) for v in dados_agrupados.values())
 
+    for data, preenchs in sorted(dados_agrupados.items()):
         for p in preenchs:
+            laudo_count += 1
+            # Adiciona uma quebra de página antes de cada laudo, exceto o primeiro
+            if laudo_count > 1:
+                pdf.add_page()
+
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 10, f"Data do Checklist: {data.strftime('%d/%m/%Y')}", 0, 1, 'L')
             pdf.set_font('Arial', 'I', 10)
             pdf.cell(0, 8, f"Preenchido por: {p.motorista.nome} às {p.data_preenchimento.strftime('%H:%M')}", 0, 1, 'L')
-            pdf.ln(2) # Pequeno espaço
+            pdf.ln(2)
 
-            item_counter = 1 # Inicia o contador sequencial de itens
-
+            item_counter = 1
             for item_principal in itens_principais:
-                # Renderiza o cabeçalho da categoria (Item Principal)
                 pdf.set_font('Arial', 'B', 10)
-                pdf.set_fill_color(224, 224, 224) # Cinza claro
+                pdf.set_fill_color(224, 224, 224)
                 pdf.cell(0, 7, item_principal.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'C', 1)
-
-                # Renderiza o cabeçalho da tabela
                 pdf.set_font('Arial', 'B', 9)
-                pdf.cell(15, 7, 'Item', 1, 0, 'C', 1)
-                pdf.cell(135, 7, 'Descrição', 1, 0, 'C', 1)
-                pdf.cell(40, 7, 'Resposta', 1, 1, 'C', 1)
-
+                pdf.cell(10, 7, 'Nº', 1, 0, 'C', 1)
+                pdf.cell(120, 7, 'Descrição', 1, 0, 'C', 1)
+                pdf.cell(60, 7, 'Resposta', 1, 1, 'C', 1)
                 pdf.set_font('Arial', '', 9)
-                if not item_principal.sub_itens:
-                    continue # Se não houver sub-itens, apenas o cabeçalho é mostrado
 
-                for sub_item in item_principal.sub_itens:
+                # Chave de ordenação mais robusta para "1.1", "1.10", etc.
+                def natural_sort_key(text):
+                    return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', str(text or '0'))]
+
+                sub_itens_sorted = sorted(item_principal.sub_itens, key=lambda si: natural_sort_key(si.ordem))
+                for sub_item in sub_itens_sorted:
                     resposta_obj = next((r for r in p.respostas if r.item_id == sub_item.id), None)
-                    
-                    h = 6 # Altura base da célula
+                    h = 6
                     x_start = pdf.get_x()
                     y_start = pdf.get_y()
-
-                    # Célula do Item (com contador)
-                    pdf.cell(15, h, str(item_counter), 1, 0, 'C')
-
-                    # Célula da Descrição (com multi_cell para quebra de linha)
-                    pdf.multi_cell(135, h, sub_item.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
-                    
-                    # Armazena a posição Y final após a descrição
+                    pdf.cell(10, h, str(item_counter), 1, 0, 'C')
+                    pdf.multi_cell(120, h, sub_item.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
                     y_end = pdf.get_y()
-
-                    # Reposiciona para a mesma linha da descrição para desenhar a resposta
-                    pdf.set_xy(x_start + 150, y_start)
-                    pdf.cell(40, y_end - y_start, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
-
-                    # Se houver observação, renderiza abaixo
+                    pdf.set_xy(x_start + 130, y_start)
+                    pdf.cell(60, y_end - y_start, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
                     if resposta_obj and resposta_obj.observacao:
                         pdf.set_font('Arial', 'I', 8)
                         pdf.set_fill_color(245, 245, 245)
                         pdf.multi_cell(0, 5, f"Obs: {resposta_obj.observacao.encode('latin-1', 'replace').decode('latin-1')}", 1, 'L', 1)
                         pdf.set_font('Arial', '', 9)
-
                     item_counter += 1
-            pdf.ln(10) # Espaço entre os preenchimentos de um mesmo dia
+            
+            # --- LÓGICA DE QUEBRA DE PÁGINA INTELIGENTE ---
+            altura_bloco_assinatura = 60 # Altura estimada do bloco de obs + assinaturas
+            if pdf.get_y() + altura_bloco_assinatura > pdf.page_break_trigger:
+                pdf.add_page()
 
-    # *** CORREÇÃO DEFINITIVA DO AssertionError APLICADA AQUI ***
-    # Converte o bytearray do FPDF para bytes, que é o que o Flask/Werkzeug espera.
+            # --- SEÇÃO DE OBSERVAÇÕES E ASSINATURAS ---
+            pdf.ln(5)
+            pdf.set_font('Arial', 'B', 11)
+            pdf.cell(0, 8, 'Observações Gerais e Assinaturas', 0, 1, 'L')
+            
+            obs_text = []
+            if p.outros_problemas: obs_text.append(f"Outros Problemas: {p.outros_problemas}")
+            if p.solucoes_adotadas: obs_text.append(f"Soluções Adotadas: {p.solucoes_adotadas}")
+            if p.pendencias_gerais: obs_text.append(f"Pendências Gerais: {p.pendencias_gerais}")
+            
+            pdf.set_font('Arial', '', 9)
+            if obs_text:
+                full_obs_text = "\\n".join(obs_text)
+                pdf.multi_cell(0, 5, full_obs_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
+            else:
+                pdf.cell(0, 8, "Nenhuma observação geral registrada.", 1, 1, 'C')
+            
+            pdf.ln(10)
+            
+            y_signatures = pdf.get_y()
+            x_motorista = pdf.get_x()
+            x_responsavel = x_motorista + 95
+
+            if p.assinatura_motorista:
+                try:
+                    img_data = re.sub('^data:image/.+;base64,', '', p.assinatura_motorista)
+                    img_bytes = base64.b64decode(img_data)
+                    pdf.image(io.BytesIO(img_bytes), x=x_motorista + 5, y=y_signatures, w=80, h=30, type='PNG')
+                except Exception:
+                    pdf.text(x_motorista + 5, y_signatures + 15, "(Erro ao carregar assinatura)")
+
+            if p.assinatura_responsavel:
+                try:
+                    img_data_resp = re.sub('^data:image/.+;base64,', '', p.assinatura_responsavel)
+                    img_bytes_resp = base64.b64decode(img_data_resp)
+                    pdf.image(io.BytesIO(img_bytes_resp), x=x_responsavel, y=y_signatures, w=80, h=30, type='PNG')
+                except Exception:
+                    pdf.text(x_responsavel + 5, y_signatures + 15, "(Erro ao carregar assinatura)")
+
+            pdf.line(x_motorista + 5, y_signatures + 32, x_motorista + 85, y_signatures + 32)
+            pdf.set_xy(x_motorista + 5, y_signatures + 33)
+            pdf.set_font('Arial', 'I', 8)
+            pdf.cell(80, 5, 'Motorista', 0, 0, 'C')
+            
+            if p.assinatura_responsavel:
+                pdf.line(x_responsavel, y_signatures + 32, x_responsavel + 80, y_signatures + 32)
+                pdf.set_xy(x_responsavel, y_signatures + 33)
+                pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
+
     return Response(bytes(pdf.output()),
                     mimetype='application/pdf',
                     headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
