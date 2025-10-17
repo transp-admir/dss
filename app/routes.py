@@ -1720,7 +1720,7 @@ def checklists():
 
 
 @admin_bp.route('/checklists/add', methods=['POST'])
-@login_required()
+@login_required(required_role=["admin"])
 def add_checklist():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
@@ -1911,7 +1911,7 @@ def view_checklist(checklist_id):
 
 
 @admin_bp.route('/checklists/add_item/<int:checklist_id>', methods=['POST'])
-@login_required()
+@login_required(required_role=["admin"])
 def add_checklist_item(checklist_id):
     """
     Adiciona um novo item ou sub-item a um checklist.
@@ -1962,7 +1962,7 @@ def add_checklist_item(checklist_id):
 
 
 @admin_bp.route('/checklists/delete_item/<int:item_id>', methods=['POST'])
-@login_required()
+@login_required(required_role=["admin"])
 def delete_checklist_item(item_id):
     """
     Exclui um item ou sub-item de um checklist.
@@ -2031,6 +2031,7 @@ def conteudo_detalhe(conteudo_id):
 
 
 @admin_bp.route('/checklist/edit/<int:checklist_id>', methods=['POST'])
+@login_required(required_role=["admin"])
 def edit_checklist(checklist_id):
     """
     Rota para editar os dados de um checklist mestre.
@@ -2142,7 +2143,7 @@ def get_checklist_item_json(item_id):
 
 
 @admin_bp.route('/checklist/item/update/<int:item_id>', methods=['POST'])
-@login_required()
+@login_required(required_role=["admin"])
 def update_checklist_item(item_id):
     """
     Atualiza um item de checklist (principal ou sub-item) a partir dos dados do formulário modal.
