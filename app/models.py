@@ -60,10 +60,11 @@ class Veiculo(db.Model):
     unidade = db.Column(db.String(100))
     operacao = db.Column(db.String(100))
     obs = db.Column(db.Text)
+    ativo = db.Column(db.Boolean, default=True, nullable=False) # <-- ADICIONADO
     
-    placa_cavalo_id = db.Column(db.Integer, db.ForeignKey('placa.id'), unique=True)
-    placa_carreta1_id = db.Column(db.Integer, db.ForeignKey('placa.id'), unique=True)
-    placa_carreta2_id = db.Column(db.Integer, db.ForeignKey('placa.id'), unique=True)
+    placa_cavalo_id = db.Column(db.Integer, db.ForeignKey('placa.id')) # <-- unique=True REMOVIDO
+    placa_carreta1_id = db.Column(db.Integer, db.ForeignKey('placa.id')) # <-- unique=True REMOVIDO
+    placa_carreta2_id = db.Column(db.Integer, db.ForeignKey('placa.id')) # <-- unique=True REMOVIDO
     
     placa_cavalo = db.relationship('Placa', foreign_keys=[placa_cavalo_id])
     placa_carreta1 = db.relationship('Placa', foreign_keys=[placa_carreta1_id])

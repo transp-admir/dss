@@ -259,24 +259,26 @@ def veiculos():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
-    # Filtra os veículos e placas com base na unidade do usuário
+    # Query base para veículos e placas, filtrando por unidade se necessário
     veiculos_query = Veiculo.query
     placas_query = Placa.query
     if user_role != 'admin':
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
         placas_query = placas_query.filter(Placa.unidade == user_unidade)
 
+    # A lista agora inclui veículos ativos e inativos. A ordenação é feita no template.
     lista_veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
     todas_as_placas = placas_query.order_by(Placa.numero).all()
     
-    # Identifica os IDs de todas as placas que já estão em uso
+    # --- LÓGICA CORRIGIDA: Identifica IDs de placas em uso APENAS em veículos ATIVOS ---
     placas_em_uso_ids = set()
-    for v in Veiculo.query.all(): # Precisamos checar todos os veículos, não apenas os filtrados
+    veiculos_ativos = Veiculo.query.filter_by(ativo=True).all()
+    for v in veiculos_ativos:
         if v.placa_cavalo_id: placas_em_uso_ids.add(v.placa_cavalo_id)
         if v.placa_carreta1_id: placas_em_uso_ids.add(v.placa_carreta1_id)
         if v.placa_carreta2_id: placas_em_uso_ids.add(v.placa_carreta2_id)
 
-    # Cria listas de placas disponíveis para os formulários
+    # Cria listas de placas disponíveis para os formulários de adição/edição
     placas_cavalo_disponiveis = [p for p in todas_as_placas if p.tipo == 'CAVALO' and p.id not in placas_em_uso_ids]
     placas_carreta_disponiveis = [p for p in todas_as_placas if p.tipo == 'CARRETA' and p.id not in placas_em_uso_ids]
 
@@ -288,11 +290,12 @@ def veiculos():
     return render_template(
         'veiculos.html',
         veiculos=lista_veiculos,
-        placas=todas_as_placas, # Lista de todas as placas para a coluna da direita
+        placas=todas_as_placas,
         placas_cavalo_disponiveis=placas_cavalo_disponiveis,
         placas_carreta_disponiveis=placas_carreta_disponiveis,
         unidades_disponiveis=unidades_disponiveis
     )
+
 
 @admin_bp.route('/veiculos/add', methods=['POST'])
 @login_required()
@@ -322,6 +325,22 @@ def add_veiculo():
         flash(f'Já existe um conjunto com o nome "{nome_conjunto}".', 'danger')
         return redirect(url_for('admin.veiculos'))
 
+    # --- TRAVA DE SEGURANÇA: VERIFICA SE AS PLACAS JÁ ESTÃO EM USO ---
+    placas_selecionadas_ids = {int(p_id) for p_id in [placa_cavalo_id, placa_carreta1_id, placa_carreta2_id] if p_id}
+    placa_em_uso = Veiculo.query.filter(
+        Veiculo.ativo == True,
+        or_(
+            Veiculo.placa_cavalo_id.in_(placas_selecionadas_ids),
+            Veiculo.placa_carreta1_id.in_(placas_selecionadas_ids),
+            Veiculo.placa_carreta2_id.in_(placas_selecionadas_ids)
+        )
+    ).first()
+
+    if placa_em_uso:
+        flash(f'Uma ou mais placas selecionadas já estão em uso no conjunto ativo "{placa_em_uso.nome_conjunto}".', 'danger')
+        return redirect(url_for('admin.veiculos'))
+    # --- FIM DA TRAVA ---
+
     novo_veiculo = Veiculo(
         nome_conjunto=nome_conjunto, 
         unidade=unidade,
@@ -346,6 +365,27 @@ def edit_veiculo(veiculo_id):
     if user_role != 'admin' and veiculo.unidade != user_unidade:
         flash('Você não tem permissão para editar este veículo.', 'danger')
         return redirect(url_for('admin.veiculos'))
+        
+    placa_cavalo_id = request.form.get('placa_cavalo_id')
+    placa_carreta1_id = request.form.get('placa_carreta1_id')
+    placa_carreta2_id = request.form.get('placa_carreta2_id')
+
+    # --- TRAVA DE SEGURANÇA: VERIFICA SE AS PLACAS JÁ ESTÃO EM USO EM OUTRO CONJUNTO ---
+    placas_selecionadas_ids = {int(p_id) for p_id in [placa_cavalo_id, placa_carreta1_id, placa_carreta2_id] if p_id}
+    conflito = Veiculo.query.filter(
+        Veiculo.id != veiculo_id,  # Exclui o próprio veículo da verificação
+        Veiculo.ativo == True,
+        or_(
+            Veiculo.placa_cavalo_id.in_(placas_selecionadas_ids),
+            Veiculo.placa_carreta1_id.in_(placas_selecionadas_ids),
+            Veiculo.placa_carreta2_id.in_(placas_selecionadas_ids)
+        )
+    ).first()
+
+    if conflito:
+        flash(f'Uma ou mais placas selecionadas já estão em uso no conjunto ativo "{conflito.nome_conjunto}".', 'danger')
+        return redirect(url_for('admin.veiculos'))
+    # --- FIM DA TRAVA ---
 
     veiculo.nome_conjunto = request.form.get('nome_conjunto')
     veiculo.operacao = request.form.get('operacao')
@@ -354,14 +394,13 @@ def edit_veiculo(veiculo_id):
     if user_role == 'admin':
         veiculo.unidade = request.form.get('unidade')
 
-    veiculo.placa_cavalo_id = int(request.form.get('placa_cavalo_id')) if request.form.get('placa_cavalo_id') else None
-    veiculo.placa_carreta1_id = int(request.form.get('placa_carreta1_id')) if request.form.get('placa_carreta1_id') else None
-    veiculo.placa_carreta2_id = int(request.form.get('placa_carreta2_id')) if request.form.get('placa_carreta2_id') else None
+    veiculo.placa_cavalo_id = int(placa_cavalo_id) if placa_cavalo_id else None
+    veiculo.placa_carreta1_id = int(placa_carreta1_id) if placa_carreta1_id else None
+    veiculo.placa_carreta2_id = int(placa_carreta2_id) if placa_carreta2_id else None
     
     db.session.commit()
     flash(f'Conjunto "{veiculo.nome_conjunto}" atualizado com sucesso.', 'success')
     return redirect(url_for('admin.veiculos'))
-
 
 
 @admin_bp.route('/placas/add', methods=['POST'])
@@ -404,19 +443,59 @@ def add_placa():
 
 
 
-@admin_bp.route('/veiculos/delete/<int:veiculo_id>', methods=['POST'])
+@admin_bp.route('/veiculos/toggle_status/<int:veiculo_id>', methods=['POST'])
 @login_required()
-def delete_veiculo(veiculo_id):
+def toggle_veiculo_status(veiculo_id):
     veiculo = Veiculo.query.get_or_404(veiculo_id)
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
     if user_role != 'admin' and veiculo.unidade != user_unidade:
-        flash('Você não tem permissão para excluir este veículo.', 'danger')
+        flash('Você não tem permissão para alterar este veículo.', 'danger')
         return redirect(url_for('admin.veiculos'))
-    db.session.delete(veiculo)
-    db.session.commit()
-    flash(f'Conjunto "{veiculo.nome_conjunto}" foi excluído.', 'info')
+
+    has_history = ChecklistPreenchido.query.filter_by(veiculo_id=veiculo.id).first()
+    
+    if not has_history:
+        db.session.delete(veiculo)
+        db.session.commit()
+        flash(f'Conjunto "{veiculo.nome_conjunto}" foi excluído permanentemente, pois não possuía histórico.', 'info')
+        return redirect(url_for('admin.veiculos'))
+
+    # Se estiver DESATIVANDO (veiculo.ativo é True, será mudado para False)
+    if veiculo.ativo:
+        veiculo.ativo = False
+        if veiculo.motorista:
+            veiculo.motorista.veiculo_id = None
+            flash(f'O motorista {veiculo.motorista.nome} foi desvinculado do conjunto.', 'warning')
+        
+        db.session.commit()
+        flash(f'Conjunto "{veiculo.nome_conjunto}" foi desativado e arquivado. O histórico foi mantido.', 'success')
+    
+    # Se estiver REATIVANDO (veiculo.ativo é False, será mudado para True)
+    else:
+        # --- TRAVA DE SEGURANÇA NA REATIVAÇÃO ---
+        placas_do_veiculo_ids = {p_id for p_id in [veiculo.placa_cavalo_id, veiculo.placa_carreta1_id, veiculo.placa_carreta2_id] if p_id}
+        
+        conflito = Veiculo.query.filter(
+            Veiculo.id != veiculo.id,
+            Veiculo.ativo == True,
+            or_(
+                Veiculo.placa_cavalo_id.in_(placas_do_veiculo_ids),
+                Veiculo.placa_carreta1_id.in_(placas_do_veiculo_ids),
+                Veiculo.placa_carreta2_id.in_(placas_do_veiculo_ids)
+            )
+        ).first()
+
+        if conflito:
+            flash(f'Não foi possível reativar o conjunto "{veiculo.nome_conjunto}". Uma ou mais de suas placas já estão em uso pelo conjunto ativo "{conflito.nome_conjunto}".', 'danger')
+            return redirect(url_for('admin.veiculos'))
+        # --- FIM DA TRAVA DE SEGURANÇA ---
+
+        veiculo.ativo = True
+        db.session.commit()
+        flash(f'Conjunto "{veiculo.nome_conjunto}" foi reativado com sucesso.', 'success')
+
     return redirect(url_for('admin.veiculos'))
 
 

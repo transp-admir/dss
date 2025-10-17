@@ -23,29 +23,40 @@
                             <thead>
                                 <tr>
                                     <th>Nome do Conjunto</th>
-                                    <th>Unidade</th>
-                                    <th>Operação</th>
+                                    <th>Unidade/Operação</th>
                                     <th>Placas</th>
+                                    <th class="text-center">Status</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for veiculo in veiculos %}
-                                <tr>
-                                    <td>{{ veiculo.nome_conjunto }}</td>
-                                    <td>{{ veiculo.unidade }}</td>
-                                    <td>{{ veiculo.operacao or 'N/A' }}</td>
+                                {% for veiculo in veiculos|sort(attribute='ativo', reverse=True) %}
+                                <tr class="{{ 'table-light text-muted' if not veiculo.ativo }}">
+                                    <td>
+                                        {{ veiculo.nome_conjunto }}
+                                        {% if not veiculo.ativo %}
+                                            <span class="badge bg-secondary">Arquivado</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ veiculo.unidade }} / {{ veiculo.operacao or 'N/A' }}</td>
                                     <td>
                                         {% if veiculo.placa_cavalo %}<span class="badge bg-primary">{{ veiculo.placa_cavalo.numero }}</span>{% endif %}
-                                        {% if veiculo.placa_carreta1 %}<span class="badge bg-secondary">{{ veiculo.placa_carreta1.numero }}</span>{% endif %}
-                                        {% if veiculo.placa_carreta2 %}<span class="badge bg-secondary">{{ veiculo.placa_carreta2.numero }}</span>{% endif %}
+                                        {% if veiculo.placa_carreta1 %}<span class="badge bg-info text-dark">{{ veiculo.placa_carreta1.numero }}</span>{% endif %}
+                                        {% if veiculo.placa_carreta2 %}<span class="badge bg-info text-dark">{{ veiculo.placa_carreta2.numero }}</span>{% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if veiculo.ativo %}
+                                            <span class="badge bg-success">Ativo</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Inativo</span>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editVeiculoModal-{{ veiculo.id }}">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteVeiculoModal-{{ veiculo.id }}">
-                                            <i class="fas fa-trash"></i>
+                                        <button type="button" class="btn btn-{{ 'secondary' if veiculo.ativo else 'success' }} btn-sm" data-bs-toggle="modal" data-bs-target="#toggleStatusVeiculoModal-{{ veiculo.id }}">
+                                            <i class="fas fa-{{ 'toggle-off' if veiculo.ativo else 'toggle-on' }}"></i>
                                         </button>
                                     </td>
                                 </tr>
@@ -60,7 +71,7 @@
         <!-- Coluna para Gerenciamento de Placas -->
         <div class="col-lg-4">
             <div class="card shadow mb-4">
-                <div class="card-header py-3">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary">Adicionar Nova Placa</h6>
                 </div>
                 <div class="card-body">
@@ -72,6 +83,7 @@
                         <div class="mb-3">
                             <label class="form-label">Tipo</label>
                             <select name="tipo" class="form-select" required>
+                                <option value="" disabled selected>-- Selecione --</option>
                                 <option value="CAVALO">Cavalo</option>
                                 <option value="CARRETA">Carreta</option>
                             </select>
@@ -88,7 +100,7 @@
                             <label class="form-label">Operação</label>
                             <input type="text" class="form-control" name="operacao">
                         </div>
-                        <button type="submit" class="btn btn-primary">Adicionar Placa</button>
+                        <button type="submit" class="btn btn-success w-100">Adicionar Placa</button>
                     </form>
                 </div>
             </div>
@@ -105,7 +117,7 @@
                                     <strong>{{ placa.numero }}</strong> <small class="text-muted">({{ placa.tipo }})</small><br>
                                     <small class="text-muted">{{ placa.unidade }} / {{ placa.operacao or '-' }}</small>
                                 </div>
-                                <form action="{{ url_for('admin.delete_placa', placa_id=placa.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir a placa {{placa.numero}}?');">
+                                <form action="{{ url_for('admin.delete_placa', placa_id=placa.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir a placa {{placa.numero}}? Esta ação é irreversível e só deve ser feita se a placa nunca foi usada.');">
                                     <button type="submit" class="btn btn-danger btn-sm py-0 px-1"><i class="fas fa-times"></i></button>
                                 </form>
                             </li>
@@ -118,6 +130,13 @@
         </div>
     </div>
 </div>
+
+<!-- Datalist de Unidades para ser Reutilizada -->
+<datalist id="unidades_list">
+    {% for u in unidades_disponiveis %}
+        <option value="{{ u }}">
+    {% endfor %}
+</datalist>
 
 <!-- MODAIS -->
 
@@ -140,11 +159,6 @@
                             <label class="form-label">Unidade</label>
                              {% if session.role == 'admin' %}
                                 <input type="text" class="form-control" name="unidade" list="unidades_list" required>
-                                <datalist id="unidades_list">
-                                    {% for u in unidades_disponiveis %}
-                                        <option value="{{ u }}">
-                                    {% endfor %}
-                                </datalist>
                             {% else %}
                                 <input type="text" class="form-control" name="unidade" value="{{ session.unidade }}" readonly>
                             {% endif %}
@@ -225,12 +239,10 @@
                     <div class="mb-3">
                         <label class="form-label">Placa Cavalo</label>
                         <select name="placa_cavalo_id" class="form-select" required>
-                            <option value="">-- Selecione um cavalo --</option>
-                            {# Mostra a placa atual do veículo, mesmo que já esteja em uso por ele mesmo #}
+                            <option value="">-- Selecione --</option>
                             {% if veiculo.placa_cavalo %}
                                 <option value="{{ veiculo.placa_cavalo.id }}" selected>{{ veiculo.placa_cavalo.numero }} (Atual)</option>
                             {% endif %}
-                            {# Mostra as outras placas de cavalo disponíveis #}
                             {% for p in placas_cavalo_disponiveis %}
                                  <option value="{{ p.id }}">{{ p.numero }}</option>
                             {% endfor %}
@@ -277,22 +289,34 @@
     </div>
 </div>
 
-<!-- Modal de Exclusão de Veículo -->
-<div class="modal fade" id="deleteVeiculoModal-{{ veiculo.id }}" tabindex="-1" aria-hidden="true">
+<!-- Modal de Ativar/Desativar Veículo -->
+<div class="modal fade" id="toggleStatusVeiculoModal-{{ veiculo.id }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Confirmar Exclusão</h5>
+                <h5 class="modal-title">Confirmar Alteração de Status</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>Tem certeza que deseja excluir o conjunto <strong>{{ veiculo.nome_conjunto }}</strong>?</p>
-                <p class="text-danger">Esta ação não pode ser desfeita.</p>
+                {% if veiculo.ativo %}
+                    <p>Tem certeza que deseja <strong>desativar</strong> o conjunto <strong>{{ veiculo.nome_conjunto }}</strong>?</p>
+                    <p class="text-warning">O conjunto será arquivado e não poderá ser usado em novos checklists. O histórico será mantido.</p>
+                    {% if veiculo.motorista %}
+                        <p class="text-danger">Atenção: O motorista <strong>{{ veiculo.motorista.nome }}</strong> será desvinculado deste conjunto.</p>
+                    {% endif %}
+                {% else %}
+                    <p>Tem certeza que deseja <strong>reativar</strong> o conjunto <strong>{{ veiculo.nome_conjunto }}</strong>?</p>
+                    <p class="text-success">O conjunto ficará disponível para ser vinculado a motoristas novamente.</p>
+                {% endif %}
             </div>
             <div class="modal-footer">
-                <form action="{{ url_for('admin.delete_veiculo', veiculo_id=veiculo.id) }}" method="POST">
+                <form action="{{ url_for('admin.toggle_veiculo_status', veiculo_id=veiculo.id) }}" method="POST">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-danger">Sim, Excluir</button>
+                    {% if veiculo.ativo %}
+                         <button type="submit" class="btn btn-warning">Sim, Desativar</button>
+                    {% else %}
+                        <button type="submit" class="btn btn-success">Sim, Reativar</button>
+                    {% endif %}
                 </form>
             </div>
         </div>
