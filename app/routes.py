@@ -1339,15 +1339,23 @@ def registrar_isencao_periodo():
 
 
 @admin_bp.route('/relatorios_consolidados', methods=['GET', 'POST'])
+@login_required() # Usando o decorador para segurança
 def relatorios_consolidados():
-    if 'admin_user' not in session:
-        return redirect(url_for('admin.login'))
-
     # --- DEFINIÇÃO DOS FUSOS HORÁRIOS ---
     brt_tz = timezone(timedelta(hours=-3))
     utc_tz = timezone.utc
 
-    veiculos = Veiculo.query.order_by(Veiculo.nome_conjunto).all()
+    # --- LÓGICA DE FILTRO CORRIGIDA ---
+    user_role = session.get('role')
+    user_unidade = session.get('unidade')
+
+    veiculos_query = Veiculo.query
+    if user_role != 'admin':
+        veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
+    
+    veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
+    # --- FIM DA CORREÇÃO ---
+    
     resultados_agrupados = None
     filtros = request.form if request.method == 'POST' else {}
 
@@ -1359,7 +1367,10 @@ def relatorios_consolidados():
         
         query = ChecklistPreenchido.query.join(Checklist).join(Veiculo)
 
-        # Ajusta a query de data para considerar o fuso horário
+        # Filtra pela unidade do usuário se não for admin (camada extra de segurança)
+        if user_role != 'admin':
+            query = query.filter(Veiculo.unidade == user_unidade)
+
         if data_inicio_str:
             data_inicio_brt = datetime.strptime(data_inicio_str, '%Y-%m-%d').replace(tzinfo=brt_tz)
             data_inicio_utc = data_inicio_brt.astimezone(utc_tz)
@@ -1376,11 +1387,9 @@ def relatorios_consolidados():
 
         preenchimentos = query.order_by(Veiculo.nome_conjunto, ChecklistPreenchido.data_preenchimento.desc()).all()
 
-        # --- CORREÇÃO: Anexa o objeto de data/hora local ao objeto de preenchimento ---
         for p in preenchimentos:
             p.data_preenchimento_local = p.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz)
         
-        # Agrupa usando a data local
         resultados_agrupados = defaultdict(lambda: defaultdict(list))
         for p in preenchimentos:
             if p.veiculo:
