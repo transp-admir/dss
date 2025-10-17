@@ -168,6 +168,18 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                         <label for="motivo_indisp" class="form-label">Motivo</label>
                         <input type="text" class="form-control" id="motivo_indisp" name="motivo" placeholder="Ex: Em manutenção na oficina" required>
                     </div>
+                    <div class="mb-3">
+                        <label for="tipo_checklist" class="form-label">Tipo de Checklist Afetado</label>
+                        <select class="form-select" id="tipo_checklist" name="tipo_checklist">
+                            <option value="">Nenhum</option>
+                            {% for tipo in tipos_checklist %}
+                                <option value="{{ tipo }}">{{ tipo }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Se "Nenhum" for selecionado, a indisponibilidade afetará todos os checklists (Diário e Mensal). Se um tipo for escolhido, afetará apenas o selecionado.
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -225,8 +237,7 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar Liberação</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>                    <button type="submit" class="btn btn-primary">Salvar Liberação</button>
                 </div>
             </form>
         </div>

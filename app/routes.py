@@ -1144,10 +1144,23 @@ def acompanhamento_diario():
     veiculos_para_exibir = sorted(veiculos_para_exibir_map.values(), key=lambda v: v.nome_conjunto)
 
     # --- 3. COLETA DADOS DE STATUS (DIÁRIO, MENSAL, INDISPONIBILIDADE, ISENÇÃO) ---
-    indisponibilidades_hoje = {ind.veiculo_id: ind.motivo for ind in VeiculoIndisponibilidade.query.filter(
+    # <<< INÍCIO DA ALTERAÇÃO >>>
+    indisponibilidades_hoje_query = VeiculoIndisponibilidade.query.filter(
         VeiculoIndisponibilidade.data_inicio <= hoje, 
         or_(VeiculoIndisponibilidade.data_fim >= hoje, VeiculoIndisponibilidade.data_fim == None)
-    ).all()}
+    ).all()
+    
+    indisponibilidades_hoje = {}
+    for ind in indisponibilidades_hoje_query:
+        # Se tipo_checklist for None (ou vazio), afeta ambos. Se tiver valor, afeta só o tipo específico.
+        afeta_diario = not ind.tipo_checklist or ind.tipo_checklist == 'DIÁRIO'
+        afeta_mensal = not ind.tipo_checklist or ind.tipo_checklist == 'MENSAL'
+        indisponibilidades_hoje[ind.veiculo_id] = {
+            'motivo': ind.motivo,
+            'afeta_diario': afeta_diario,
+            'afeta_mensal': afeta_mensal
+        }
+    # <<< FIM DA ALTERAÇÃO >>>
 
     preenchimentos_diarios_agrupados = defaultdict(list)
     if checklist_diario:
@@ -1192,40 +1205,48 @@ def acompanhamento_diario():
         motorista_atual = veiculo.motorista
         detalhe_motorista = f"Motorista: {motorista_atual.nome}" if motorista_atual else "Sem motorista"
 
-        if veiculo.id in indisponibilidades_hoje:
-            motivo = indisponibilidades_hoje[veiculo.id]
-            info['status_diario'] = {'status': 'Indisponível', 'detalhe': motivo, 'classe_css': 'table-secondary'}
-            info['status_mensal'] = {'status': 'Indisponível', 'detalhe': motivo, 'classe_css': 'table-secondary'}
-        else:
-            if checklist_diario:
-                if veiculo.id in preenchimentos_diarios_agrupados:
-                    regs = preenchimentos_diarios_agrupados[veiculo.id]
-                    ultimo_reg = regs[-1]
-                    hora_local = ultimo_reg.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz).strftime('%H:%M')
-                    detalhe = f"por {ultimo_reg.motorista.nome} às {hora_local}" + (f" ({len(regs)} regs)" if len(regs) > 1 else "")
-                    info['status_diario'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success'}
-                elif motorista_atual and motorista_atual.id in isencoes_diario:
-                    info['status_diario'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_diario[motorista_atual.id]})", 'classe_css': 'table-light'}
-                else:
-                    info['status_diario'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger'}
-            
-            if checklist_mensal:
-                if veiculo.id in preenchimentos_mensais_agrupados:
-                    regs = preenchimentos_mensais_agrupados[veiculo.id]
-                    ultimo_reg = regs[-1]
-                    data_local = ultimo_reg.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz).strftime('%d/%m')
-                    detalhe = f"por {ultimo_reg.motorista.nome} em {data_local}" + (f" ({len(regs)} regs)" if len(regs) > 1 else "")
-                    info['status_mensal'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success'}
-                elif motorista_atual and motorista_atual.id in isencoes_mensal:
-                    info['status_mensal'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_mensal[motorista_atual.id]})", 'classe_css': 'table-light'}
-                else:
-                    info['status_mensal'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger'}
+        # <<< INÍCIO DA ALTERAÇÃO >>>
+        indisponibilidade = indisponibilidades_hoje.get(veiculo.id)
+
+        # Status DIÁRIO
+        if checklist_diario:
+            if indisponibilidade and indisponibilidade['afeta_diario']:
+                info['status_diario'] = {'status': 'Indisponível', 'detalhe': indisponibilidade['motivo'], 'classe_css': 'table-secondary'}
+            elif veiculo.id in preenchimentos_diarios_agrupados:
+                regs = preenchimentos_diarios_agrupados[veiculo.id]
+                ultimo_reg = regs[-1]
+                hora_local = ultimo_reg.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz).strftime('%H:%M')
+                detalhe = f"por {ultimo_reg.motorista.nome} às {hora_local}" + (f" ({len(regs)} regs)" if len(regs) > 1 else "")
+                info['status_diario'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success'}
+            elif motorista_atual and motorista_atual.id in isencoes_diario:
+                info['status_diario'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_diario[motorista_atual.id]})", 'classe_css': 'table-light'}
+            else:
+                info['status_diario'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger'}
+        
+        # Status MENSAL
+        if checklist_mensal:
+            if indisponibilidade and indisponibilidade['afeta_mensal']:
+                info['status_mensal'] = {'status': 'Indisponível', 'detalhe': indisponibilidade['motivo'], 'classe_css': 'table-secondary'}
+            elif veiculo.id in preenchimentos_mensais_agrupados:
+                regs = preenchimentos_mensais_agrupados[veiculo.id]
+                ultimo_reg = regs[-1]
+                data_local = ultimo_reg.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz).strftime('%d/%m')
+                detalhe = f"por {ultimo_reg.motorista.nome} em {data_local}" + (f" ({len(regs)} regs)" if len(regs) > 1 else "")
+                info['status_mensal'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success'}
+            elif motorista_atual and motorista_atual.id in isencoes_mensal:
+                info['status_mensal'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_mensal[motorista_atual.id]})", 'classe_css': 'table-light'}
+            else:
+                info['status_mensal'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger'}
+        # <<< FIM DA ALTERAÇÃO >>>
         
         veiculos_status.append(info)
 
     # --- 5. PREPARA DADOS PARA FORMULÁRIOS E RENDERIZA ---
     veiculos_para_formulario = veiculos_query.order_by(Veiculo.nome_conjunto).all()
     motoristas_para_formulario = motoristas_query.order_by(Motorista.nome).all()
+
+    tipos_checklist_query = db.session.query(Checklist.tipo).distinct().all()
+    tipos_checklist = sorted([tipo[0] for tipo in tipos_checklist_query])
 
     return render_template(
         'admin_acompanhamento_diario.html',
@@ -1234,8 +1255,10 @@ def acompanhamento_diario():
         checklist_mensal=checklist_mensal,
         data_hoje=hoje,
         veiculos_para_formulario=veiculos_para_formulario,
-        motoristas_para_formulario=motoristas_para_formulario
+        motoristas_para_formulario=motoristas_para_formulario,
+        tipos_checklist=tipos_checklist
     )
+
 
 
 
@@ -1250,6 +1273,8 @@ def registrar_indisponibilidade():
     data_inicio_str = request.form.get('data_inicio')
     data_fim_str = request.form.get('data_fim')
     motivo = request.form.get('motivo')
+    tipo_checklist = request.form.get('tipo_checklist')
+
 
     if not all([veiculo_id, data_inicio_str, motivo]):
         flash('Veículo, data de início e motivo são obrigatórios.', 'danger')
@@ -1273,14 +1298,14 @@ def registrar_indisponibilidade():
         data_inicio=data_inicio,
         data_fim=data_fim,
         motivo=motivo,
-        usuario_id=user_id
+        usuario_id=user_id,
+        tipo_checklist=tipo_checklist if tipo_checklist else None
     )
     db.session.add(nova_indisponibilidade)
     db.session.commit()
     
     flash('Indisponibilidade do veículo registrada com sucesso!', 'success')
     return redirect(url_for('admin.acompanhamento_diario'))
-
 
 # ROTA PARA REGISTRAR ISENÇÃO DE MOTORISTA (COM PERÍODO)
 

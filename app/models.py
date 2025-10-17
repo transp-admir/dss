@@ -228,6 +228,7 @@ class VeiculoIndisponibilidade(db.Model):
     data_inicio = db.Column(db.Date, nullable=False, default=date.today)
     data_fim = db.Column(db.Date, nullable=True)
     motivo = db.Column(db.Text, nullable=False)
+    tipo_checklist = db.Column(db.String(50), nullable=True)
     veiculo_id = db.Column(db.Integer, db.ForeignKey('veiculo.id'), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
