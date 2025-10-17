@@ -1104,99 +1104,126 @@ def acompanhamento_diario():
     brt_tz = timezone(timedelta(hours=-3))
     utc_tz = timezone.utc
 
-    checklist_diario_query = Checklist.query.filter(Checklist.tipo == 'DIÁRIO', Checklist.ativo == True)
-    if user_role != 'admin':
-        checklist_diario_query = checklist_diario_query.filter(or_(Checklist.unidade == user_unidade, Checklist.unidade == None))
-    checklist_diario = checklist_diario_query.order_by(Checklist.data.desc()).first()
+    # --- 1. BUSCA OS CHECKLISTS ATIVOS (DIÁRIO E MENSAL) ---
+    def get_active_checklist(tipo):
+        query = Checklist.query.filter(Checklist.tipo == tipo, Checklist.ativo == True)
+        if user_role != 'admin':
+            query = query.filter(or_(Checklist.unidade == user_unidade, Checklist.unidade == None))
+        return query.order_by(Checklist.data.desc()).first()
 
-    if not checklist_diario:
-        flash('Nenhum checklist "DIÁRIO" ativo foi configurado para sua unidade.', 'warning')
-        return render_template('admin_acompanhamento_diario.html', veiculos_status=[], data_hoje=hoje)
+    checklist_diario = get_active_checklist('DIÁRIO')
+    checklist_mensal = get_active_checklist('MENSAL')
 
+    # --- 2. BUSCA OS VEÍCULOS (ATIVOS E INATIVOS COM REGISTRO HOJE) ---
     veiculos_query = Veiculo.query
     motoristas_query = Motorista.query
     if user_role != 'admin':
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
         motoristas_query = motoristas_query.filter(Motorista.unidade == user_unidade)
 
-    # --- LÓGICA CORRIGIDA PARA PEGAR VEÍCULOS ---
-    start_of_today_brt = datetime.combine(hoje, datetime.min.time(), tzinfo=brt_tz)
-    end_of_today_brt = datetime.combine(hoje, datetime.max.time(), tzinfo=brt_tz)
-    start_of_today_utc = start_of_today_brt.astimezone(utc_tz)
-    end_of_today_utc = end_of_today_brt.astimezone(utc_tz)
+    start_of_today_utc = datetime.combine(hoje, datetime.min.time(), tzinfo=brt_tz).astimezone(utc_tz)
+    end_of_today_utc = datetime.combine(hoje, datetime.max.time(), tzinfo=brt_tz).astimezone(utc_tz)
+    
+    veiculo_ids_com_preenchimento_diario = set()
+    if checklist_diario:
+        veiculo_ids_com_preenchimento_diario = {p.veiculo_id for p in ChecklistPreenchido.query.filter(
+            ChecklistPreenchido.checklist_id == checklist_diario.id,
+            ChecklistPreenchido.data_preenchimento.between(start_of_today_utc, end_of_today_utc)
+        ).all()}
 
-    preenchimentos_brutos_hoje = ChecklistPreenchido.query.filter(
-        ChecklistPreenchido.checklist_id == checklist_diario.id,
-        ChecklistPreenchido.data_preenchimento.between(start_of_today_utc, end_of_today_utc)
-    ).all()
-
-    veiculo_ids_com_preenchimento = {p.veiculo_id for p in preenchimentos_brutos_hoje}
-
-    # 1. Pega todos os veículos ATIVOS
     veiculos_ativos = veiculos_query.filter(Veiculo.ativo == True).all()
-    # 2. Pega todos os veículos INATIVOS que tiveram checklist preenchido hoje
     veiculos_inativos_com_registro = veiculos_query.filter(
         Veiculo.ativo == False,
-        Veiculo.id.in_(veiculo_ids_com_preenchimento)
+        Veiculo.id.in_(veiculo_ids_com_preenchimento_diario)
     ).all()
 
-    # 3. Combina as duas listas, sem duplicatas, para exibir tudo
     veiculos_para_exibir_map = {v.id: v for v in veiculos_ativos}
     for v in veiculos_inativos_com_registro:
         if v.id not in veiculos_para_exibir_map:
             veiculos_para_exibir_map[v.id] = v
-    
     veiculos_para_exibir = sorted(veiculos_para_exibir_map.values(), key=lambda v: v.nome_conjunto)
-    # --- FIM DA LÓGICA CORRIGIDA ---
 
+    # --- 3. COLETA DADOS DE STATUS (DIÁRIO, MENSAL, INDISPONIBILIDADE, ISENÇÃO) ---
     indisponibilidades_hoje = {ind.veiculo_id: ind.motivo for ind in VeiculoIndisponibilidade.query.filter(
         VeiculoIndisponibilidade.data_inicio <= hoje, 
         or_(VeiculoIndisponibilidade.data_fim >= hoje, VeiculoIndisponibilidade.data_fim == None)
     ).all()}
 
-    preenchimentos_agrupados = defaultdict(list)
-    for p in preenchimentos_brutos_hoje:
-        preenchimentos_agrupados[p.veiculo_id].append(p)
+    preenchimentos_diarios_agrupados = defaultdict(list)
+    if checklist_diario:
+        preenchimentos_diarios_brutos = ChecklistPreenchido.query.filter(
+            ChecklistPreenchido.checklist_id == checklist_diario.id,
+            ChecklistPreenchido.data_preenchimento.between(start_of_today_utc, end_of_today_utc)
+        ).order_by(ChecklistPreenchido.data_preenchimento.asc()).all()
+        for p in preenchimentos_diarios_brutos:
+            preenchimentos_diarios_agrupados[p.veiculo_id].append(p)
 
+    preenchimentos_mensais_agrupados = defaultdict(list)
+    if checklist_mensal:
+        start_of_month = hoje.replace(day=1)
+        next_month = start_of_month.replace(day=28) + timedelta(days=4)
+        end_of_month = next_month - timedelta(days=next_month.day)
+        start_of_month_utc = datetime.combine(start_of_month, datetime.min.time(), tzinfo=brt_tz).astimezone(utc_tz)
+        end_of_month_utc = datetime.combine(end_of_month, datetime.max.time(), tzinfo=brt_tz).astimezone(utc_tz)
+
+        preenchimentos_mensais_brutos = ChecklistPreenchido.query.filter(
+            ChecklistPreenchido.checklist_id == checklist_mensal.id,
+            ChecklistPreenchido.data_preenchimento.between(start_of_month_utc, end_of_month_utc)
+        ).order_by(ChecklistPreenchido.data_preenchimento.asc()).all()
+        for p in preenchimentos_mensais_brutos:
+            preenchimentos_mensais_agrupados[p.veiculo_id].append(p)
+
+    isencoes_diario = {i.motorista_id: i.motivo for i in MotoristaIsencao.query.filter_by(data=hoje, tipo_checklist='DIÁRIO').all()}
+    isencoes_mensal = {i.motorista_id: i.motivo for i in MotoristaIsencao.query.filter(
+        db.func.extract('year', MotoristaIsencao.data) == hoje.year,
+        db.func.extract('month', MotoristaIsencao.data) == hoje.month,
+        MotoristaIsencao.tipo_checklist == 'MENSAL'
+    ).all()}
+
+    # --- 4. MONTA A ESTRUTURA DE DADOS CORRETA PARA O TEMPLATE ---
     veiculos_status = []
-    for veiculo in veiculos_para_exibir: # Agora usa a lista combinada
-        status_info = {'veiculo': veiculo, 'status': 'Pendente', 'detalhe': '', 'classe_css': 'table-warning'}
+    for veiculo in veiculos_para_exibir:
+        info = {
+            'veiculo': veiculo,
+            'status_diario': {'status': 'N/A', 'detalhe': 'Não aplicável', 'classe_css': 'table-secondary'},
+            'status_mensal': {'status': 'N/A', 'detalhe': 'Não aplicável', 'classe_css': 'table-secondary'}
+        }
+
+        motorista_atual = veiculo.motorista
+        detalhe_motorista = f"Motorista: {motorista_atual.nome}" if motorista_atual else "Sem motorista"
 
         if veiculo.id in indisponibilidades_hoje:
-            status_info.update({'status': 'Indisponível', 'detalhe': indisponibilidades_hoje[veiculo.id], 'classe_css': 'table-secondary'})
-        
-        elif veiculo.id in preenchimentos_agrupados:
-            registros = preenchimentos_agrupados[veiculo.id]
-            ultimo_registro = registros[-1]
-            
-            hora_utc = ultimo_registro.data_preenchimento.replace(tzinfo=utc_tz)
-            hora_local = hora_utc.astimezone(brt_tz).strftime('%H:%M')
-            
-            detalhe_texto = f"por {ultimo_registro.motorista.nome} às {hora_local}"
-            
-            if len(registros) > 1:
-                detalhe_texto += f" ({len(registros)} registros)"
-
-            status_info.update({'status': 'Preenchido', 'detalhe': detalhe_texto, 'classe_css': 'table-success'})
-        
-        elif not veiculo.ativo: # Se é um veículo inativo sem preenchimento, não exibe
-            continue
-
+            motivo = indisponibilidades_hoje[veiculo.id]
+            info['status_diario'] = {'status': 'Indisponível', 'detalhe': motivo, 'classe_css': 'table-secondary'}
+            info['status_mensal'] = {'status': 'Indisponível', 'detalhe': motivo, 'classe_css': 'table-secondary'}
         else:
-            motorista_atual = veiculo.motorista
-            detalhe_texto = f"Motorista: {motorista_atual.nome}" if motorista_atual else "Sem motorista"
-            isencao_motivo = None
-            if motorista_atual:
-                isencao = MotoristaIsencao.query.filter_by(motorista_id=motorista_atual.id, data=hoje, tipo_checklist='DIÁRIO').first()
-                if isencao: isencao_motivo = isencao.motivo
+            if checklist_diario:
+                if veiculo.id in preenchimentos_diarios_agrupados:
+                    regs = preenchimentos_diarios_agrupados[veiculo.id]
+                    ultimo_reg = regs[-1]
+                    hora_local = ultimo_reg.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz).strftime('%H:%M')
+                    detalhe = f"por {ultimo_reg.motorista.nome} às {hora_local}" + (f" ({len(regs)} regs)" if len(regs) > 1 else "")
+                    info['status_diario'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success'}
+                elif motorista_atual and motorista_atual.id in isencoes_diario:
+                    info['status_diario'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_diario[motorista_atual.id]})", 'classe_css': 'table-light'}
+                else:
+                    info['status_diario'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger'}
+            
+            if checklist_mensal:
+                if veiculo.id in preenchimentos_mensais_agrupados:
+                    regs = preenchimentos_mensais_agrupados[veiculo.id]
+                    ultimo_reg = regs[-1]
+                    data_local = ultimo_reg.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz).strftime('%d/%m')
+                    detalhe = f"por {ultimo_reg.motorista.nome} em {data_local}" + (f" ({len(regs)} regs)" if len(regs) > 1 else "")
+                    info['status_mensal'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success'}
+                elif motorista_atual and motorista_atual.id in isencoes_mensal:
+                    info['status_mensal'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_mensal[motorista_atual.id]})", 'classe_css': 'table-light'}
+                else:
+                    info['status_mensal'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger'}
+        
+        veiculos_status.append(info)
 
-            if isencao_motivo:
-                 status_info.update({'status': 'Isento', 'detalhe': f"{detalhe_texto} ({isencao_motivo})", 'classe_css': 'table-light'})
-            else:
-                status_info.update({'status': 'Pendente', 'detalhe': detalhe_texto, 'classe_css': 'table-danger'})
-
-        veiculos_status.append(status_info)
-
+    # --- 5. PREPARA DADOS PARA FORMULÁRIOS E RENDERIZA ---
     veiculos_para_formulario = veiculos_query.order_by(Veiculo.nome_conjunto).all()
     motoristas_para_formulario = motoristas_query.order_by(Motorista.nome).all()
 
@@ -1204,10 +1231,12 @@ def acompanhamento_diario():
         'admin_acompanhamento_diario.html',
         veiculos_status=veiculos_status,
         checklist_diario=checklist_diario,
+        checklist_mensal=checklist_mensal,
         data_hoje=hoje,
         veiculos_para_formulario=veiculos_para_formulario,
         motoristas_para_formulario=motoristas_para_formulario
     )
+
 
 
 

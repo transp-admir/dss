@@ -1,12 +1,13 @@
 {% extends "base_adm.html" %}
 
-{% block title %}Acompanhamento de Checklists Diários{% endblock %}
+{% block title %}Acompanhamento de Checklists{% endblock %}
 
 {% block header %}
 Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
-{% if checklist_diario %}
-    <span class="fs-6 text-muted fw-normal">(Referência: Checklist {{ checklist_diario.codigo }})</span>
-{% endif %}
+<span class="fs-6 text-muted fw-normal">
+    {% if checklist_diario %} (Diário: {{ checklist_diario.codigo }}) {% endif %}
+    {% if checklist_mensal %} (Mensal: {{ checklist_mensal.codigo }}) {% endif %}
+</span>
 {% endblock %}
 
 {% block content %}
@@ -31,12 +32,12 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                     <h6 class="m-0 font-weight-bold text-primary">Status dos Veículos Hoje</h6>
                 </div>
                 <div class="card-body">
-                    {% if not checklist_diario %}
+                    {% if not checklist_diario and not checklist_mensal %}
                         <div class="alert alert-warning" role="alert">
                           <h4 class="alert-heading">Atenção!</h4>
-                          <p>Não foi encontrado nenhum checklist do tipo <strong>DIÁRIO</strong> que esteja <strong>ATIVO</strong> no sistema para sua unidade.</p>
+                          <p>Não foi encontrado nenhum checklist do tipo <strong>DIÁRIO</strong> ou <strong>MENSAL</strong> que esteja <strong>ATIVO</strong> no sistema para sua unidade.</p>
                           <hr>
-                          <p class="mb-0">Para que o acompanhamento funcione, por favor, <a href="{{ url_for('admin.checklists') }}" class="alert-link">crie ou ative um checklist diário</a>.</p>
+                          <p class="mb-0">Para que o acompanhamento funcione, por favor, <a href="{{ url_for('admin.checklists') }}" class="alert-link">crie ou ative os checklists</a>.</p>
                         </div>
                     {% elif veiculos_status %}
                         <div class="table-responsive">
@@ -44,16 +45,26 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                                 <thead>
                                     <tr>
                                         <th>Veículo (Conjunto)</th>
-                                        <th class="text-center">Status</th>
-                                        <th>Detalhe</th>
+                                        <th class="text-center">Status Checklist Diário</th>
+                                        <th class="text-center">Status Checklist Mensal</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for item in veiculos_status %}
-                                        <tr class="{{ item.classe_css }}">
-                                            <td><strong>{{ item.veiculo.nome_conjunto }}</strong></td>
-                                            <td class="text-center"><strong>{{ item.status }}</strong></td>
-                                            <td>{{ item.detalhe }}</td>
+                                        <tr>
+                                            <td class="align-middle"><strong>{{ item.veiculo.nome_conjunto }}</strong></td>
+                                            
+                                            {# --- Célula para o Status Diário --- #}
+                                            <td class="{{ item.status_diario.classe_css }} align-middle text-center">
+                                                <div class="fw-bold">{{ item.status_diario.status }}</div>
+                                                <small class="text-muted">{{ item.status_diario.detalhe }}</small>
+                                            </td>
+                                
+                                            {# --- Célula para o Status Mensal --- #}
+                                            <td class="{{ item.status_mensal.classe_css }} align-middle text-center">
+                                                <div class="fw-bold">{{ item.status_mensal.status }}</div>
+                                                <small class="text-muted">{{ item.status_mensal.detalhe }}</small>
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                 </tbody>
@@ -66,28 +77,55 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
             </div>
         </div>
 
-        <!-- Card Lateral: Resumo de Pendentes -->
+        <!-- Card Lateral: Resumos de Pendentes -->
         <div class="col-lg-4">
+            <!-- Card para Pendências Diárias -->
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Resumo de Pendências</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">Resumo de Pendências (Diário)</h6>
                 </div>
                 <div class="card-body">
-                    {% set pendentes = veiculos_status | selectattr('status', 'equalto', 'Pendente') | list %}
-                    {% if pendentes %}
-                        <p><strong>{{ pendentes|length }} veículo(s) com preenchimento pendente hoje:</strong></p>
+                    {% set pendentes_diario = veiculos_status | selectattr('status_diario.status', 'equalto', 'Pendente') | list %}
+                    {% if pendentes_diario %}
+                        <p><strong>{{ pendentes_diario|length }} veículo(s) com preenchimento DIÁRIO pendente:</strong></p>
                         <ul class="list-group">
-                            {% for item in pendentes %}
+                            {% for item in pendentes_diario %}
                             <li class="list-group-item list-group-item-danger">
                                 <strong>{{ item.veiculo.nome_conjunto }}</strong>
-                                <br><small class="text-muted">{{ item.detalhe }}</small>
+                                <br><small class="text-muted">{{ item.status_diario.detalhe }}</small>
                             </li>
                             {% endfor %}
                         </ul>
                     {% else %}
                         <div class="alert alert-success text-center">
                             <i class="fas fa-check-circle fa-2x mb-2"></i>
-                            <p class="mb-0">Parabéns! Não há nenhuma pendência de checklist para hoje.</p>
+                            <p class="mb-0">Parabéns! Não há pendências de checklist DIÁRIO.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Card para Pendências Mensais -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Resumo de Pendências (Mensal)</h6>
+                </div>
+                <div class="card-body">
+                    {% set pendentes_mensal = veiculos_status | selectattr('status_mensal.status', 'equalto', 'Pendente') | list %}
+                    {% if pendentes_mensal %}
+                        <p><strong>{{ pendentes_mensal|length }} veículo(s) com preenchimento MENSAL pendente:</strong></p>
+                        <ul class="list-group">
+                            {% for item in pendentes_mensal %}
+                            <li class="list-group-item list-group-item-warning">
+                                <strong>{{ item.veiculo.nome_conjunto }}</strong>
+                                <br><small class="text-muted">{{ item.status_mensal.detalhe }}</small>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="alert alert-success text-center">
+                            <i class="fas fa-check-circle fa-2x mb-2"></i>
+                            <p class="mb-0">Parabéns! Todos os checklists MENSAIS estão em dia.</p>
                         </div>
                     {% endif %}
                 </div>
@@ -96,7 +134,7 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
     </div>
 </div>
 
-<!-- MODAL: Declarar Veículo Indisponível (CORRIGIDO) -->
+<!-- MODAL: Declarar Veículo Indisponível -->
 <div class="modal fade" id="modalIndisponibilidade" tabindex="-1" aria-labelledby="modalIndisponibilidadeLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -140,7 +178,7 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
     </div>
 </div>
 
-<!-- MODAL: Liberar Motorista(s) do Checklist (UNIFICADO) -->
+<!-- MODAL: Liberar Motorista(s) do Checklist -->
 <div class="modal fade" id="modalIsencaoMotorista" tabindex="-1" aria-labelledby="modalIsencaoMotoristaLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -152,14 +190,18 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                 <div class="modal-body">
                     <p class="small text-muted">Use para liberar um ou todos os motoristas por um período (ex: feriado, atestado).</p>
                     
-                    <!-- Campo escondido para enviar o tipo de checklist. Nesta página, será sempre DIÁRIO -->
-                    <input type="hidden" name="tipo_checklist" value="DIÁRIO">
+                    <div class="mb-3">
+                        <label for="tipo_checklist_isencao" class="form-label">Tipo de Checklist</label>
+                        <select class="form-select" name="tipo_checklist" id="tipo_checklist_isencao" required>
+                            <option value="DIÁRIO">Diário</option>
+                            <option value="MENSAL">Mensal</option>
+                        </select>
+                    </div>
 
                     <div class="mb-3">
                         <label for="motorista_id_isencao" class="form-label">Motorista</label>
                         <select class="form-select" id="motorista_id_isencao" name="motorista_id" required>
                             <option value="" disabled selected>Selecione um motorista...</option>
-                            <!-- Apenas Master ou Admin podem liberar todos de uma vez -->
                             {% if session.get('role') in ['admin', 'master'] %}
                                 <option value="todos">-- TODOS OS MOTORISTAS DA UNIDADE --</option>
                             {% endif %}
@@ -170,8 +212,7 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                     </div>
                      <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="data_inicio_isencao" class="form-label">Data de Início</label>
-                            <input type="date" class="form-control" id="data_inicio_isencao" name="data_inicio" required>
+                            <label for="data_inicio_isencao" class="form-label">Data de Início</label>                            <input type="date" class="form-control" id="data_inicio_isencao" name="data_inicio" required>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="data_fim_isencao" class="form-label">Data Final</label>
