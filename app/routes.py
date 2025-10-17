@@ -141,21 +141,19 @@ def salvar_config_unidade():
 def trocar_veiculo():
     """
     Processa a troca ou a primeira vinculação de um conjunto para o motorista,
-    respeitando a configuração da unidade (NENHUMA, UNIDADE, OPERACAO).
+    respeitando a configuração da unidade e garantindo a integridade do banco de dados.
     """
     if 'motorista_id' not in session:
         return redirect(url_for('main.motorista_login'))
 
     motorista_atual = Motorista.query.get(session['motorista_id'])
     
-    # --- Verificação de Permissão (Atualizada) ---
     config_unidade = UnidadeConfig.query.filter_by(unidade=motorista_atual.unidade).first()
     permissao = config_unidade.motorista_pode_trocar_veiculo if config_unidade else 'NENHUMA'
 
     if permissao == 'NENHUMA':
         flash('A troca de veículo não está permitida para sua unidade. Fale com o administrador.', 'danger')
         return redirect(url_for('main.lista_checklists_motorista'))
-    # --- Fim da Verificação ---
 
     novo_veiculo_id = request.form.get('veiculo_id')
 
@@ -168,7 +166,6 @@ def trocar_veiculo():
         flash('Conjunto selecionado é inválido.', 'danger')
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    # --- Validação Adicional com Base na Permissão ---
     if permissao == 'UNIDADE' and motorista_atual.unidade != novo_veiculo.unidade:
         flash(f'Você só tem permissão para se vincular a conjuntos da sua unidade ({motorista_atual.unidade}).', 'danger')
         return redirect(url_for('main.lista_checklists_motorista'))
@@ -176,16 +173,23 @@ def trocar_veiculo():
     if permissao == 'OPERACAO' and motorista_atual.operacao != novo_veiculo.operacao:
         flash(f'Você só tem permissão para se vincular a conjuntos da sua operação ({motorista_atual.operacao}).', 'danger')
         return redirect(url_for('main.lista_checklists_motorista'))
-    # --- Fim da Validação Adicional ---
 
+    # --- LÓGICA DE TROCA CORRIGIDA ---
+
+    # 1. Libera o conjunto novo, se ele estiver ocupado por outro motorista.
     motorista_antigo = novo_veiculo.motorista
     if motorista_antigo and motorista_antigo.id != motorista_atual.id:
         motorista_antigo.veiculo_id = None
         db.session.add(motorista_antigo)
+        db.session.commit() # SALVA a liberação antes de continuar.
         flash(f'O conjunto {novo_veiculo.nome_conjunto} foi desvinculado do motorista anterior.', 'info')
 
+    # 2. Atribui o conjunto (agora livre) ao motorista atual.
     motorista_atual.veiculo_id = novo_veiculo.id
-    db.session.commit()
+    db.session.add(motorista_atual)
+    db.session.commit() # SALVA a nova atribuição.
+    
+    # --- FIM DA CORREÇÃO ---
 
     flash(f'Você agora está vinculado ao conjunto {novo_veiculo.nome_conjunto}.', 'success')
     return redirect(url_for('main.lista_checklists_motorista'))
@@ -1097,7 +1101,6 @@ def acompanhamento_diario():
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
-    # --- DEFINIÇÃO DOS FUSOS HORÁRIOS ---
     brt_tz = timezone(timedelta(hours=-3))
     utc_tz = timezone.utc
 
@@ -1106,55 +1109,93 @@ def acompanhamento_diario():
         checklist_diario_query = checklist_diario_query.filter(or_(Checklist.unidade == user_unidade, Checklist.unidade == None))
     checklist_diario = checklist_diario_query.order_by(Checklist.data.desc()).first()
 
+    if not checklist_diario:
+        flash('Nenhum checklist "DIÁRIO" ativo foi configurado para sua unidade.', 'warning')
+        return render_template('admin_acompanhamento_diario.html', veiculos_status=[], data_hoje=hoje)
+
     veiculos_query = Veiculo.query
     motoristas_query = Motorista.query
     if user_role != 'admin':
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
         motoristas_query = motoristas_query.filter(Motorista.unidade == user_unidade)
+
+    # --- LÓGICA CORRIGIDA PARA PEGAR VEÍCULOS ---
+    start_of_today_brt = datetime.combine(hoje, datetime.min.time(), tzinfo=brt_tz)
+    end_of_today_brt = datetime.combine(hoje, datetime.max.time(), tzinfo=brt_tz)
+    start_of_today_utc = start_of_today_brt.astimezone(utc_tz)
+    end_of_today_utc = end_of_today_brt.astimezone(utc_tz)
+
+    preenchimentos_brutos_hoje = ChecklistPreenchido.query.filter(
+        ChecklistPreenchido.checklist_id == checklist_diario.id,
+        ChecklistPreenchido.data_preenchimento.between(start_of_today_utc, end_of_today_utc)
+    ).all()
+
+    veiculo_ids_com_preenchimento = {p.veiculo_id for p in preenchimentos_brutos_hoje}
+
+    # 1. Pega todos os veículos ATIVOS
+    veiculos_ativos = veiculos_query.filter(Veiculo.ativo == True).all()
+    # 2. Pega todos os veículos INATIVOS que tiveram checklist preenchido hoje
+    veiculos_inativos_com_registro = veiculos_query.filter(
+        Veiculo.ativo == False,
+        Veiculo.id.in_(veiculo_ids_com_preenchimento)
+    ).all()
+
+    # 3. Combina as duas listas, sem duplicatas, para exibir tudo
+    veiculos_para_exibir_map = {v.id: v for v in veiculos_ativos}
+    for v in veiculos_inativos_com_registro:
+        if v.id not in veiculos_para_exibir_map:
+            veiculos_para_exibir_map[v.id] = v
     
-    veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
-    
+    veiculos_para_exibir = sorted(veiculos_para_exibir_map.values(), key=lambda v: v.nome_conjunto)
+    # --- FIM DA LÓGICA CORRIGIDA ---
+
+    indisponibilidades_hoje = {ind.veiculo_id: ind.motivo for ind in VeiculoIndisponibilidade.query.filter(
+        VeiculoIndisponibilidade.data_inicio <= hoje, 
+        or_(VeiculoIndisponibilidade.data_fim >= hoje, VeiculoIndisponibilidade.data_fim == None)
+    ).all()}
+
+    preenchimentos_agrupados = defaultdict(list)
+    for p in preenchimentos_brutos_hoje:
+        preenchimentos_agrupados[p.veiculo_id].append(p)
+
     veiculos_status = []
-    if checklist_diario:
-        # --- CORREÇÃO DA CONSULTA POR DATA PARA CONSIDERAR O FUSO HORÁRIO ---
-        start_of_today_brt = datetime.combine(hoje, datetime.min.time(), tzinfo=brt_tz)
-        end_of_today_brt = datetime.combine(hoje, datetime.max.time(), tzinfo=brt_tz)
-        start_of_today_utc = start_of_today_brt.astimezone(utc_tz)
-        end_of_today_utc = end_of_today_brt.astimezone(utc_tz)
+    for veiculo in veiculos_para_exibir: # Agora usa a lista combinada
+        status_info = {'veiculo': veiculo, 'status': 'Pendente', 'detalhe': '', 'classe_css': 'table-warning'}
 
-        indisponibilidades_hoje = {ind.veiculo_id: ind.motivo for ind in VeiculoIndisponibilidade.query.filter(VeiculoIndisponibilidade.data_inicio <= hoje, or_(VeiculoIndisponibilidade.data_fim >= hoje, VeiculoIndisponibilidade.data_fim == None)).all()}
-        isencoes_hoje = {isen.motorista_id: isen.motivo for isen in MotoristaIsencao.query.filter(MotoristaIsencao.data == hoje, MotoristaIsencao.tipo_checklist == 'DIÁRIO').all()}
+        if veiculo.id in indisponibilidades_hoje:
+            status_info.update({'status': 'Indisponível', 'detalhe': indisponibilidades_hoje[veiculo.id], 'classe_css': 'table-secondary'})
         
-        preenchimentos_hoje = {
-            p.veiculo_id: p for p in ChecklistPreenchido.query.filter(
-                ChecklistPreenchido.checklist_id == checklist_diario.id,
-                ChecklistPreenchido.data_preenchimento.between(start_of_today_utc, end_of_today_utc)
-            ).all()
-        }
+        elif veiculo.id in preenchimentos_agrupados:
+            registros = preenchimentos_agrupados[veiculo.id]
+            ultimo_registro = registros[-1]
+            
+            hora_utc = ultimo_registro.data_preenchimento.replace(tzinfo=utc_tz)
+            hora_local = hora_utc.astimezone(brt_tz).strftime('%H:%M')
+            
+            detalhe_texto = f"por {ultimo_registro.motorista.nome} às {hora_local}"
+            
+            if len(registros) > 1:
+                detalhe_texto += f" ({len(registros)} registros)"
 
-        for veiculo in veiculos:
-            status_info = {'veiculo': veiculo, 'status': 'Pendente', 'detalhe': '', 'classe_css': 'table-warning'}
-            if veiculo.id in indisponibilidades_hoje:
-                status_info.update({'status': 'Indisponível', 'detalhe': indisponibilidades_hoje[veiculo.id], 'classe_css': 'table-secondary'})
-            elif not veiculo.motorista:
-                status_info.update({'status': 'Sem Motorista', 'detalhe': 'Vincule um motorista ao veículo', 'classe_css': 'table-info'})
-            elif veiculo.id in preenchimentos_hoje:
-                preenchimento = preenchimentos_hoje[veiculo.id]
-                
-                # --- CORREÇÃO DA HORA PARA EXIBIÇÃO ---
-                hora_utc = preenchimento.data_preenchimento.replace(tzinfo=utc_tz)
-                hora_local = hora_utc.astimezone(brt_tz)
-                hora_local_str = hora_local.strftime('%H:%M')
-                
-                status_info.update({'status': 'Preenchido', 'detalhe': f"por {preenchimento.motorista.nome} às {hora_local_str}", 'classe_css': 'table-success'})
-            elif veiculo.motorista and veiculo.motorista.id in isencoes_hoje:
-                status_info.update({'status': 'Isento', 'detalhe': f"Motorista isento: {isencoes_hoje[veiculo.motorista.id]}", 'classe_css': 'table-light'})
+            status_info.update({'status': 'Preenchido', 'detalhe': detalhe_texto, 'classe_css': 'table-success'})
+        
+        elif not veiculo.ativo: # Se é um veículo inativo sem preenchimento, não exibe
+            continue
+
+        else:
+            motorista_atual = veiculo.motorista
+            detalhe_texto = f"Motorista: {motorista_atual.nome}" if motorista_atual else "Sem motorista"
+            isencao_motivo = None
+            if motorista_atual:
+                isencao = MotoristaIsencao.query.filter_by(motorista_id=motorista_atual.id, data=hoje, tipo_checklist='DIÁRIO').first()
+                if isencao: isencao_motivo = isencao.motivo
+
+            if isencao_motivo:
+                 status_info.update({'status': 'Isento', 'detalhe': f"{detalhe_texto} ({isencao_motivo})", 'classe_css': 'table-light'})
             else:
-                motorista_nome = veiculo.motorista.nome if veiculo.motorista else "N/A"
-                status_info.update({'status': 'Pendente', 'detalhe': f"Motorista: {motorista_nome}", 'classe_css': 'table-danger'})
-            veiculos_status.append(status_info)
-    else:
-        flash('Nenhum checklist "DIÁRIO" ativo foi configurado para sua unidade.', 'warning')
+                status_info.update({'status': 'Pendente', 'detalhe': detalhe_texto, 'classe_css': 'table-danger'})
+
+        veiculos_status.append(status_info)
 
     veiculos_para_formulario = veiculos_query.order_by(Veiculo.nome_conjunto).all()
     motoristas_para_formulario = motoristas_query.order_by(Motorista.nome).all()
@@ -1702,44 +1743,34 @@ def lista_checklists_motorista():
         
     motorista_unidade = motorista.unidade
     
-    # --- Lógica de Permissão de Troca (Atualizada) ---
     config = UnidadeConfig.query.filter_by(unidade=motorista_unidade).first()
-    # O valor da permissão agora é o texto 'NENHUMA', 'UNIDADE', ou 'OPERACAO'
     permissao_troca = config.motorista_pode_trocar_veiculo if config else 'NENHUMA'
     
     veiculos_para_troca = []
-    # Só busca veículos se a troca for permitida (não for 'NENHUMA')
     if permissao_troca != 'NENHUMA':
+        query_veiculos = Veiculo.query.filter_by(ativo=True)
         
-        query_veiculos = Veiculo.query # Query base
-        
-        # Filtra com base no nível da permissão
         if permissao_troca == 'UNIDADE':
             query_veiculos = query_veiculos.filter(Veiculo.unidade == motorista.unidade)
         elif permissao_troca == 'OPERACAO':
-            # Garante que o motorista e o veículo tenham uma operação definida
             if motorista.operacao:
                 query_veiculos = query_veiculos.filter(Veiculo.operacao == motorista.operacao)
             else:
-                query_veiculos = query_veiculos.filter(Veiculo.id == -1) # Retorna uma query vazia se o motorista não tem operação
+                query_veiculos = query_veiculos.filter(Veiculo.id == -1)
 
-        # Se o motorista já tem um veículo, exclui o próprio veículo da lista de opções de troca.
         if motorista.veiculo:
             query_veiculos = query_veiculos.filter(Veiculo.id != motorista.veiculo.id)
             
         veiculos_para_troca = query_veiculos.order_by(Veiculo.nome_conjunto).all()
 
-    # Se o motorista não tem veículo, ele é direcionado à tela de seleção
     if not motorista.veiculo:
         return render_template(
             'motorista_lista_checklists.html', 
             motorista_sem_veiculo=True,
             veiculos_disponiveis=veiculos_para_troca,
-            # Passa a permissão como string para o template
             troca_permitida=permissao_troca 
         )
 
-    # --- Lógica Padrão para Listar Checklists (inalterada) ---
     checklists = Checklist.query.filter(
         Checklist.ativo == True,
         Checklist.itens.any(),
@@ -1752,28 +1783,33 @@ def lista_checklists_motorista():
     for checklist in checklists:
         preenchido_no_periodo = False
         status_texto = "Pendente"
-        if checklist.tipo == 'DIÁRIO':
-            preenchimento = ChecklistPreenchido.query.filter(
+        
+        if motorista.veiculo:
+            q = ChecklistPreenchido.query.filter(
                 and_(
                     ChecklistPreenchido.motorista_id == motorista.id,
                     ChecklistPreenchido.checklist_id == checklist.id,
-                    db.func.date(ChecklistPreenchido.data_preenchimento) == hoje
+                    ChecklistPreenchido.veiculo_id == motorista.veiculo.id
                 )
-            ).first()
-            if preenchimento:
-                preenchido_no_periodo = True; status_texto = "Preenchido Hoje"
-        elif checklist.tipo == 'MENSAL':
-            preenchimento = ChecklistPreenchido.query.filter(
-                and_(
-                    ChecklistPreenchido.motorista_id == motorista.id,
-                    ChecklistPreenchido.checklist_id == checklist.id,
+            )
+            
+            if checklist.tipo == 'DIÁRIO':
+                preenchimento = q.filter(db.func.date(ChecklistPreenchido.data_preenchimento) == hoje).first()
+                # --- CORREÇÃO DO ERRO DE DIGITAÇÃO APLICADA AQUI ---
+                if preenchimento:
+                    preenchido_no_periodo = True
+                    status_texto = "Preenchido Hoje"
+            
+            elif checklist.tipo == 'MENSAL':
+                preenchimento = q.filter(
                     db.func.extract('year', ChecklistPreenchido.data_preenchimento) == hoje.year,
                     db.func.extract('month', ChecklistPreenchido.data_preenchimento) == hoje.month
-                )
-            ).first()
-            if preenchimento:
-                preenchido_no_periodo = True; status_texto = "Preenchido este Mês"
-        
+                ).first()
+                # --- CORREÇÃO DO ERRO DE DIGITAÇÃO APLICADA AQUI ---
+                if preenchimento:
+                    preenchido_no_periodo = True
+                    status_texto = "Preenchido este Mês"
+
         checklists_com_status.append({
             'checklist': checklist, 
             'preenchido': preenchido_no_periodo,
@@ -1786,9 +1822,9 @@ def lista_checklists_motorista():
         motorista_sem_veiculo=False,
         veiculo_atual=motorista.veiculo,
         veiculos_disponiveis=veiculos_para_troca, 
-        # Passa a permissão como string para o template
         troca_permitida=permissao_troca
     )
+
 
 
 @admin_bp.route('/checklists/<int:checklist_id>', methods=['GET'])
