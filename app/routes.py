@@ -2606,6 +2606,34 @@ def gerar_relatorio_pdf():
                         pdf.multi_cell(0, 5, f"Obs: {resposta_obj.observacao.encode('latin-1', 'replace').decode('latin-1')}", 1, 'L', 1)
                         pdf.set_font('Arial', '', 9)
                     item_counter += 1
+
+            # --- INÍCIO DA SEÇÃO DE EXTINTORES PARA O PDF ---
+            extintores_preenchidos = p.extintores_check.all()
+            if extintores_preenchidos:
+                pdf.ln(5) # Espaçamento
+                pdf.set_font('Arial', 'B', 10)
+                pdf.set_fill_color(224, 224, 224)
+                pdf.cell(0, 7, "Controle de Extintores", 1, 1, 'C', 1)
+
+                # Cabeçalho da tabela
+                pdf.set_font('Arial', 'B', 9)
+                pdf.cell(40, 7, 'Local', 1, 0, 'C', 1)
+                pdf.cell(20, 7, 'Tipo', 1, 0, 'C', 1)
+                pdf.cell(20, 7, 'Peso (KG)', 1, 0, 'C', 1)
+                pdf.cell(30, 7, 'Vencimento', 1, 0, 'C', 1)
+                pdf.cell(20, 7, 'Trocado?', 1, 0, 'C', 1)
+                pdf.cell(60, 7, 'Motivo da Troca', 1, 1, 'C', 1)
+                
+                # Corpo da tabela
+                pdf.set_font('Arial', '', 9)
+                for ext in extintores_preenchidos:
+                    pdf.cell(40, 6, (ext.local or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'L')
+                    pdf.cell(20, 6, (ext.tipo or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C')
+                    pdf.cell(20, 6, str(ext.peso or ''), 1, 0, 'C')
+                    pdf.cell(30, 6, ext.vencimento.strftime('%d/%m/%Y') if ext.vencimento else '', 1, 0, 'C')
+                    pdf.cell(20, 6, (ext.trocado or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C')
+                    pdf.cell(60, 6, (ext.motivo_troca or '').encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'L')
+            # --- FIM DA SEÇÃO DE EXTINTORES PARA O PDF ---
             
             altura_bloco_assinatura = 60
             if pdf.get_y() + altura_bloco_assinatura > pdf.page_break_trigger:
@@ -2622,7 +2650,7 @@ def gerar_relatorio_pdf():
             
             pdf.set_font('Arial', '', 9)
             if obs_text:
-                full_obs_text = "\n".join(obs_text)
+                full_obs_text = "\\n".join(obs_text)
                 pdf.multi_cell(0, 5, full_obs_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
             else:
                 pdf.cell(0, 8, "Nenhuma observação geral registrada.", 1, 1, 'C')

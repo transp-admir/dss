@@ -66,16 +66,13 @@
                 {% for veiculo_nome, datas in resultados.items() %}
                     <h4 class="mt-4 border-bottom pb-2">{{ veiculo_nome }}</h4>
                     {% for data, preenchimentos in datas.items() %}
-                        {# A data aqui já vem correta da rota, então não precisa de conversão #}
                         <h5 class="text-muted ms-3 mt-3">{{ data.strftime('%d/%m/%Y') }}</h5>
                         <ul class="list-group ms-3">
                             {% for p in preenchimentos %}
                                 <li class="list-group-item">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span>
-                                            <strong>{{ p.checklist.codigo }}</strong> ({{ p.checklist.tipo }}) - Preenchido por <strong>{{ p.motorista.nome }}</strong> às 
-                                            {# --- ESTA É A LINHA CORRIGIDA --- #}
-                                            <strong>{{ p.data_preenchimento_local.strftime('%H:%M') }}</strong>
+                                            <strong>{{ p.checklist.codigo }}</strong> ({{ p.checklist.tipo }}) - Preenchido por <strong>{{ p.motorista.nome }}</strong> às {{ p.data_preenchimento.strftime('%H:%M') }}
                                         </span>
                                         <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ p.id }}" aria-expanded="false" aria-controls="collapse-{{ p.id }}">
                                             Ver Detalhes
@@ -93,6 +90,40 @@
                                                     </li>
                                                 {% endfor %}
                                             </ul>
+
+                                            <!-- INÍCIO DO BLOCO DE EXTINTORES CORRIGIDO -->
+                                            {% if p.extintores_check %}
+                                            <hr>
+                                            <h6>Controle de Extintores:</h6>
+                                            <div class="table-responsive">
+                                                <table class="table table-bordered table-sm">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Local</th>
+                                                            <th>Tipo</th>
+                                                            <th>Peso (KG)</th>
+                                                            <th>Vencimento</th>
+                                                            <th>Trocado?</th>
+                                                            <th>Motivo da Troca</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for ext in p.extintores_check %}
+                                                        <tr>
+                                                            <td>{{ ext.local }}</td>
+                                                            <td>{{ ext.tipo }}</td>
+                                                            <td>{{ ext.peso }}</td>
+                                                            <td>{{ ext.vencimento.strftime('%d/%m/%Y') if ext.vencimento else '' }}</td>
+                                                            <td>{{ ext.trocado }}</td>
+                                                            <td>{{ ext.motivo_troca or '' }}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            {% endif %}
+                                            <!-- FIM DO BLOCO DE EXTINTORES CORRIGIDO -->
+
                                             <hr>
                                             <h6>Observações Gerais:</h6>
                                             <p><strong>Outros problemas:</strong> {{ p.outros_problemas or 'Nenhum' }}</p>
@@ -160,6 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
+            // Nota: a rota 'admin.gerar_relatorio_status_diario' será criada no próximo passo.
             const url = new URL("{{ url_for('admin.gerar_relatorio_status_diario') }}", window.location.origin);
             url.searchParams.set('veiculo_id', veiculoId);
             url.searchParams.set('data_inicio', dataInicio);
