@@ -176,7 +176,7 @@ class ChecklistPreenchido(db.Model):
     outros_problemas = db.Column(db.Text)
     solucoes_adotadas = db.Column(db.Text)
     pendencias_gerais = db.Column(db.Text)
-    
+    tempo_preenchimento = db.Column(db.Integer, nullable=True)    
     checklist = db.relationship('Checklist')
     veiculo = db.relationship('Veiculo')
     respostas = db.relationship('ChecklistResposta', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")

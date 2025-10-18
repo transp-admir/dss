@@ -4,10 +4,12 @@
 
 {% block header %}
 Dashboard
-{% if unidade_selecionada %}
-    <span class="badge bg-primary ms-2 fs-6 fw-normal">{{ unidade_selecionada }}</span>
+{% if unidade_selecionada or operacao_selecionada %}
+    <span class="badge bg-primary ms-2 fs-6 fw-normal">
+        {{ unidade_selecionada if unidade_selecionada else "Todas Unidades" }} / {{ operacao_selecionada if operacao_selecionada else "Todas Operações" }}
+    </span>
 {% else %}
-    <span class="badge bg-secondary ms-2 fs-6 fw-normal">Todas as Unidades</span>
+    <span class="badge bg-secondary ms-2 fs-6 fw-normal">Visão Geral</span>
 {% endif %}
 {% endblock %}
 
@@ -27,8 +29,20 @@ Dashboard
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
+                <label for="operacao" class="form-label fw-bold">Filtrar por Operação</label>
+                <select name="operacao" id="operacao" class="form-select" {% if not unidade_selecionada %}disabled{% endif %}>
+                    <option value="todas">Todas as Operações</option>
+                    {% for o in operacoes_disponiveis %}
+                        <option value="{{ o }}" {% if o == operacao_selecionada %}selected{% endif %}>{{ o }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
                 <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+            </div>
+             <div class="col-md-2">
+                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary w-100">Limpar</a>
             </div>
         </form>
     </div>
@@ -37,60 +51,63 @@ Dashboard
 
 {# --- SEÇÃO DE CARDS DE KPI --- #}
 <div class="row">
-    {# --- CARD DE ADESÃO DIÁRIA --- #}
-    <div class="col-xl-6 col-md-6 mb-4">
+    <!-- CARD UNIFICADO DE ADESÃO -->
+    <div class="col-12 mb-4">
         <div class="card h-100">
+            <div class="card-header py-3">
+                 <h6 class="m-0 fw-bold text-primary">Adesão Geral de Checklists</h6>
+            </div>
             <div class="card-body">
-                <div class="row no-gutters align-items-center">
+                <!-- Barra de Progresso Principal -->
+                <div class="row no-gutters align-items-center mb-3">
                     <div class="col me-2">
-                        <div class="text-xs fw-bold text-primary text-uppercase mb-1">Adesão Diária (Checklist - Hoje)</div>
                         <div class="row g-0 align-items-center mb-1">
                             <div class="col-auto">
-                                <div class="h5 mb-0 me-3 fw-bold text-dark">{{ '%.0f'|format(percentual_diario) }}%</div>
+                                <div class="h5 mb-0 me-3 fw-bold text-dark">{{ '%.0f'|format(percentual_geral) }}%</div>
                             </div>
                             <div class="col">
-                                {% set progress_color_diario = 'bg-success' if percentual_diario > 85 else ('bg-warning' if percentual_diario > 60 else 'bg-danger') %}
-                                <div class="progress" style="height: 1rem;">
-                                    <div class="progress-bar {{ progress_color_diario }}" role="progressbar" style="width: {{ percentual_diario }}%" aria-valuenow="{{ percentual_diario }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                {% set progress_color_geral = 'bg-success' if percentual_geral > 85 else ('bg-warning' if percentual_geral > 60 else 'bg-danger') %}
+                                <div class="progress" style="height: 1.2rem;">
+                                    <div class="progress-bar {{ progress_color_geral }}" role="progressbar" style="width: {{ percentual_geral }}%" aria-valuenow="{{ percentual_geral }}" aria-valuemin="0" aria-valuemax="100"></div>
                                 </div>
                             </div>
                         </div>
                         <div class="text-muted text-xs">
-                            <span>{{ checklists_diarios_hoje }} de {{ total_esperado_diario }} preenchidos</span>
+                            <span>Total: {{ checklists_gerais_preenchidos }} de {{ total_esperado_geral }} checklists esperados</span>
                         </div>
                     </div>
                     <div class="col-auto">
-                        <i class="fas fa-calendar-day fa-2x text-secondary"></i>
+                        <i class="fas fa-clipboard-check fa-2x text-secondary"></i>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
 
-    {# --- CARD DE ADESÃO MENSAL --- #}
-    <div class="col-xl-6 col-md-6 mb-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col me-2">
-                        <div class="text-xs fw-bold text-info text-uppercase mb-1">Adesão Mensal (Checklist - Mês)</div>
-                        <div class="row g-0 align-items-center mb-1">
-                            <div class="col-auto">
-                                <div class="h5 mb-0 me-3 fw-bold text-dark">{{ '%.0f'|format(percentual_mensal) }}%</div>
-                            </div>
-                            <div class="col">
-                                {% set progress_color_mensal = 'bg-success' if percentual_mensal > 85 else ('bg-warning' if percentual_mensal > 60 else 'bg-danger') %}
-                                <div class="progress" style="height: 1rem;">
-                                    <div class="progress-bar bg-info {{ progress_color_mensal }}" role="progressbar" style="width: {{ percentual_mensal }}%" aria-valuenow="{{ percentual_mensal }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                            </div>
+                <hr>
+
+                <!-- Detalhes de Adesão Diária e Mensal -->
+                <div class="row mt-3">
+                    <!-- Adesão Diária -->
+                    <div class="col-md-6 border-end-md">
+                        <div class="text-xs fw-bold text-primary text-uppercase mb-1">Adesão Diária (Hoje)</div>
+                        <div class="progress mb-1" style="height: 0.8rem;">
+                            {% set progress_color_diario = 'bg-primary' %}
+                            <div class="progress-bar {{ progress_color_diario }}" role="progressbar" style="width: {{ percentual_diario }}%" aria-valuenow="{{ percentual_diario }}" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
-                        <div class="text-muted text-xs">
-                            <span>{{ checklists_mensais_mes }} de {{ total_esperado_mensal }} preenchidos</span>
+                        <div class="d-flex justify-content-between text-muted text-xs">
+                            <span>{{ checklists_diarios_hoje }} / {{ total_esperado_diario }} preenchidos</span>
+                            <span>{{ '%.0f'|format(percentual_diario) }}%</span>
                         </div>
                     </div>
-                    <div class="col-auto">
-                        <i class="fas fa-calendar-alt fa-2x text-secondary"></i>
+                    <!-- Adesão Mensal -->
+                    <div class="col-md-6 mt-3 mt-md-0">
+                        <div class="text-xs fw-bold text-info text-uppercase mb-1">Adesão Mensal (Mês)</div>
+                        <div class="progress mb-1" style="height: 0.8rem;">
+                            {% set progress_color_mensal = 'bg-info' %}
+                            <div class="progress-bar {{ progress_color_mensal }}" role="progressbar" style="width: {{ percentual_mensal }}%" aria-valuenow="{{ percentual_mensal }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="d-flex justify-content-between text-muted text-xs">
+                            <span>{{ checklists_mensais_mes }} / {{ total_esperado_mensal }} preenchidos</span>
+                            <span>{{ '%.0f'|format(percentual_mensal) }}%</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -99,8 +116,39 @@ Dashboard
 </div>
 
 <div class="row mb-4">
+    {# --- CARDS DE TEMPO MÉDIO --- #}
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card h-100 py-2">
+            <div class="card-body">
+                <div class="row g-0 align-items-center">
+                    <div class="col">
+                        <div class="text-xs fw-bold text-secondary text-uppercase mb-1">Tempo Médio (Diário)</div>
+                        <div class="h5 mb-0 fw-bold text-dark">{{ tempo_medio_diario }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-clock fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card h-100 py-2">
+            <div class="card-body">
+                <div class="row g-0 align-items-center">
+                    <div class="col">
+                        <div class="text-xs fw-bold text-secondary text-uppercase mb-1">Tempo Médio (Mensal)</div>
+                        <div class="h5 mb-0 fw-bold text-dark">{{ tempo_medio_mensal }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-history fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     {# --- OUTROS CARDS --- #}
-    <div class="col-xl-4 col-md-6 mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
         <div class="card h-100 py-2">
             <div class="card-body">
                 <div class="row g-0 align-items-center">
@@ -115,7 +163,7 @@ Dashboard
             </div>
         </div>
     </div>
-    <div class="col-xl-4 col-md-6 mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
         <div class="card h-100 py-2">
             <div class="card-body">
                 <div class="row g-0 align-items-center">
@@ -130,28 +178,11 @@ Dashboard
             </div>
         </div>
     </div>
-    <div class="col-xl-4 col-md-6 mb-4">
-        <div class="card h-100 py-2">
-            <div class="card-body">
-                <div class="row g-0 align-items-center">
-                    <div class="col">
-                        <div class="text-xs fw-bold text-warning text-uppercase mb-1">Motoristas Ativos</div>
-                        <div class="h4 mb-0 fw-bold text-dark">{{ total_motoristas }}</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="fas fa-users fa-2x text-secondary"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
-
 
 {# --- SEÇÃO DE GRÁFICOS E TABELAS --- #}
 <div class="row">
     <div class="col-lg-7 mb-4">
-        {# --- PENDÊNCIAS POR SETOR --- #}
         <div class="card shadow-sm h-100">
             <div class="card-header py-3">
                 <h6 class="m-0 fw-bold text-primary">Pendências Abertas por Setor</h6>
@@ -169,11 +200,10 @@ Dashboard
     </div>
 
     <div class="col-lg-5 mb-4">
-        {# --- RANKING DE ADESÃO (ADMIN GERAL) --- #}
-        {% if session.role == 'admin' and not unidade_selecionada %}
+        {% if session.role == 'admin' and not unidade_selecionada and not operacao_selecionada %}
             <div class="card shadow-sm h-100">
                 <div class="card-header py-3">
-                    <h6 class="m-0 fw-bold text-primary">Adesão por Unidade (Mês)</h6>
+                    <h6 class="m-0 fw-bold text-primary">Adesão Geral por Unidade</h6>
                 </div>
                 <div class="card-body">
                     {% if ranking_adesao %}
@@ -190,7 +220,6 @@ Dashboard
                     {% endif %}
                 </div>
             </div>
-        {# --- CONFIG DE TROCA (MASTER) --- #}
         {% elif session.role == 'master' and config_unidade %}
              <div class="card shadow-sm h-100">
                 <div class="card-header py-3">
@@ -208,16 +237,12 @@ Dashboard
                             <button class="btn btn-success" type="submit">Salvar</button>
                         </div>
                     </form>
-                    <small class="form-text text-muted mt-2 d-block">
-                        Esta opção define se o motorista pode selecionar um novo conjunto ao iniciar um checklist.
-                    </small>
                 </div>
             </div>
-        {# --- VEÍCULOS COM PENDÊNCIAS (ADMIN FILTRADO OU MASTER) --- #}
         {% else %}
             <div class="card shadow-sm h-100">
                 <div class="card-header py-3">
-                    <h6 class="m-0 fw-bold text-primary">Top Veículos com Pendências</h6>
+                    <h6 class="m-0 fw-bold text-primary">Top 5 Veículos com Pendências</h6>
                 </div>
                  <div class="card-body">
                     {% if top_veiculos_pendencias %}
@@ -254,7 +279,7 @@ Dashboard
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Gráfico de Pendências por Setor
+    // Gráfico de Pendências
     const ctx = document.getElementById('graficoPendenciasSetor');
     {% if pendencias_por_setor %}
     const data = {
@@ -262,32 +287,60 @@ document.addEventListener('DOMContentLoaded', function() {
         datasets: [{
             label: 'Pendências',
             data: {{ pendencias_por_setor|map(attribute='total')|list|tojson|safe }},
-            backgroundColor: [
-                '#0d6efd', '#dc3545', '#0dcaf0', '#ffc107', '#6f42c1',
-                '#fd7e14', '#20c997', '#6c757d'
-            ],
+            backgroundColor: ['#0d6efd', '#dc3545', '#0dcaf0', '#ffc107', '#6f42c1', '#fd7e14', '#20c997', '#6c757d'],
             hoverOffset: 4
         }]
     };
-
     new Chart(ctx, {
-        type: 'doughnut',
-        data: data,
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'top',
-                }
-            }
-        }
+        type: 'doughnut', data: data, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
     });
     {% endif %}
+
+    // Lógica para Filtros Dependentes
+    const unidadeSelect = document.getElementById('unidade');
+    const operacaoSelect = document.getElementById('operacao');
+    const operacoesPorUnidade = {{ operacoes_por_unidade_json|tojson|safe }};
+
+    function atualizarOperacoes() {
+        const selectedUnidade = unidadeSelect.value;
+        const operacoes = operacoesPorUnidade[selectedUnidade] || [];
+        
+        operacaoSelect.innerHTML = '<option value="todas">Todas as Operações</option>'; // Limpa e adiciona a opção padrão
+
+        if (selectedUnidade === 'todas' || operacoes.length === 0) {
+            operacaoSelect.disabled = true;
+        } else {
+            operacaoSelect.disabled = false;
+            operacoes.forEach(function(op) {
+                const option = document.createElement('option');
+                option.value = op;
+                option.textContent = op;
+                operacaoSelect.appendChild(option);
+            });
+        }
+    }
+
+    if(unidadeSelect) {
+        unidadeSelect.addEventListener('change', function() {
+            // Ao mudar a unidade, reseta a operação para "Todas"
+            operacaoSelect.value = 'todas';
+            atualizarOperacoes();
+        });
+        // Define o estado inicial ao carregar a página
+        atualizarOperacoes();
+        // Restaura a seleção de operação se ela existia na URL
+        const operacaoAtual = '{{ operacao_selecionada|default("todas") }}';
+        operacaoSelect.value = operacaoAtual;
+    }
 });
 </script>
 <style>
 .text-xs { font-size: .85rem; }
 .text-secondary { color: #858796 !important; }
+.border-end-md {
+    @media (min-width: 768px) {
+        border-right: 1px solid #e3e6f0;
+    }
+}
 </style>
 {% endblock %}
