@@ -57,13 +57,23 @@ Acompanhamento Diário - {{ data_hoje.strftime('%d/%m/%Y') }}
                                             {# --- Célula para o Status Diário --- #}
                                             <td class="{{ item.status_diario.classe_css }} align-middle text-center">
                                                 <div class="fw-bold">{{ item.status_diario.status }}</div>
-                                                <small class="text-muted">{{ item.status_diario.detalhe }}</small>
+                                                <small class="text-muted d-block">{{ item.status_diario.detalhe }}</small>
+                                                {% if item.status_diario.tempo_gasto is not none %}
+                                                <small class="text-muted d-block fst-italic">
+                                                    <i class="fas fa-stopwatch me-1"></i>{{ formatar_segundos(item.status_diario.tempo_gasto) }}
+                                                </small>
+                                                {% endif %}
                                             </td>
                                 
                                             {# --- Célula para o Status Mensal --- #}
                                             <td class="{{ item.status_mensal.classe_css }} align-middle text-center">
                                                 <div class="fw-bold">{{ item.status_mensal.status }}</div>
-                                                <small class="text-muted">{{ item.status_mensal.detalhe }}</small>
+                                                <small class="text-muted d-block">{{ item.status_mensal.detalhe }}</small>
+                                                {% if item.status_mensal.tempo_gasto is not none %}
+                                                <small class="text-muted d-block fst-italic">
+                                                    <i class="fas fa-stopwatch me-1"></i>{{ formatar_segundos(item.status_mensal.tempo_gasto) }}
+                                                </small>
+                                                {% endif %}
                                             </td>
                                         </tr>
                                     {% endfor %}

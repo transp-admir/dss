@@ -1343,7 +1343,6 @@ def acompanhamento_diario():
     veiculos_para_exibir = sorted(veiculos_para_exibir_map.values(), key=lambda v: v.nome_conjunto)
 
     # --- 3. COLETA DADOS DE STATUS (DIÁRIO, MENSAL, INDISPONIBILIDADE, ISENÇÃO) ---
-    # <<< INÍCIO DA ALTERAÇÃO >>>
     indisponibilidades_hoje_query = VeiculoIndisponibilidade.query.filter(
         VeiculoIndisponibilidade.data_inicio <= hoje, 
         or_(VeiculoIndisponibilidade.data_fim >= hoje, VeiculoIndisponibilidade.data_fim == None)
@@ -1351,7 +1350,6 @@ def acompanhamento_diario():
     
     indisponibilidades_hoje = {}
     for ind in indisponibilidades_hoje_query:
-        # Se tipo_checklist for None (ou vazio), afeta ambos. Se tiver valor, afeta só o tipo específico.
         afeta_diario = not ind.tipo_checklist or ind.tipo_checklist == 'DIÁRIO'
         afeta_mensal = not ind.tipo_checklist or ind.tipo_checklist == 'MENSAL'
         indisponibilidades_hoje[ind.veiculo_id] = {
@@ -1359,7 +1357,6 @@ def acompanhamento_diario():
             'afeta_diario': afeta_diario,
             'afeta_mensal': afeta_mensal
         }
-    # <<< FIM DA ALTERAÇÃO >>>
 
     preenchimentos_diarios_agrupados = defaultdict(list)
     if checklist_diario:
@@ -1397,46 +1394,44 @@ def acompanhamento_diario():
     for veiculo in veiculos_para_exibir:
         info = {
             'veiculo': veiculo,
-            'status_diario': {'status': 'N/A', 'detalhe': 'Não aplicável', 'classe_css': 'table-secondary'},
-            'status_mensal': {'status': 'N/A', 'detalhe': 'Não aplicável', 'classe_css': 'table-secondary'}
+            'status_diario': {'status': 'N/A', 'detalhe': 'Não aplicável', 'classe_css': 'table-secondary', 'tempo_gasto': None},
+            'status_mensal': {'status': 'N/A', 'detalhe': 'Não aplicável', 'classe_css': 'table-secondary', 'tempo_gasto': None}
         }
 
         motorista_atual = veiculo.motorista
         detalhe_motorista = f"Motorista: {motorista_atual.nome}" if motorista_atual else "Sem motorista"
 
-        # <<< INÍCIO DA ALTERAÇÃO >>>
         indisponibilidade = indisponibilidades_hoje.get(veiculo.id)
 
         # Status DIÁRIO
         if checklist_diario:
             if indisponibilidade and indisponibilidade['afeta_diario']:
-                info['status_diario'] = {'status': 'Indisponível', 'detalhe': indisponibilidade['motivo'], 'classe_css': 'table-secondary'}
+                info['status_diario'] = {'status': 'Indisponível', 'detalhe': indisponibilidade['motivo'], 'classe_css': 'table-secondary', 'tempo_gasto': None}
             elif veiculo.id in preenchimentos_diarios_agrupados:
                 regs = preenchimentos_diarios_agrupados[veiculo.id]
                 ultimo_reg = regs[-1]
                 hora_local = ultimo_reg.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz).strftime('%H:%M')
                 detalhe = f"por {ultimo_reg.motorista.nome} às {hora_local}" + (f" ({len(regs)} regs)" if len(regs) > 1 else "")
-                info['status_diario'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success'}
+                info['status_diario'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success', 'tempo_gasto': ultimo_reg.tempo_preenchimento}
             elif motorista_atual and motorista_atual.id in isencoes_diario:
-                info['status_diario'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_diario[motorista_atual.id]})", 'classe_css': 'table-light'}
+                info['status_diario'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_diario[motorista_atual.id]})", 'classe_css': 'table-light', 'tempo_gasto': None}
             else:
-                info['status_diario'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger'}
+                info['status_diario'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger', 'tempo_gasto': None}
         
         # Status MENSAL
         if checklist_mensal:
             if indisponibilidade and indisponibilidade['afeta_mensal']:
-                info['status_mensal'] = {'status': 'Indisponível', 'detalhe': indisponibilidade['motivo'], 'classe_css': 'table-secondary'}
+                info['status_mensal'] = {'status': 'Indisponível', 'detalhe': indisponibilidade['motivo'], 'classe_css': 'table-secondary', 'tempo_gasto': None}
             elif veiculo.id in preenchimentos_mensais_agrupados:
                 regs = preenchimentos_mensais_agrupados[veiculo.id]
                 ultimo_reg = regs[-1]
                 data_local = ultimo_reg.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz).strftime('%d/%m')
                 detalhe = f"por {ultimo_reg.motorista.nome} em {data_local}" + (f" ({len(regs)} regs)" if len(regs) > 1 else "")
-                info['status_mensal'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success'}
+                info['status_mensal'] = {'status': 'Preenchido', 'detalhe': detalhe, 'classe_css': 'table-success', 'tempo_gasto': ultimo_reg.tempo_preenchimento}
             elif motorista_atual and motorista_atual.id in isencoes_mensal:
-                info['status_mensal'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_mensal[motorista_atual.id]})", 'classe_css': 'table-light'}
+                info['status_mensal'] = {'status': 'Isento', 'detalhe': f"{detalhe_motorista} ({isencoes_mensal[motorista_atual.id]})", 'classe_css': 'table-light', 'tempo_gasto': None}
             else:
-                info['status_mensal'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger'}
-        # <<< FIM DA ALTERAÇÃO >>>
+                info['status_mensal'] = {'status': 'Pendente', 'detalhe': detalhe_motorista, 'classe_css': 'table-danger', 'tempo_gasto': None}
         
         veiculos_status.append(info)
 
@@ -1455,7 +1450,8 @@ def acompanhamento_diario():
         data_hoje=hoje,
         veiculos_para_formulario=veiculos_para_formulario,
         motoristas_para_formulario=motoristas_para_formulario,
-        tipos_checklist=tipos_checklist
+        tipos_checklist=tipos_checklist,
+        formatar_segundos=formatar_segundos
     )
 
 
