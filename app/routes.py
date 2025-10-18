@@ -765,21 +765,156 @@ def admin_logout():
     return redirect(url_for('admin.login'))
 
 
+# Substitua a função dashboard() existente por esta:
+from sqlalchemy import func, desc
+
 @admin_bp.route('/dashboard')
 @login_required()
 def dashboard():
+    # --- 1. FILTROS E PERMISSÕES ---
     user_role = session.get('role')
     user_unidade = session.get('unidade')
     
-    config_unidade = None
-    if user_role == 'master' and user_unidade:
-        config_unidade = UnidadeConfig.query.filter_by(unidade=user_unidade).first()
-        if not config_unidade:
-            config_unidade = UnidadeConfig(unidade=user_unidade, motorista_pode_trocar_veiculo=False)
-            db.session.add(config_unidade)
-            db.session.commit()
+    unidade_selecionada = request.args.get('unidade') if user_role == 'admin' else user_unidade
+    if unidade_selecionada == 'todas':
+        unidade_selecionada = None
 
-    return render_template('adm.html', config_unidade=config_unidade)
+    target_unidade = unidade_selecionada if user_role == 'admin' else user_unidade
+
+    # --- 2. CÁLCULO DOS KPIs ---
+    hoje = date.today()
+    inicio_mes = hoje.replace(day=1)
+
+    # --- Total de Veículos Ativos (BASE PARA CÁLCULOS) ---
+    veiculos_query_base = Veiculo.query.filter(Veiculo.ativo == True)
+    if target_unidade:
+        veiculos_query_base = veiculos_query_base.filter(Veiculo.unidade == target_unidade)
+    total_veiculos = veiculos_query_base.count()
+
+    # --- Adesão Diária ---
+    query_diario = ChecklistPreenchido.query.join(Checklist).filter(
+        Checklist.tipo == 'DIÁRIO',
+        func.date(ChecklistPreenchido.data_preenchimento) == hoje
+    )
+    if target_unidade:
+         query_diario = query_diario.join(Veiculo).filter(Veiculo.unidade == target_unidade)
+    checklists_diarios_hoje = query_diario.count()
+    
+    total_esperado_diario = total_veiculos
+    percentual_diario = (checklists_diarios_hoje / total_esperado_diario * 100) if total_esperado_diario > 0 else 0
+
+    # --- Adesão Mensal ---
+    query_mensal = ChecklistPreenchido.query.join(Checklist).filter(
+        Checklist.tipo == 'MENSAL',
+        func.date(ChecklistPreenchido.data_preenchimento) >= inicio_mes
+    )
+    if target_unidade:
+        query_mensal = query_mensal.join(Veiculo).filter(Veiculo.unidade == target_unidade)
+    checklists_mensais_mes = query_mensal.count()
+
+    total_esperado_mensal = total_veiculos
+    percentual_mensal = (checklists_mensais_mes / total_esperado_mensal * 100) if total_esperado_mensal > 0 else 0
+
+    # --- Outros KPIs ---
+    pendencias_query_base = Pendencia.query.filter(Pendencia.status == 'PENDENTE')
+    if target_unidade:
+        pendencias_query_base = pendencias_query_base.join(Veiculo, Veiculo.id == Pendencia.veiculo_id).filter(Veiculo.unidade == target_unidade)
+    total_pendencias = pendencias_query_base.count()
+    
+    motoristas_query_base = Motorista.query.filter(Motorista.ativo == True)
+    if target_unidade:
+        motoristas_query_base = motoristas_query_base.filter(Motorista.unidade == target_unidade)
+    total_motoristas = motoristas_query_base.count()
+
+    # --- 3. DADOS PARA GRÁFICOS E RANKING ---
+    
+    # --- Ranking de Adesão por Unidade (SOMENTE PARA ADMIN GERAL) ---
+    ranking_adesao = []
+    if user_role == 'admin' and not target_unidade:
+        unidades_db = db.session.query(Veiculo.unidade).distinct().filter(Veiculo.unidade.isnot(None)).all()
+        all_unidades = [u[0] for u in unidades_db]
+        
+        veiculos_com_preenchimento_mensal = db.session.query(ChecklistPreenchido.veiculo_id).join(Checklist).filter(
+            Checklist.tipo == 'MENSAL',
+            func.date(ChecklistPreenchido.data_preenchimento) >= inicio_mes
+        ).distinct().all()
+        veiculos_preenchidos_ids = {v[0] for v in veiculos_com_preenchimento_mensal}
+
+        for unidade_nome in all_unidades:
+            total_veiculos_unidade = Veiculo.query.filter(Veiculo.ativo == True, Veiculo.unidade == unidade_nome).count()
+            if total_veiculos_unidade > 0:
+                preenchidos_na_unidade = Veiculo.query.filter(
+                    Veiculo.ativo == True,
+                    Veiculo.unidade == unidade_nome,
+                    Veiculo.id.in_(veiculos_preenchidos_ids)
+                ).count()
+                taxa = (preenchidos_na_unidade / total_veiculos_unidade * 100)
+                ranking_adesao.append({'unidade': unidade_nome, 'taxa': round(taxa)})
+        
+        ranking_adesao.sort(key=lambda x: x['taxa'], reverse=True)
+
+    # --- Gráfico de Pendências por Setor ---
+    pendencias_por_setor_query = db.session.query(
+        ChecklistItem.setor_responsavel,
+        func.count(Pendencia.id).label('total')
+    ).join(Pendencia, Pendencia.item_id == ChecklistItem.id)\
+    .filter(Pendencia.status == 'PENDENTE')\
+    .filter(ChecklistItem.setor_responsavel.isnot(None))
+    
+    if target_unidade:
+        pendencias_por_setor_query = pendencias_por_setor_query.join(Veiculo, Veiculo.id == Pendencia.veiculo_id).filter(Veiculo.unidade == target_unidade)
+    
+    pendencias_por_setor = pendencias_por_setor_query.group_by(ChecklistItem.setor_responsavel)\
+        .order_by(desc('total')).all()
+
+    # --- Gráfico de Top Veículos com Pendências ---
+    top_veiculos_query = db.session.query(
+        Veiculo.nome_conjunto,
+        func.count(Pendencia.id).label('total_pendencias')
+    ).join(Pendencia, Veiculo.id == Pendencia.veiculo_id)\
+    .filter(Pendencia.status == 'PENDENTE')
+    
+    if target_unidade:
+         top_veiculos_query = top_veiculos_query.filter(Veiculo.unidade == target_unidade)
+
+    top_veiculos_pendencias = top_veiculos_query.group_by(Veiculo.nome_conjunto)\
+        .order_by(desc('total_pendencias'))\
+        .limit(5).all()
+
+    # --- 4. DADOS ESPECÍFICOS DE ROLE ---
+    unidades_disponiveis = []
+    config_unidade = None
+    
+    if user_role == 'admin':
+        unidades_db = db.session.query(Usuario.unidade).distinct().filter(Usuario.unidade.isnot(None)).all()
+        unidades_disponiveis = sorted([u[0] for u in unidades_db])
+    
+    if user_role == 'master':
+        config_unidade = UnidadeConfig.query.filter_by(unidade=user_unidade).first()
+
+    # --- 5. RENDERIZAÇÃO ---
+    return render_template(
+        'adm.html',
+        # Adesão
+        checklists_diarios_hoje=checklists_diarios_hoje,
+        total_esperado_diario=total_esperado_diario,
+        percentual_diario=percentual_diario,
+        checklists_mensais_mes=checklists_mensais_mes,
+        total_esperado_mensal=total_esperado_mensal,
+        percentual_mensal=percentual_mensal,
+        # Outros KPIs
+        total_pendencias=total_pendencias,
+        total_veiculos=total_veiculos,
+        total_motoristas=total_motoristas,
+        # Gráficos e Tabelas
+        pendencias_por_setor=pendencias_por_setor,
+        top_veiculos_pendencias=top_veiculos_pendencias,
+        ranking_adesao=ranking_adesao,
+        # Configurações e Filtros
+        unidades_disponiveis=unidades_disponiveis,
+        unidade_selecionada=unidade_selecionada,
+        config_unidade=config_unidade
+    )
 
 
 
