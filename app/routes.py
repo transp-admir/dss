@@ -795,7 +795,7 @@ def formatar_segundos(segundos):
     segundos_restantes = segundos % 60
     return f"{minutos} min {segundos_restantes} s"
 
-#Substitua a função dashboard() existente por esta:
+# Substitua a função dashboard() existente por esta:
 @admin_bp.route('/dashboard')
 @login_required()
 def dashboard():
@@ -827,21 +827,30 @@ def dashboard():
         for unidade in operacoes_por_unidade: operacoes_por_unidade[unidade].sort()
     operacoes_disponiveis_filtro = operacoes_por_unidade.get(unidade_selecionada, [])
 
-    # --- 3. CÁLCULO DOS KPIs ---
+    # --- 3. LÓGICA DE DATAS (COM PADRÃO PARA O DIA ATUAL) ---
     hoje = date.today()
-    data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date() if data_inicio_str else hoje.replace(day=1)
-    if data_fim_str:
-        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-    else:
-        proximo_mes = hoje.replace(day=28) + timedelta(days=4)
-        data_fim = proximo_mes - timedelta(days=proximo_mes.day)
+    # **NOVO**: Define o padrão para ambas as datas como o dia atual.
+    data_inicio_padrao = hoje
+    data_fim_padrao = hoje
+    # Lê as datas do request ou usa os padrões.
+    data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date() if data_inicio_str else data_inicio_padrao
+    data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date() if data_fim_str else data_fim_padrao
+    # Validação para garantir que a data de início não seja maior que a data de fim.
+    if data_inicio > data_fim:
+        data_inicio, data_fim = data_fim, data_inicio # Inverte as datas
 
-    periodo_dias = (data_fim - data_inicio).days + 1
+    # --- 4. CÁLCULO DE DIAS ÚTEIS E PERÍODO UTC ---
+    dias_uteis_periodo = 0
+    for i in range((data_fim - data_inicio).days + 1):
+        if (data_inicio + timedelta(days=i)).weekday() != 6: # 6 = Domingo
+            dias_uteis_periodo += 1
+
     brt_tz = timezone(timedelta(hours=-3))
     utc_tz = timezone.utc
     start_utc = datetime.combine(data_inicio, datetime.min.time(), tzinfo=brt_tz).astimezone(utc_tz)
     end_utc = datetime.combine(data_fim, datetime.max.time(), tzinfo=brt_tz).astimezone(utc_tz)
 
+    # --- 5. LÓGICA PRINCIPAL DE CÁLCULO DE KPIs ---
     veiculos_query_base = Veiculo.query.filter(Veiculo.ativo == True)
     if target_unidade: veiculos_query_base = veiculos_query_base.filter(Veiculo.unidade == target_unidade)
     if target_operacao: veiculos_query_base = veiculos_query_base.filter(Veiculo.operacao == target_operacao)
@@ -850,7 +859,6 @@ def dashboard():
     veiculos_ids = {v.id for v in veiculos_filtrados}
     total_veiculos = len(veiculos_filtrados)
     
-    # CALCULO DE INDISPONIBILIDADES
     total_dias_indisponiveis_diario = 0
     veiculos_indisponiveis_mensal = set()
     if veiculos_ids:
@@ -862,45 +870,42 @@ def dashboard():
         for ind in indisp_query:
             overlap_start = max(ind.data_inicio, data_inicio)
             overlap_end = min(ind.data_fim or data_fim, data_fim)
-            dias = (overlap_end - overlap_start).days + 1
-            if dias > 0:
-                if ind.tipo_checklist == 'DIÁRIO' or ind.tipo_checklist is None:
-                    total_dias_indisponiveis_diario += dias
+            if overlap_start <= overlap_end:
                 if ind.tipo_checklist == 'MENSAL':
                     veiculos_indisponiveis_mensal.add(ind.veiculo_id)
+                if ind.tipo_checklist == 'DIÁRIO' or ind.tipo_checklist is None:
+                    current_day = overlap_start
+                    while current_day <= overlap_end:
+                        if current_day.weekday() != 6:
+                            total_dias_indisponiveis_diario += 1
+                        current_day += timedelta(days=1)
 
-    # --- KPI: Adesão Diária ---
-    total_esperado_diario = max(0, (total_veiculos * periodo_dias) - total_dias_indisponiveis_diario)
+    dias_potenciais_diario = total_veiculos * dias_uteis_periodo
+    total_esperado_diario = max(0, dias_potenciais_diario - total_dias_indisponiveis_diario)
     query_diario_base = ChecklistPreenchido.query.join(Checklist).join(Veiculo).filter(
-        Checklist.tipo == 'DIÁRIO',
-        ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc),
+        Checklist.tipo == 'DIÁRIO', ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc),
         Veiculo.id.in_(veiculos_ids) if veiculos_ids else false()
     )
     checklists_diarios_periodo = query_diario_base.with_entities(ChecklistPreenchido.veiculo_id, func.date(ChecklistPreenchido.data_preenchimento)).distinct().count() or 0
     percentual_diario = (checklists_diarios_periodo / total_esperado_diario * 100) if total_esperado_diario > 0 else 0
     
-    # --- KPI: Adesão Mensal ---
     total_esperado_mensal = max(0, total_veiculos - len(veiculos_indisponiveis_mensal))
     query_mensal_base = ChecklistPreenchido.query.join(Checklist).join(Veiculo).filter(
-        Checklist.tipo == 'MENSAL',
-        ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc),
+        Checklist.tipo == 'MENSAL', ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc),
         Veiculo.id.in_(veiculos_ids) if veiculos_ids else false()
     )
     checklists_mensais_periodo = query_mensal_base.with_entities(func.count(distinct(ChecklistPreenchido.veiculo_id))).scalar() or 0
     percentual_mensal = (checklists_mensais_periodo / total_esperado_mensal * 100) if total_esperado_mensal > 0 else 0
 
-    # --- KPI: Adesão Geral ---
     checklists_gerais_preenchidos = checklists_diarios_periodo + checklists_mensais_periodo
     total_esperado_geral = total_esperado_diario + total_esperado_mensal
     percentual_geral = (checklists_gerais_preenchidos / total_esperado_geral * 100) if total_esperado_geral > 0 else 0
     
-    # --- KPI: Tempo Médio ---
     avg_tempo_diario_seg = query_diario_base.with_entities(func.avg(ChecklistPreenchido.tempo_preenchimento)).scalar()
     tempo_medio_diario = formatar_segundos(avg_tempo_diario_seg)
     avg_tempo_mensal_seg = query_mensal_base.with_entities(func.avg(ChecklistPreenchido.tempo_preenchimento)).scalar()
     tempo_medio_mensal = formatar_segundos(avg_tempo_mensal_seg)
 
-    # --- Outros KPIs ---
     pendencias_query_base = Pendencia.query.join(Veiculo, Veiculo.id == Pendencia.veiculo_id).filter(Pendencia.status == 'PENDENTE')
     if target_unidade: pendencias_query_base = pendencias_query_base.filter(Veiculo.unidade == target_unidade)
     if target_operacao: pendencias_query_base = pendencias_query_base.filter(Veiculo.operacao == target_operacao)
@@ -911,16 +916,14 @@ def dashboard():
     if target_operacao: motoristas_query_base = motoristas_query_base.filter(Motorista.operacao == target_operacao)
     total_motoristas = motoristas_query_base.count()
     
-    # --- 4. GRÁFICOS E RANKING (LÓGICA ADAPTADA PARA PERÍODO) ---
     ranking_adesao = []
     if user_role == 'admin' and not target_unidade and not target_operacao:
         unidades_para_ranking = [u[0] for u in db.session.query(Veiculo.unidade).filter(Veiculo.unidade.isnot(None)).distinct()]
         for unidade_nome in unidades_para_ranking:
             veiculos_unidade = Veiculo.query.filter(Veiculo.ativo == True, Veiculo.unidade == unidade_nome).all()
             veiculos_unidade_ids = {v.id for v in veiculos_unidade}
-            
             if not veiculos_unidade_ids: continue
-
+            
             dias_indisp_unidade, veiculos_indisp_mensal_unidade = 0, set()
             indisp_unidade_q = VeiculoIndisponibilidade.query.filter(
                 VeiculoIndisponibilidade.veiculo_id.in_(veiculos_unidade_ids),
@@ -928,14 +931,19 @@ def dashboard():
                 or_(VeiculoIndisponibilidade.data_fim == None, VeiculoIndisponibilidade.data_fim >= data_inicio)
             ).all()
             for ind in indisp_unidade_q:
-                overlap_start = max(ind.data_inicio, data_inicio)
-                overlap_end = min(ind.data_fim or data_fim, data_fim)
-                dias = (overlap_end - overlap_start).days + 1
-                if dias > 0:
-                    if ind.tipo_checklist == 'DIÁRIO' or ind.tipo_checklist is None: dias_indisp_unidade += dias
-                    if ind.tipo_checklist == 'MENSAL': veiculos_indisp_mensal_unidade.add(ind.veiculo_id)
+                overlap_start_unidade = max(ind.data_inicio, data_inicio)
+                overlap_end_unidade = min(ind.data_fim or data_fim, data_fim)
+                if overlap_start_unidade <= overlap_end_unidade:
+                    if ind.tipo_checklist == 'MENSAL':
+                        veiculos_indisp_mensal_unidade.add(ind.veiculo_id)
+                    if ind.tipo_checklist == 'DIÁRIO' or ind.tipo_checklist is None:
+                        current_day_unidade = overlap_start_unidade
+                        while current_day_unidade <= overlap_end_unidade:
+                            if current_day_unidade.weekday() != 6:
+                                dias_indisp_unidade += 1
+                            current_day_unidade += timedelta(days=1)
 
-            esperado_d = max(0, (len(veiculos_unidade_ids) * periodo_dias) - dias_indisp_unidade)
+            esperado_d = max(0, (len(veiculos_unidade_ids) * dias_uteis_periodo) - dias_indisp_unidade)
             esperado_m = max(0, len(veiculos_unidade_ids) - len(veiculos_indisp_mensal_unidade))
             
             preenchido_d = db.session.query(ChecklistPreenchido).join(Checklist).filter(Checklist.tipo == 'DIÁRIO', ChecklistPreenchido.veiculo_id.in_(veiculos_unidade_ids), ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc)).with_entities(ChecklistPreenchido.veiculo_id, func.date(ChecklistPreenchido.data_preenchimento)).distinct().count()
@@ -948,7 +956,6 @@ def dashboard():
         
         ranking_adesao.sort(key=lambda x: x['taxa'], reverse=True)
 
-    # --- Restante dos gráficos ---
     pendencias_por_setor_query = db.session.query(ChecklistItem.setor_responsavel, func.count(Pendencia.id).label('total')).join(Pendencia, Pendencia.item_id == ChecklistItem.id).join(Veiculo, Veiculo.id == Pendencia.veiculo_id).filter(Pendencia.status == 'PENDENTE', ChecklistItem.setor_responsavel.isnot(None))
     if target_unidade: pendencias_por_setor_query = pendencias_por_setor_query.filter(Veiculo.unidade == target_unidade)
     if target_operacao: pendencias_por_setor_query = pendencias_por_setor_query.filter(Veiculo.operacao == target_operacao)
@@ -961,7 +968,7 @@ def dashboard():
 
     config_unidade = UnidadeConfig.query.filter_by(unidade=user_unidade).first() if user_role == 'master' else None
 
-    # --- 5. RENDERIZAÇÃO ---
+    # --- 6. RENDERIZAÇÃO ---
     return render_template(
         'adm.html',
         checklists_gerais_preenchidos=checklists_gerais_preenchidos,
@@ -990,6 +997,7 @@ def dashboard():
         data_inicio=data_inicio,
         data_fim=data_fim
     )
+
 
 
 #ROTA PARA DESCONSIDERAR OS DOMINGOS NO CÁLCULO DE ADESÃO DIÁRIA
