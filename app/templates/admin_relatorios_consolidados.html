@@ -45,7 +45,7 @@
                             Gerar
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="#" id="export-pdf-btn">PDF Detalhado</a></li>
+                            <li><a class="dropdown-item" href="#" id="export-pdf-btn">PDF Consolidado</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="#" id="status-diario-btn">Relatório de Status</a></li>
                         </ul>
@@ -74,9 +74,14 @@
                                         <span>
                                             <strong>{{ p.checklist.codigo }}</strong> ({{ p.checklist.tipo }}) - Preenchido por <strong>{{ p.motorista.nome }}</strong> às {{ p.data_preenchimento.strftime('%H:%M') }}
                                         </span>
-                                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ p.id }}" aria-expanded="false" aria-controls="collapse-{{ p.id }}">
-                                            Ver Detalhes
-                                        </button>
+                                        <div class="btn-group">
+                                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ p.id }}">
+                                                Ver Detalhes
+                                            </button>
+                                            <a href="{{ url_for('admin.gerar_relatorio_pdf', preenchido_id=p.id) }}" class="btn btn-sm btn-danger" target="_blank">
+                                                PDF
+                                            </a>
+                                        </div>
                                     </div>
                                     <div class="collapse mt-3" id="collapse-{{ p.id }}">
                                         <div class="card card-body">
@@ -91,8 +96,7 @@
                                                 {% endfor %}
                                             </ul>
 
-                                            <!-- INÍCIO DO BLOCO DE EXTINTORES CORRIGIDO -->
-                                            {% if p.extintores_check %}
+                                            {% if p.extintores_check.all() %}
                                             <hr>
                                             <h6>Controle de Extintores:</h6>
                                             <div class="table-responsive">
@@ -122,7 +126,6 @@
                                                 </table>
                                             </div>
                                             {% endif %}
-                                            <!-- FIM DO BLOCO DE EXTINTORES CORRIGIDO -->
 
                                             <hr>
                                             <h6>Observações Gerais:</h6>
@@ -148,7 +151,6 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Botão para o PDF detalhado existente
     const exportPdfButton = document.getElementById('export-pdf-btn');
     if (exportPdfButton) {
         exportPdfButton.addEventListener('click', function(e) {
@@ -164,11 +166,10 @@ document.addEventListener('DOMContentLoaded', function() {
             url.searchParams.set('data_inicio', dataInicio);
             url.searchParams.set('data_fim', dataFim);
 
-            window.open(url.toString(), '_blank'); // Abre em nova aba
+            window.open(url.toString(), '_blank');
         });
     }
 
-    // Novo botão para o relatório de Status Diário
     const statusDiarioButton = document.getElementById('status-diario-btn');
     if (statusDiarioButton) {
         statusDiarioButton.addEventListener('click', function(e) {
@@ -177,27 +178,24 @@ document.addEventListener('DOMContentLoaded', function() {
             let dataInicio = document.getElementById('data_inicio').value;
             let dataFim = document.getElementById('data_fim').value;
 
-            // Validação de data
             if (dataInicio && dataFim) {
-                const dateInicio = new Date(dataInicio + 'T00:00:00'); // Adiciona tempo para evitar problemas de fuso
+                const dateInicio = new Date(dataInicio + 'T00:00:00');
                 const dateFim = new Date(dataFim + 'T00:00:00');
                 const diffTime = Math.abs(dateFim - dateInicio);
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                // 3 meses ~ 93 dias
                 if (diffDays > 93) {
                     alert('O intervalo máximo para este relatório é de 3 meses.');
                     return;
                 }
             }
             
-            // Nota: a rota 'admin.gerar_relatorio_status_diario' será criada no próximo passo.
             const url = new URL("{{ url_for('admin.gerar_relatorio_status_diario') }}", window.location.origin);
             url.searchParams.set('veiculo_id', veiculoId);
             url.searchParams.set('data_inicio', dataInicio);
             url.searchParams.set('data_fim', dataFim);
 
-            window.open(url.toString(), '_blank'); // Abre o relatório em uma nova aba
+            window.open(url.toString(), '_blank');
         });
     }
 });

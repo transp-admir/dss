@@ -2704,16 +2704,16 @@ def gerar_relatorio_pdf():
     if 'admin_user' not in session:
         return redirect(url_for('admin.login'))
 
-    # --- Classe Auxiliar para gerar o PDF com Cabeçalho e Rodapé customizado ---
     class PDF(FPDF):
-        def __init__(self, checklist_title, veiculo_info, metadata_info, *args, **kwargs):
+        def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.checklist_title = checklist_title
-            self.veiculo_info = veiculo_info
-            self.metadata_info = metadata_info
+            self.checklist_title = ""
+            self.veiculo_info = ""
+            self.metadata_info = ""
 
         def header(self):
-            # Título, Metadados e Veículo
+            if not self.checklist_title: return # Não desenha o cabeçalho se o título estiver vazio
+            
             self.set_font('Arial', 'B', 14)
             self.cell(0, 8, self.checklist_title.encode('latin-1', 'replace').decode('latin-1'), 0, 1, 'C')
             self.set_font('Arial', 'B', 10)
@@ -2730,53 +2730,58 @@ def gerar_relatorio_pdf():
         def draw_table_header(self):
             self.set_font('Arial', 'B', 9)
             self.set_fill_color(224, 224, 224)
-            self.cell(10, 7, 'Nº', 1, 0, 'C', 1)
-            self.cell(120, 7, 'Descrição', 1, 0, 'C', 1)
+            self.cell(15, 7, 'Nº', 1, 0, 'C', 1)
+            self.cell(115, 7, 'Descrição', 1, 0, 'C', 1)
             self.cell(60, 7, 'Resposta', 1, 1, 'C', 1)
             self.set_font('Arial', '', 9)
 
-    # 1. Captura e processa filtros
-    tipo_checklist = request.args.get('tipo_checklist')
-    veiculo_id = request.args.get('veiculo_id')
-    data_inicio_str = request.args.get('data_inicio')
-    data_fim_str = request.args.get('data_fim')
+    preenchido_id = request.args.get('preenchido_id')
+    preenchimentos = []
+    filename = "relatorio.pdf"
 
-    query = ChecklistPreenchido.query.join(Checklist).join(Veiculo)
+    if preenchido_id:
+        p = ChecklistPreenchido.query.get(preenchido_id)
+        if p:
+            preenchimentos.append(p)
+            # Define o nome do arquivo para PDF individual
+            date_str = p.data_preenchimento.strftime('%d%m%Y')
+            filename = f"relatorio_{p.veiculo.nome_conjunto}_{date_str}.pdf"
+    else:
+        tipo_checklist = request.args.get('tipo_checklist')
+        veiculo_id = request.args.get('veiculo_id')
+        data_inicio_str = request.args.get('data_inicio')
+        data_fim_str = request.args.get('data_fim')
+        query = ChecklistPreenchido.query.join(Checklist).join(Veiculo)
+        if data_inicio_str: query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) >= datetime.strptime(data_inicio_str, '%Y-%m-%d').date())
+        if data_fim_str: query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) <= datetime.strptime(data_fim_str, '%Y-%m-%d').date())
+        if tipo_checklist: query = query.filter(Checklist.tipo == tipo_checklist)
+        if veiculo_id and veiculo_id != 'todos':
+            query = query.filter(ChecklistPreenchido.veiculo_id == veiculo_id)
+        preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
+        # Define um nome de arquivo genérico para relatórios consolidados
+        if veiculo_id and veiculo_id != 'todos':
+            veiculo_obj = Veiculo.query.get(veiculo_id)
+            filename = f"consolidado_{veiculo_obj.nome_conjunto}.pdf"
+        else:
+            filename = "consolidado_geral.pdf"
 
-    if data_inicio_str:
-        query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) >= datetime.strptime(data_inicio_str, '%Y-%m-%d').date())
-    if data_fim_str:
-        query = query.filter(db.func.date(ChecklistPreenchido.data_preenchimento) <= datetime.strptime(data_fim_str, '%Y-%m-%d').date())
-    if tipo_checklist:
-        query = query.filter(Checklist.tipo == tipo_checklist)
-    
-    veiculo_obj = None
-    if veiculo_id and veiculo_id != 'todos':
-        query = query.filter(ChecklistPreenchido.veiculo_id == veiculo_id)
-        veiculo_obj = Veiculo.query.get(veiculo_id)
 
-    preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
-    
     if not preenchimentos:
-        flash('Nenhum checklist preenchido encontrado para os filtros selecionados.', 'warning')
+        flash('Nenhum checklist preenchido encontrado.', 'warning')
         return redirect(url_for('admin.relatorios_consolidados'))
 
-    checklist_base = Checklist.query.get(preenchimentos[0].checklist_id)
-    itens_principais = checklist_base.itens.filter_by(parent_id=None).all()
-
-    # --- CRIAÇÃO DOS TÍTULOS PARA O CABEÇALHO DO PDF ---
-    titulo_checklist_pdf = {'Diário': 'CHECKLIST DIÁRIO FR MAN 06 DIÁRIO', 'Mensal': 'CHECKLIST MENSAL/ADEQUAÇÃO FR MAN 07 MENSAL'}.get(tipo_checklist, checklist_base.titulo)
-    info_veiculo_pdf = f"Veículo: {veiculo_obj.nome_conjunto}" if veiculo_obj else "Veículos: Todos da seleção"
-    data_checklist_str = checklist_base.data.strftime('%d/%m/%Y')
-    info_metadata_pdf = f"Código: {checklist_base.codigo} / REV: {checklist_base.revisao} / Data: {data_checklist_str}"
-
-    pdf = PDF(checklist_title=titulo_checklist_pdf, veiculo_info=info_veiculo_pdf, metadata_info=info_metadata_pdf, orientation='P', unit='mm', format='A4')
+    pdf = PDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=15)
-    
     brt_tz = timezone(timedelta(hours=-3))
     utc_tz = timezone.utc
     
     for p in preenchimentos:
+        # ATUALIZA OS ATRIBUTOS DO PDF ANTES DE ADICIONAR A PÁGINA
+        checklist_atual = p.checklist
+        pdf.checklist_title = {'DIÁRIO': 'CHECKLIST DIÁRIO FR MAN 06 DIÁRIO', 'MENSAL': 'CHECKLIST MENSAL/ADEQUAÇÃO FR MAN 07 MENSAL'}.get(checklist_atual.tipo, checklist_atual.titulo)
+        pdf.veiculo_info = f"Veículo: {p.veiculo.nome_conjunto}"
+        pdf.metadata_info = f"Código: {checklist_atual.codigo} / REV: {checklist_atual.revisao} / Data: {checklist_atual.data.strftime('%d/%m/%Y')}"
+        
         pdf.add_page()
 
         hora_local_obj = p.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz)
@@ -2789,7 +2794,7 @@ def gerar_relatorio_pdf():
         def get_natural_sort_key(text):
             return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', str(text or '0'))]
 
-        item_counter = 1
+        itens_principais = checklist_atual.itens.filter_by(parent_id=None).all()
         for item_principal in sorted(itens_principais, key=lambda i: get_natural_sort_key(i.ordem)):
             pdf.set_font('Arial', 'B', 10)
             pdf.set_fill_color(224, 224, 224)
@@ -2798,38 +2803,34 @@ def gerar_relatorio_pdf():
 
             for sub_item in sorted(item_principal.sub_itens, key=lambda si: get_natural_sort_key(si.ordem)):
                 resposta_obj = next((r for r in p.respostas if r.item_id == sub_item.id), None)
-                
                 line_height = 6
                 desc_text = sub_item.texto
                 obs_text = f"Obs: {resposta_obj.observacao}" if resposta_obj and resposta_obj.observacao else ""
                 
-                # --- LÓGICA DE QUEBRA DE PÁGINA ---
                 def calculate_height(text, width):
-                    lines = pdf.get_string_width(text) / width
-                    return line_height * (int(lines) + 1)
+                    if not text: return 0
+                    test_pdf = FPDF()
+                    test_pdf.set_font('Arial', '', 9)
+                    text = text.encode('latin-1', 'replace').decode('latin-1')
+                    lines = test_pdf.get_string_width(text) / width
+                    return line_height * (int(lines) + 1.5)
 
-                needed_height = calculate_height(desc_text, 120)
+                needed_height = calculate_height(desc_text, 115)
                 if obs_text: needed_height += calculate_height(obs_text, 180)
 
                 if pdf.get_y() + needed_height > pdf.page_break_trigger:
                     pdf.add_page()
                     pdf.draw_table_header()
 
-                # --- LÓGICA DE DESENHO DA LINHA CORRIGIDA ---
                 x_start, y_start = pdf.get_x(), pdf.get_y()
-
-                # Posiciona cursor para a descrição e desenha para calcular a altura
-                pdf.set_x(x_start + 10)
-                pdf.multi_cell(120, line_height, desc_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
+                pdf.set_x(x_start + 15)
+                pdf.multi_cell(115, line_height, desc_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
                 altura_real = pdf.get_y() - y_start
                 
-                # Volta ao início da linha para desenhar as outras células com a altura correta
                 pdf.set_xy(x_start, y_start)
-                pdf.cell(10, altura_real, str(item_counter), 1, 0, 'C')
-                
+                pdf.cell(15, altura_real, str(sub_item.ordem), 1, 0, 'C')
                 pdf.set_xy(x_start + 130, y_start)
                 pdf.cell(60, altura_real, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
-                # --- FIM DA CORREÇÃO ---
 
                 if obs_text:
                     pdf.set_font('Arial', 'I', 8)
@@ -2837,16 +2838,10 @@ def gerar_relatorio_pdf():
                     pdf.multi_cell(0, 5, obs_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L', 1)
                     pdf.set_font('Arial', '', 9)
 
-                item_counter += 1
-
-        # Restante do código para extintores e assinaturas permanece o mesmo
         if p.extintores_check.all():
             if pdf.get_y() + 40 > pdf.page_break_trigger: pdf.add_page()
             pdf.ln(5); pdf.set_font('Arial', 'B', 10); pdf.set_fill_color(224, 224, 224); pdf.cell(0, 7, "Controle de Extintores", 1, 1, 'C', 1)
-            # Cabeçalho da tabela de extintores
-            pdf.set_font('Arial', 'B', 9)
-            pdf.cell(40, 7, 'Local', 1, 0, 'C', 1); pdf.cell(20, 7, 'Tipo', 1, 0, 'C', 1); pdf.cell(20, 7, 'Peso (KG)', 1, 0, 'C', 1); pdf.cell(30, 7, 'Vencimento', 1, 0, 'C', 1); pdf.cell(20, 7, 'Trocado?', 1, 0, 'C', 1); pdf.cell(60, 7, 'Motivo da Troca', 1, 1, 'C', 1)
-            pdf.set_font('Arial', '', 9)
+            pdf.set_font('Arial', 'B', 9); pdf.cell(40, 7, 'Local', 1, 0, 'C', 1); pdf.cell(20, 7, 'Tipo', 1, 0, 'C', 1); pdf.cell(20, 7, 'Peso (KG)', 1, 0, 'C', 1); pdf.cell(30, 7, 'Vencimento', 1, 0, 'C', 1); pdf.cell(20, 7, 'Trocado?', 1, 0, 'C', 1); pdf.cell(60, 7, 'Motivo da Troca', 1, 1, 'C', 1); pdf.set_font('Arial', '', 9)
             for ext in p.extintores_check.all():
                  pdf.cell(40, 6, (ext.local or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'L'); pdf.cell(20, 6, (ext.tipo or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C'); pdf.cell(20, 6, str(ext.peso or ''), 1, 0, 'C'); pdf.cell(30, 6, ext.vencimento.strftime('%d/%m/%Y') if ext.vencimento else '', 1, 0, 'C'); pdf.cell(20, 6, (ext.trocado or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C'); pdf.cell(60, 6, (ext.motivo_troca or '').encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'L')
 
@@ -2875,7 +2870,7 @@ def gerar_relatorio_pdf():
         if p.assinatura_responsavel: pdf.line(x_responsavel, y_signatures + 32, x_responsavel + 80, y_signatures + 32); pdf.set_xy(x_responsavel, y_signatures + 33); pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
 
     pdf_output = bytes(pdf.output(dest='S'))
-    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
+    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': f'attachment;filename={filename}'})
 
 
 
