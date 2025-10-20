@@ -2704,6 +2704,38 @@ def gerar_relatorio_pdf():
     if 'admin_user' not in session:
         return redirect(url_for('admin.login'))
 
+    # --- Classe Auxiliar para gerar o PDF com Cabeçalho e Rodapé customizado ---
+    class PDF(FPDF):
+        def __init__(self, checklist_title, veiculo_info, metadata_info, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.checklist_title = checklist_title
+            self.veiculo_info = veiculo_info
+            self.metadata_info = metadata_info # Atributo para a linha de metadados
+
+        def header(self):
+            # Título do Checklist (Ex: CHECKLIST DIÁRIO...)
+            self.set_font('Arial', 'B', 14)
+            self.cell(0, 8, self.checklist_title, 0, 1, 'C')
+            
+            # Informações de Metadados (Código, REV e Data do Checklist)
+            self.set_font('Arial', 'B', 10)
+            self.cell(0, 8, self.metadata_info, 0, 1, 'C')
+
+            # Informações do Veículo
+            self.set_font('Arial', 'I', 10)
+            self.cell(0, 8, self.veiculo_info, 0, 1, 'C')
+            
+            # Quebra de linha
+            self.ln(4)
+
+        def footer(self):
+            # Posiciona o cursor a 1.5 cm do fim da página
+            self.set_y(-15)
+            self.set_font('Arial', 'I', 8)
+            # Número da página
+            self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+
+
     # 1. Captura e processa filtros
     tipo_checklist = request.args.get('tipo_checklist')
     veiculo_id = request.args.get('veiculo_id')
@@ -2735,41 +2767,61 @@ def gerar_relatorio_pdf():
     checklist_base = Checklist.query.get(preenchimentos[0].checklist_id)
     itens_principais = checklist_base.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
 
-    titulo = f"Relatório - {veiculo_obj.nome_conjunto if veiculo_obj else 'Geral'}"
-    pdf = PDF(title=titulo, orientation='P', unit='mm', format='A4')
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
+    # --- CRIAÇÃO DOS TÍTULOS PARA O CABEÇALHO DO PDF ---
+    titulo_checklist_pdf = ""
+    if tipo_checklist == 'Diário':
+        titulo_checklist_pdf = 'CHECKLIST DIÁRIO FR MAN 06 DIÁRIO'
+    elif tipo_checklist == 'Mensal':
+        titulo_checklist_pdf = 'CHECKLIST MENSAL/ADEQUAÇÃO FR MAN 07 MENSAL'
+    else:
+        titulo_checklist_pdf = checklist_base.titulo
+        
+    info_veiculo_pdf = f"Veículo: {veiculo_obj.nome_conjunto}" if veiculo_obj else "Veículos: Todos da seleção"
+    # --- NOVO: Linha de metadados combinada ---
+    data_checklist_str = checklist_base.data.strftime('%d/%m/%Y')
+    info_metadata_pdf = f"Código: {checklist_base.codigo} / REV: {checklist_base.revisao} / Data: {data_checklist_str}"
 
+
+    # --- INICIALIZA O PDF COM OS TÍTULOS CORRETOS ---
+    pdf = PDF(
+        checklist_title=titulo_checklist_pdf, 
+        veiculo_info=info_veiculo_pdf, 
+        metadata_info=info_metadata_pdf, # Passa a nova informação combinada
+        orientation='P', 
+        unit='mm', 
+        format='A4'
+    )
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
     # --- DEFINIÇÃO DOS FUSOS HORÁRIOS ---
     brt_tz = timezone(timedelta(hours=-3))
     utc_tz = timezone.utc
 
     dados_agrupados = defaultdict(list)
     for p in preenchimentos:
-        # Agrupa pela data local correta
         data_local = p.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz)
         dados_agrupados[data_local.date()].append(p)
 
     laudo_count = 0
-    for data, preenchs in sorted(dados_agrupados.items()):
-        for p in preenchs:
+    for data, preenchs in sorted(dados_agrupados.items(), reverse=True): 
+        for p in sorted(preenchs, key=lambda x: x.data_preenchimento, reverse=True):
             laudo_count += 1
             if laudo_count > 1:
                 pdf.add_page()
-            
-            # --- CORREÇÃO: CONVERTE A HORA DE UTC (DO BANCO) PARA BRT (EXIBIÇÃO) ---
+            else: 
+                pdf.add_page()
+
             hora_utc = p.data_preenchimento.replace(tzinfo=utc_tz)
             hora_local_obj = hora_utc.astimezone(brt_tz)
             data_local_str = hora_local_obj.strftime('%d/%m/%Y')
             hora_local_str = hora_local_obj.strftime('%H:%M')
 
             pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 10, f"Data do Checklist: {data_local_str}", 0, 1, 'L')
+            pdf.cell(0, 10, f"Data do Preenchimento: {data_local_str}", 0, 1, 'L')
             pdf.set_font('Arial', 'I', 10)
             pdf.cell(0, 8, f"Preenchido por: {p.motorista.nome} às {hora_local_str}", 0, 1, 'L')
             pdf.ln(2)
 
-            # (O restante do código para renderizar os itens e assinaturas continua o mesmo)
             item_counter = 1
             for item_principal in itens_principais:
                 pdf.set_font('Arial', 'B', 10)
@@ -2786,75 +2838,65 @@ def gerar_relatorio_pdf():
 
                 sub_itens_sorted = sorted(item_principal.sub_itens, key=lambda si: natural_sort_key(si.ordem))
                 for sub_item in sub_itens_sorted:
+                    altura_estimada = 6 + (5 if next((r for r in p.respostas if r.item_id == sub_item.id), None) and next((r for r in p.respostas if r.item_id == sub_item.id), None).observacao else 0)
+                    if pdf.get_y() + altura_estimada > pdf.page_break_trigger:
+                        pdf.add_page()
+                
                     resposta_obj = next((r for r in p.respostas if r.item_id == sub_item.id), None)
                     h = 6
                     x_start = pdf.get_x()
                     y_start = pdf.get_y()
+                    
+                    texto_sub_item = sub_item.texto.encode('latin-1', 'replace').decode('latin-1')
+                    
+                    # Célula do Número
                     pdf.cell(10, h, str(item_counter), 1, 0, 'C')
-                    pdf.multi_cell(120, h, sub_item.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
-                    y_end = pdf.get_y()
+                    # Posição X para a descrição
+                    x_desc = pdf.get_x()
+                    
+                    # MultiCell para a Descrição
+                    pdf.multi_cell(120, h, texto_sub_item, 1, 'L')
+                    y_end_desc = pdf.get_y()
+                    
+                    altura_real = y_end_desc - y_start
+                    
+                    # Reposiciona para a célula de Número e a redesenha com a altura correta
+                    pdf.set_xy(x_start, y_start)
+                    pdf.cell(10, altura_real, str(item_counter), 1, 0, 'C')
+
+                    # Reposiciona para a célula de Resposta
                     pdf.set_xy(x_start + 130, y_start)
-                    pdf.cell(60, y_end - y_start, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
+                    pdf.cell(60, altura_real, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
+                    
                     if resposta_obj and resposta_obj.observacao:
                         pdf.set_font('Arial', 'I', 8)
                         pdf.set_fill_color(245, 245, 245)
                         pdf.multi_cell(0, 5, f"Obs: {resposta_obj.observacao.encode('latin-1', 'replace').decode('latin-1')}", 1, 'L', 1)
                         pdf.set_font('Arial', '', 9)
+                    
                     item_counter += 1
 
-            # --- INÍCIO DA SEÇÃO DE EXTINTORES PARA O PDF ---
             extintores_preenchidos = p.extintores_check.all()
             if extintores_preenchidos:
-                pdf.ln(5) # Espaçamento
-                pdf.set_font('Arial', 'B', 10)
-                pdf.set_fill_color(224, 224, 224)
-                pdf.cell(0, 7, "Controle de Extintores", 1, 1, 'C', 1)
-
-                # Cabeçalho da tabela
-                pdf.set_font('Arial', 'B', 9)
-                pdf.cell(40, 7, 'Local', 1, 0, 'C', 1)
-                pdf.cell(20, 7, 'Tipo', 1, 0, 'C', 1)
-                pdf.cell(20, 7, 'Peso (KG)', 1, 0, 'C', 1)
-                pdf.cell(30, 7, 'Vencimento', 1, 0, 'C', 1)
-                pdf.cell(20, 7, 'Trocado?', 1, 0, 'C', 1)
-                pdf.cell(60, 7, 'Motivo da Troca', 1, 1, 'C', 1)
-                
-                # Corpo da tabela
+                if pdf.get_y() + 30 > pdf.page_break_trigger: pdf.add_page()
+                pdf.ln(5)
+                pdf.set_font('Arial', 'B', 10); pdf.set_fill_color(224, 224, 224); pdf.cell(0, 7, "Controle de Extintores", 1, 1, 'C', 1)
+                pdf.set_font('Arial', 'B', 9); pdf.cell(40, 7, 'Local', 1, 0, 'C', 1); pdf.cell(20, 7, 'Tipo', 1, 0, 'C', 1); pdf.cell(20, 7, 'Peso (KG)', 1, 0, 'C', 1); pdf.cell(30, 7, 'Vencimento', 1, 0, 'C', 1); pdf.cell(20, 7, 'Trocado?', 1, 0, 'C', 1); pdf.cell(60, 7, 'Motivo da Troca', 1, 1, 'C', 1)
                 pdf.set_font('Arial', '', 9)
                 for ext in extintores_preenchidos:
-                    pdf.cell(40, 6, (ext.local or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'L')
-                    pdf.cell(20, 6, (ext.tipo or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C')
-                    pdf.cell(20, 6, str(ext.peso or ''), 1, 0, 'C')
-                    pdf.cell(30, 6, ext.vencimento.strftime('%d/%m/%Y') if ext.vencimento else '', 1, 0, 'C')
-                    pdf.cell(20, 6, (ext.trocado or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C')
-                    pdf.cell(60, 6, (ext.motivo_troca or '').encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'L')
-            # --- FIM DA SEÇÃO DE EXTINTORES PARA O PDF ---
+                    pdf.cell(40, 6, (ext.local or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'L'); pdf.cell(20, 6, (ext.tipo or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C'); pdf.cell(20, 6, str(ext.peso or ''), 1, 0, 'C'); pdf.cell(30, 6, ext.vencimento.strftime('%d/%m/%Y') if ext.vencimento else '', 1, 0, 'C'); pdf.cell(20, 6, (ext.trocado or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C'); pdf.cell(60, 6, (ext.motivo_troca or '').encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'L')
             
-            altura_bloco_assinatura = 60
-            if pdf.get_y() + altura_bloco_assinatura > pdf.page_break_trigger:
-                pdf.add_page()
-
+            if pdf.get_y() + 60 > pdf.page_break_trigger: pdf.add_page()
             pdf.ln(5)
-            pdf.set_font('Arial', 'B', 11)
-            pdf.cell(0, 8, 'Observações Gerais e Assinaturas', 0, 1, 'L')
-            
-            obs_text = []
-            if p.outros_problemas: obs_text.append(f"Outros Problemas: {p.outros_problemas}")
-            if p.solucoes_adotadas: obs_text.append(f"Soluções Adotadas: {p.solucoes_adotadas}")
-            if p.pendencias_gerais: obs_text.append(f"Pendências Gerais: {p.pendencias_gerais}")
-            
+            pdf.set_font('Arial', 'B', 11); pdf.cell(0, 8, 'Observações Gerais e Assinaturas', 0, 1, 'L')
+            obs_text = [f"Outros Problemas: {p.outros_problemas}" for p in [p] if p.outros_problemas] + [f"Soluções Adotadas: {p.solucoes_adotadas}" for p in [p] if p.solucoes_adotadas] + [f"Pendências Gerais: {p.pendencias_gerais}" for p in [p] if p.pendencias_gerais]
             pdf.set_font('Arial', '', 9)
             if obs_text:
-                full_obs_text = "\\n".join(obs_text)
-                pdf.multi_cell(0, 5, full_obs_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
+                pdf.multi_cell(0, 5, "\n".join(obs_text).encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
             else:
                 pdf.cell(0, 8, "Nenhuma observação geral registrada.", 1, 1, 'C')
-            
             pdf.ln(10)
-            
-            y_signatures = pdf.get_y()
-            x_motorista = pdf.get_x()
-            x_responsavel = x_motorista + 95
+            y_signatures = pdf.get_y(); x_motorista = pdf.get_x(); x_responsavel = x_motorista + 95
 
             def render_signature(signature_data, x_pos, y_pos):
                 temp_file = None
@@ -2868,34 +2910,21 @@ def gerar_relatorio_pdf():
                 except Exception:
                     pdf.text(x_pos + 5, y_pos + 15, "(Erro ao carregar assinatura)")
                 finally:
-                    if temp_file and os.path.exists(temp_file.name):
-                        os.remove(temp_file.name)
+                    if temp_file and os.path.exists(temp_file.name): os.remove(temp_file.name)
 
-            if p.assinatura_motorista:
-                render_signature(p.assinatura_motorista, x_motorista + 5, y_signatures)
-            
+            if p.assinatura_motorista: render_signature(p.assinatura_motorista, x_motorista + 5, y_signatures)
+            if p.assinatura_responsavel: render_signature(p.assinatura_responsavel, x_responsavel, y_signatures)
+            pdf.line(x_motorista + 5, y_signatures + 32, x_motorista + 85, y_signatures + 32); pdf.set_xy(x_motorista + 5, y_signatures + 33); pdf.set_font('Arial', 'I', 8); pdf.cell(80, 5, 'Motorista', 0, 0, 'C')
             if p.assinatura_responsavel:
-                render_signature(p.assinatura_responsavel, x_responsavel, y_signatures)
-            
-            pdf.line(x_motorista + 5, y_signatures + 32, x_motorista + 85, y_signatures + 32)
-            pdf.set_xy(x_motorista + 5, y_signatures + 33)
-            pdf.set_font('Arial', 'I', 8)
-            pdf.cell(80, 5, 'Motorista', 0, 0, 'C')
-            
-            if p.assinatura_responsavel:
-                pdf.line(x_responsavel, y_signatures + 32, x_responsavel + 80, y_signatures + 32)
-                pdf.set_xy(x_responsavel, y_signatures + 33)
-                pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
+                pdf.line(x_responsavel, y_signatures + 32, x_responsavel + 80, y_signatures + 32); pdf.set_xy(x_responsavel, y_signatures + 33); pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
 
     pdf_output = pdf.output(dest='S')
-    if isinstance(pdf_output, str):
-        response_bytes = pdf_output.encode('latin-1')
-    else:
-        response_bytes = bytes(pdf_output)
+    response_bytes = pdf_output.encode('latin-1') if isinstance(pdf_output, str) else bytes(pdf_output)
 
     return Response(response_bytes,
                     mimetype='application/pdf',
                     headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
+
 
 
 

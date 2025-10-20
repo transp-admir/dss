@@ -19,7 +19,7 @@
         }
         .header h1 {
             margin: 0;
-            font-size: 18pt;
+            font-size: 16pt;
         }
         .header p {
             margin: 5px 0;
@@ -30,6 +30,10 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            page-break-inside: auto;
+        }
+        tr {
+            page-break-inside: avoid !important;
         }
         th, td {
             border: 1px solid #333;
@@ -90,9 +94,17 @@
 </head>
 <body>
     <div class="header">
-        <h1>Relatório de Checklist - {{ veiculo_nome }}</h1>
+        <h1>
+            {% if checklist_tipo == 'Diário' %}
+                CHECKLIST DIÁRIO FR MAN 06 DIÁRIO
+            {% elif checklist_tipo == 'Mensal' %}
+                CHECKLIST MENSAL/ADEQUAÇÃO FR MAN 07 MENSAL
+            {% else %}
+                Relatório de Checklist
+            {% endif %}
+        </h1>
+        <p><strong>Veículo:</strong> {{ veiculo_nome }}</p>
         <p><strong>Período:</strong> {{ data_inicio }} a {{ data_fim }}</p>
-        <p><strong>Checklist:</strong> {{ checklist_tipo }}</p>
     </div>
 
     <div class="footer">
@@ -160,6 +172,33 @@
                     {% endfor %}
                 </tbody>
             </table>
+
+            {% if p.extintores_check %}
+            <div style="margin-top: 20px;">
+                <h3 style="font-size: 12pt; text-align: center; background-color: #E0E0E0; padding: 5px; border: 1px solid #333;">Controle de Extintores</h3>
+                <table style="margin-top: 0;">
+                    <thead>
+                        <tr>
+                            <th>Nº Extintor</th>
+                            <th>Validade</th>
+                            <th>Condição</th>
+                            <th>Observação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for extintor in p.extintores_check %}
+                        <tr>
+                            <td style="text-align: center;">{{ extintor.extintor_numero }}</td>
+                            <td style="text-align: center;">{{ extintor.data_validade.strftime('%m/%Y') }}</td>
+                            <td style="text-align: center;">{{ extintor.condicao }}</td>
+                            <td>{{ extintor.observacao }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
         {% endfor %}
     {% endfor %}
 
