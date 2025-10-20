@@ -2919,6 +2919,9 @@ def acessar_documento(documento_id):
 
 #relatorio de status diario
 
+# Substitua a função gerar_relatorio_pdf() existente por esta:
+# Substitua a função gerar_relatorio_pdf() existente por esta:
+# Substitua a função gerar_relatorio_pdf() existente por esta:
 @admin_bp.route('/gerar_relatorio_pdf')
 def gerar_relatorio_pdf():
     if 'admin_user' not in session:
@@ -2932,7 +2935,7 @@ def gerar_relatorio_pdf():
             self.metadata_info = ""
 
         def header(self):
-            if not self.checklist_title: return # Não desenha o cabeçalho se o título estiver vazio
+            if not self.checklist_title: return
             
             self.set_font('Arial', 'B', 14)
             self.cell(0, 8, self.checklist_title.encode('latin-1', 'replace').decode('latin-1'), 0, 1, 'C')
@@ -2963,7 +2966,6 @@ def gerar_relatorio_pdf():
         p = ChecklistPreenchido.query.get(preenchido_id)
         if p:
             preenchimentos.append(p)
-            # Define o nome do arquivo para PDF individual
             date_str = p.data_preenchimento.strftime('%d%m%Y')
             filename = f"relatorio_{p.veiculo.nome_conjunto}_{date_str}.pdf"
     else:
@@ -2978,13 +2980,11 @@ def gerar_relatorio_pdf():
         if veiculo_id and veiculo_id != 'todos':
             query = query.filter(ChecklistPreenchido.veiculo_id == veiculo_id)
         preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
-        # Define um nome de arquivo genérico para relatórios consolidados
         if veiculo_id and veiculo_id != 'todos':
             veiculo_obj = Veiculo.query.get(veiculo_id)
             filename = f"consolidado_{veiculo_obj.nome_conjunto}.pdf"
         else:
             filename = "consolidado_geral.pdf"
-
 
     if not preenchimentos:
         flash('Nenhum checklist preenchido encontrado.', 'warning')
@@ -2996,14 +2996,12 @@ def gerar_relatorio_pdf():
     utc_tz = timezone.utc
     
     for p in preenchimentos:
-        # ATUALIZA OS ATRIBUTOS DO PDF ANTES DE ADICIONAR A PÁGINA
         checklist_atual = p.checklist
         pdf.checklist_title = {'DIÁRIO': 'CHECKLIST DIÁRIO FR MAN 06 DIÁRIO', 'MENSAL': 'CHECKLIST MENSAL/ADEQUAÇÃO FR MAN 07 MENSAL'}.get(checklist_atual.tipo, checklist_atual.titulo)
         pdf.veiculo_info = f"Veículo: {p.veiculo.nome_conjunto}"
         pdf.metadata_info = f"Código: {checklist_atual.codigo} / REV: {checklist_atual.revisao} / Data: {checklist_atual.data.strftime('%d/%m/%Y')}"
         
         pdf.add_page()
-
         hora_local_obj = p.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz)
         pdf.set_font('Arial', 'B', 12)
         pdf.cell(0, 10, f"Data do Preenchimento: {hora_local_obj.strftime('%d/%m/%Y')}", 0, 1, 'L')
@@ -3029,18 +3027,14 @@ def gerar_relatorio_pdf():
                 
                 def calculate_height(text, width):
                     if not text: return 0
-                    test_pdf = FPDF()
-                    test_pdf.set_font('Arial', '', 9)
+                    test_pdf = FPDF(); test_pdf.set_font('Arial', '', 9)
                     text = text.encode('latin-1', 'replace').decode('latin-1')
                     lines = test_pdf.get_string_width(text) / width
                     return line_height * (int(lines) + 1.5)
-
                 needed_height = calculate_height(desc_text, 115)
-                if obs_text: needed_height += calculate_height(obs_text, 180)
-
+                if obs_text: needed_height += calculate_height(obs_text, 175)
                 if pdf.get_y() + needed_height > pdf.page_break_trigger:
-                    pdf.add_page()
-                    pdf.draw_table_header()
+                    pdf.add_page(); pdf.draw_table_header()
 
                 x_start, y_start = pdf.get_x(), pdf.get_y()
                 pdf.set_x(x_start + 15)
@@ -3052,10 +3046,13 @@ def gerar_relatorio_pdf():
                 pdf.set_xy(x_start + 130, y_start)
                 pdf.cell(60, altura_real, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
 
+                # --- CORREÇÃO DEFINITIVA ---
                 if obs_text:
                     pdf.set_font('Arial', 'I', 8)
                     pdf.set_fill_color(245, 245, 245)
-                    pdf.multi_cell(0, 5, obs_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L', 1)
+                    # Desenha as células e força uma quebra de linha explícita no final
+                    pdf.cell(15, 5, '', border=1, ln=0, fill=1)
+                    pdf.cell(175, 5, obs_text.encode('latin-1', 'replace').decode('latin-1'), border=1, ln=1, fill=1)
                     pdf.set_font('Arial', '', 9)
 
         if p.extintores_check.all():
@@ -3094,7 +3091,7 @@ def gerar_relatorio_pdf():
     except TypeError:
         pdf_output = pdf.output(dest='S').encode('latin-1')
 
-    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
+    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': f'attachment;filename={filename}'})
 
 
 
