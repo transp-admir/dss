@@ -621,35 +621,25 @@ def preencher_checklist(checklist_id):
     veiculo_do_motorista = motorista.veiculo
 
     if request.method == 'POST':
-        # --- INÍCIO DA LÓGICA DE MEDIÇÃO DE TEMPO ---
         start_time_str = session.pop('checklist_start_time', None)
         tempo_em_segundos = None
         
         data_preenchimento_str = request.form.get('data_preenchimento_local')
-        if data_preenchimento_str:
-            data_preenchimento = datetime.fromisoformat(data_preenchimento_str.replace('Z', '+00:00'))
-        else:
-            data_preenchimento = datetime.now(timezone.utc)
+        data_preenchimento = datetime.fromisoformat(data_preenchimento_str.replace('Z', '+00:00')) if data_preenchimento_str else datetime.now(timezone.utc)
 
         if start_time_str:
             try:
                 start_time = datetime.fromisoformat(start_time_str)
                 duration = data_preenchimento - start_time
-                tempo_em_segundos = max(0, int(duration.total_seconds())) # Garante que não seja negativo
+                tempo_em_segundos = max(0, int(duration.total_seconds()))
             except (ValueError, TypeError):
-                tempo_em_segundos = None # Ignora se houver erro na conversão
-        # --- FIM DA LÓGICA DE MEDIÇÃO DE TEMPO ---
+                tempo_em_segundos = None
 
         if not veiculo_do_motorista:
             flash('Você não está vinculado a um veículo. Contate o administrador.', 'danger')
             return redirect(url_for('main.lista_checklists_motorista'))
 
         assinatura_motorista_data = request.form.get('assinatura_motorista')
-        assinatura_responsavel_data = request.form.get('assinatura_responsavel')
-        outros_problemas = request.form.get('outros_problemas')
-        solucoes_adotadas = request.form.get('solucoes_adotadas')
-        pendencias_gerais = request.form.get('pendencias_gerais')
-
         if not assinatura_motorista_data:
             flash('A assinatura do motorista é obrigatória.', 'danger')
             return redirect(url_for('main.preencher_checklist', checklist_id=checklist_id))
@@ -660,27 +650,23 @@ def preencher_checklist(checklist_id):
             checklist_id=checklist.id,
             data_preenchimento=data_preenchimento,
             assinatura_motorista=assinatura_motorista_data,
-            assinatura_responsavel=assinatura_responsavel_data,
-            outros_problemas=outros_problemas,
-            solucoes_adotadas=solucoes_adotadas,
-            pendencias_gerais=pendencias_gerais,
-            tempo_preenchimento=tempo_em_segundos  # <-- CAMPO ADICIONADO AQUI
+            assinatura_responsavel=request.form.get('assinatura_responsavel'),
+            outros_problemas=request.form.get('outros_problemas'),
+            solucoes_adotadas=request.form.get('solucoes_adotadas'),
+            pendencias_gerais=request.form.get('pendencias_gerais'),
+            tempo_preenchimento=tempo_em_segundos
         )
         db.session.add(novo_preenchimento)
 
-        # O resto do código permanece igual para salvar respostas, pendências, etc.
         respostas_adicionadas = []
         for key in request.form:
             if key.startswith('resposta-'):
                 item_id = int(key.split('-')[-1])
-                resposta_texto = request.form.get(key)
-                observacao = request.form.get(f'obs-{item_id}', '')
-
                 nova_resposta = ChecklistResposta(
                     preenchimento=novo_preenchimento,
                     item_id=item_id,
-                    resposta=resposta_texto,
-                    observacao=observacao
+                    resposta=request.form.get(key),
+                    observacao=request.form.get(f'obs-{item_id}', '')
                 )
                 db.session.add(nova_resposta)
                 respostas_adicionadas.append(nova_resposta)
@@ -693,13 +679,14 @@ def preencher_checklist(checklist_id):
             trocado = request.form.get(f'extintor-{i}-trocado')
             motivo_troca = request.form.get(f'extintor-{i}-motivo')
 
-            if peso or vencimento_str or motivo_troca:
+            if peso or vencimento_str:
                 vencimento_data = None
-                if vencimento_str:
+                if vencimento_str and vencimento_str.strip().upper() != 'N/A':
                     try:
                         vencimento_data = datetime.strptime(vencimento_str, '%d/%m/%Y').date()
                     except ValueError:
                         pass
+                
                 novo_extintor = ExtintorCheck(
                     preenchimento=novo_preenchimento,
                     local=local, tipo=tipo, peso=peso,
@@ -728,12 +715,21 @@ def preencher_checklist(checklist_id):
         flash('Checklist enviado com sucesso!', 'success')
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    # --- INÍCIO DA LÓGICA DE MEDIÇÃO DE TEMPO (GET) ---
-    # Salva o timestamp de início (em UTC e formato ISO) quando a página é carregada
+    # --- LÓGICA DE ORDENAÇÃO CORRIGIDA ---
     session['checklist_start_time'] = datetime.now(timezone.utc).isoformat()
-    # --- FIM ---
 
-    itens_principais = checklist.itens.filter_by(parent_id=None).order_by(ChecklistItem.ordem).all()
+    def natural_sort_key(text):
+        return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', str(text or '0'))]
+
+    itens_principais_query = checklist.itens.filter_by(parent_id=None).all()
+    itens_principais_sorted = sorted(itens_principais_query, key=lambda i: natural_sort_key(i.ordem))
+
+    itens_com_subitens = []
+    for item in itens_principais_sorted:
+        sub_itens_query = item.sub_itens.all()
+        sub_itens_sorted = sorted(sub_itens_query, key=lambda si: natural_sort_key(si.ordem))
+        itens_com_subitens.append((item, sub_itens_sorted))
+    
     pendencias_abertas = set()
     if veiculo_do_motorista:
         lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
@@ -743,9 +739,11 @@ def preencher_checklist(checklist_id):
         'motorista_preencher_checklist.html',
         checklist=checklist,
         veiculo=veiculo_do_motorista,
-        itens_principais=itens_principais,
+        itens_com_subitens=itens_com_subitens, # <--- Passando a lista ordenada
         pendencias_abertas=pendencias_abertas
     )
+
+
 
 
 

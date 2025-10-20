@@ -36,8 +36,8 @@
         display: block;
     }
     /* Adiciona um destaque visual para campos inválidos */
-    .item-invalido {
-        border: 2px solid #dc3545; /* Vermelho do Bootstrap para perigo */
+    .item-invalido, .is-invalid {
+        border: 2px solid #dc3545 !important; /* Vermelho do Bootstrap para perigo */
         border-radius: .25rem;
     }
 </style>
@@ -49,9 +49,8 @@
 {% endblock %}
 
 {% block content %}
-<form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}" id="checklist-form">
+<form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}" id="checklist-form" novalidate>
     
-    <!-- CAMPO OCULTO PARA A DATA/HORA LOCAL -->
     <input type="hidden" name="data_preenchimento_local" id="data_preenchimento_local_input">
 
     {% if not veiculo %}
@@ -63,16 +62,15 @@
             Preenchendo checklist para o veículo: <strong>{{ veiculo.nome_conjunto }}</strong>
         </div>
 
-        {% for item in itens_principais %}
-            {# ... (bloco de extintores inalterado) ... #}
+        <!-- ***** LÓGICA DE ORDENAÇÃO CORRIGIDA ***** -->
+        {% for item, sub_itens in itens_com_subitens %}
             {% if item.texto == '__BLOCO_EXTINTORES__' %}
                  <div class="card mt-4 mb-3">
                     <div class="card-header">
                         <h5>Controle de Extintores</h5>
                     </div>
                     <div class="card-body">
-                        <input type="hidden" name="item_textos_especiais" value="__BLOCO_EXTINTORES__">
-
+                        <p class="text-muted small">Para os campos "Peso" e "Vencimento", preencha com os dados do extintor ou escreva <strong>N/A</strong> caso não se aplique.</p>
                         {% set locais = ['CABINE', '1° CARRETA L.D', '1° CARRETA L.E', '2° CARRETA L.D', '2° CARRETA L.E'] %}
                         {% for i in range(5) %}
                         <div class="extintor-card mb-3">
@@ -87,11 +85,11 @@
                                 </div>
                                 <div class="form-group">
                                     <label for="extintor-{{ i }}-peso">Peso (KG)</label>
-                                    <input type="text" inputmode="decimal" class="form-control" id="extintor-{{ i }}-peso" name="extintor-{{ i }}-peso" placeholder="Ex: 2.5">
+                                    <input type="text" class="form-control extintor-required" id="extintor-{{ i }}-peso" name="extintor-{{ i }}-peso" placeholder="Ex: 2.5 ou N/A" required>
                                 </div>
                                 <div class="form-group">
                                     <label for="extintor-{{ i }}-vencimento">Vencimento</label>
-                                    <input type="text" class="form-control date-mask" id="extintor-{{ i }}-vencimento" name="extintor-{{ i }}-vencimento" placeholder="DD/MM/AAAA">
+                                    <input type="text" class="form-control date-mask extintor-required" id="extintor-{{ i }}-vencimento" name="extintor-{{ i }}-vencimento" placeholder="DD/MM/AAAA ou N/A" required>
                                 </div>
                                 <div class="form-group-radio">
                                      <label>Trocado?</label>
@@ -121,12 +119,12 @@
                         {% endif %}
                     </div>
                     <ul class="list-group list-group-flush">
-                        {% if item.sub_itens %}
-                            {% for sub_item in item.sub_itens.order_by('ordem') %}
+                        {% if sub_itens %}
+                            {% for sub_item in sub_itens %}
                                 <li class="list-group-item sub-item {% if sub_item.id in pendencias_abertas %}list-group-item-warning{% endif %}" data-ordem="{{ sub_item.ordem }}">
                                     <div class="mb-2"><strong>{{ sub_item.ordem }}</strong> - {{ sub_item.texto }} {% if sub_item.id in pendencias_abertas %}<span class="badge bg-danger ms-1">Pendência</span>{% endif %}</div>
                                     <div class="btn-group w-100" role="group">
-                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off">
+                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off" required>
                                         <label class="btn btn-outline-success" for="conforme-{{ sub_item.id }}">Conforme</label>
 
                                         <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="nao-conforme-{{ sub_item.id }}" value="NAO CONFORME" autocomplete="off">
@@ -141,7 +139,7 @@
                         {% else %}
                              <li class="list-group-item single-item" data-ordem="{{ item.ordem }}">
                                 <div class="btn-group w-100" role="group">
-                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conforme-{{ item.id }}" value="CONFORME" autocomplete="off">
+                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conforme-{{ item.id }}" value="CONFORME" autocomplete="off" required>
                                     <label class="btn btn-outline-success" for="conforme-{{ item.id }}">Conforme</label>
 
                                     <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="nao-conforme-{{ item.id }}" value="NAO CONFORME" autocomplete="off">
@@ -158,7 +156,6 @@
             {% endif %}
         {% endfor %}
 
-        <!-- ... (Observações Gerais, Termo, Assinaturas inalterados) ... -->
         <div class="card mt-4">
             <div class="card-header">
                 <h5>Observações Gerais</h5>
@@ -235,6 +232,7 @@
     {% endif %}
 </form>
 
+<!-- **** BLOCO DE SCRIPT COMPLETO E CORRIGIDO **** -->
 {% if veiculo %}
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 <script>
@@ -242,7 +240,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('checklist-form');
     if (!form) return;
 
-    // Configuração dos pads de assinatura
     const canvasMotorista = document.getElementById('signature-canvas-motorista');
     const signaturePadMotorista = new SignaturePad(canvasMotorista, { backgroundColor: 'rgb(255, 255, 255)' });
     const signaturePadWrapper = document.getElementById('signature-pad-motorista-wrapper');
@@ -269,69 +266,66 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('clear-signature-motorista').addEventListener('click', () => signaturePadMotorista.clear());
     document.getElementById('clear-signature-responsavel').addEventListener('click', () => signaturePadResponsavel.clear());
 
-    // Máscara de data
+    // Máscara de data inteligente que aceita "N/A"
     document.querySelectorAll('.date-mask').forEach(input => {
         input.addEventListener('input', e => {
-            let v = e.target.value.replace(/\D/g, '');
+            let v = e.target.value.toUpperCase();
+            if ('N/A'.startsWith(v)) {
+                e.target.value = 'N/A';
+                return;
+            }
+            v = v.replace(/\D/g, '');
             v = v.replace(/(\d{2})(\d)/, '$1/$2');
             v = v.replace(/(\d{2})\/(\d{2})(\d)/, '$1/$2/$3');
             e.target.value = v.slice(0, 10);
         });
     });
 
-    // Evento de submit do formulário
     form.addEventListener('submit', function (event) {
-        event.preventDefault(); // Previne o envio imediato
+        event.preventDefault();
 
         // Limpa a marcação de erros anterior
-        document.querySelectorAll('.item-invalido').forEach(el => el.classList.remove('item-invalido'));
-        signaturePadWrapper.style.border = '1px solid #ced4da';
+        document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        signaturePadWrapper.classList.remove('is-invalid');
 
-        const itensNaoPreenchidos = [];
         let primeiroItemInvalido = null;
+        let isValid = true;
 
-        // Valida itens e sub-itens
+        // Valida itens do checklist
         document.querySelectorAll('.sub-item, .single-item').forEach(item => {
-            const ordem = item.dataset.ordem;
             const radios = item.querySelectorAll('input[type="radio"]');
             const isChecked = Array.from(radios).some(radio => radio.checked);
-
             if (!isChecked) {
-                itensNaoPreenchidos.push(ordem);
-                item.classList.add('item-invalido');
-                if (!primeiroItemInvalido) {
-                    primeiroItemInvalido = item;
-                }
+                isValid = false;
+                item.classList.add('is-invalid');
+                if (!primeiroItemInvalido) primeiroItemInvalido = item;
             }
         });
 
-        // Valida assinatura do motorista
-        const isAssinaturaVazia = signaturePadMotorista.isEmpty();
-        if (isAssinaturaVazia) {
-            signaturePadWrapper.style.border = '2px solid #dc3545';
-            if (!primeiroItemInvalido) {
-                primeiroItemInvalido = signaturePadWrapper;
+        // Valida campos de extintor
+        document.querySelectorAll('.extintor-required').forEach(input => {
+            if (!input.value.trim()) {
+                isValid = false;
+                input.classList.add('is-invalid');
+                if (!primeiroItemInvalido) primeiroItemInvalido = input;
             }
+        });
+
+        // Valida assinatura
+        if (signaturePadMotorista.isEmpty()) {
+            isValid = false;
+            signaturePadWrapper.classList.add('is-invalid');
+            if (!primeiroItemInvalido) primeiroItemInvalido = signaturePadWrapper;
         }
 
-        // Monta e exibe a mensagem de erro
-        let mensagemErro = '';
-        if (itensNaoPreenchidos.length > 0) {
-            mensagemErro += `Por favor, preencha os seguintes itens obrigatórios: ${itensNaoPreenchidos.join(', ')}.\n`;
-        }
-        if (isAssinaturaVazia) {
-            mensagemErro += 'A assinatura do Motorista é obrigatória.';
-        }
-
-        if (mensagemErro) {
-            alert(mensagemErro);
+        if (!isValid) {
+            alert('Por favor, preencha todos os campos obrigatórios em vermelho antes de enviar.');
             if (primeiroItemInvalido) {
                 primeiroItemInvalido.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
-            return; // Interrompe o processo
+            return;
         }
 
-        // Se tudo estiver OK, preenche os inputs das assinaturas e envia o form
         document.getElementById('assinatura_motorista_input').value = signaturePadMotorista.toDataURL('image/png');
         if (!signaturePadResponsavel.isEmpty()) {
             document.getElementById('assinatura_responsavel_input').value = signaturePadResponsavel.toDataURL('image/png');
@@ -339,14 +333,11 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('assinatura_responsavel_input').value = '';
         }
 
-        // *** ADICIONA A DATA/HORA LOCAL ANTES DE ENVIAR ***
         document.getElementById('data_preenchimento_local_input').value = new Date().toISOString();
-
-        // Envia o formulário
         form.submit();
     });
 });
 </script>
-{% endif %}
+{% endif %} <!-- FIM DA TAG QUE ESTAVA FALTANDO -->
 
 {% endblock %}
