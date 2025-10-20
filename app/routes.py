@@ -795,6 +795,7 @@ def formatar_segundos(segundos):
     segundos_restantes = segundos % 60
     return f"{minutos} min {segundos_restantes} s"
 
+#Substitua a função dashboard() existente por esta:
 @admin_bp.route('/dashboard')
 @login_required()
 def dashboard():
@@ -804,11 +805,11 @@ def dashboard():
     
     unidade_selecionada = request.args.get('unidade') if user_role == 'admin' else user_unidade
     operacao_selecionada = request.args.get('operacao')
+    data_inicio_str = request.args.get('data_inicio')
+    data_fim_str = request.args.get('data_fim')
     
-    if unidade_selecionada == 'todas':
-        unidade_selecionada = None
-    if operacao_selecionada == 'todas':
-        operacao_selecionada = None
+    if unidade_selecionada == 'todas': unidade_selecionada = None
+    if operacao_selecionada == 'todas': operacao_selecionada = None
 
     target_unidade = unidade_selecionada
     target_operacao = operacao_selecionada
@@ -816,61 +817,80 @@ def dashboard():
     # --- 2. DADOS PARA PREENCHER OS FILTROS DINÂMICOS ---
     unidades_disponiveis = []
     operacoes_por_unidade = {}
-    
     if user_role == 'admin':
         unidades_db = db.session.query(Veiculo.unidade).distinct().filter(Veiculo.unidade.isnot(None)).all()
         unidades_disponiveis = sorted([u[0] for u in unidades_db])
-        
-        operacoes_raw = db.session.query(Veiculo.unidade, Veiculo.operacao).distinct().filter(
-            Veiculo.unidade.isnot(None), 
-            Veiculo.operacao.isnot(None)
-        ).all()
-
+        operacoes_raw = db.session.query(Veiculo.unidade, Veiculo.operacao).distinct().filter(Veiculo.unidade.isnot(None), Veiculo.operacao.isnot(None)).all()
         for unidade, operacao in operacoes_raw:
-            if unidade not in operacoes_por_unidade:
-                operacoes_por_unidade[unidade] = []
+            if unidade not in operacoes_por_unidade: operacoes_por_unidade[unidade] = []
             operacoes_por_unidade[unidade].append(operacao)
-        
-        for unidade in operacoes_por_unidade:
-            operacoes_por_unidade[unidade].sort()
-    
+        for unidade in operacoes_por_unidade: operacoes_por_unidade[unidade].sort()
     operacoes_disponiveis_filtro = operacoes_por_unidade.get(unidade_selecionada, [])
 
     # --- 3. CÁLCULO DOS KPIs ---
     hoje = date.today()
-    inicio_mes = hoje.replace(day=1)
+    data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date() if data_inicio_str else hoje.replace(day=1)
+    if data_fim_str:
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    else:
+        proximo_mes = hoje.replace(day=28) + timedelta(days=4)
+        data_fim = proximo_mes - timedelta(days=proximo_mes.day)
+
+    periodo_dias = (data_fim - data_inicio).days + 1
+    brt_tz = timezone(timedelta(hours=-3))
+    utc_tz = timezone.utc
+    start_utc = datetime.combine(data_inicio, datetime.min.time(), tzinfo=brt_tz).astimezone(utc_tz)
+    end_utc = datetime.combine(data_fim, datetime.max.time(), tzinfo=brt_tz).astimezone(utc_tz)
 
     veiculos_query_base = Veiculo.query.filter(Veiculo.ativo == True)
-    if target_unidade:
-        veiculos_query_base = veiculos_query_base.filter(Veiculo.unidade == target_unidade)
-    if target_operacao:
-        veiculos_query_base = veiculos_query_base.filter(Veiculo.operacao == target_operacao)
-    total_veiculos = veiculos_query_base.count()
+    if target_unidade: veiculos_query_base = veiculos_query_base.filter(Veiculo.unidade == target_unidade)
+    if target_operacao: veiculos_query_base = veiculos_query_base.filter(Veiculo.operacao == target_operacao)
+    
+    veiculos_filtrados = veiculos_query_base.all()
+    veiculos_ids = {v.id for v in veiculos_filtrados}
+    total_veiculos = len(veiculos_filtrados)
+    
+    # CALCULO DE INDISPONIBILIDADES
+    total_dias_indisponiveis_diario = 0
+    veiculos_indisponiveis_mensal = set()
+    if veiculos_ids:
+        indisp_query = VeiculoIndisponibilidade.query.filter(
+            VeiculoIndisponibilidade.veiculo_id.in_(veiculos_ids),
+            VeiculoIndisponibilidade.data_inicio <= data_fim,
+            or_(VeiculoIndisponibilidade.data_fim == None, VeiculoIndisponibilidade.data_fim >= data_inicio)
+        ).all()
+        for ind in indisp_query:
+            overlap_start = max(ind.data_inicio, data_inicio)
+            overlap_end = min(ind.data_fim or data_fim, data_fim)
+            dias = (overlap_end - overlap_start).days + 1
+            if dias > 0:
+                if ind.tipo_checklist == 'DIÁRIO' or ind.tipo_checklist is None:
+                    total_dias_indisponiveis_diario += dias
+                if ind.tipo_checklist == 'MENSAL':
+                    veiculos_indisponiveis_mensal.add(ind.veiculo_id)
 
     # --- KPI: Adesão Diária ---
+    total_esperado_diario = max(0, (total_veiculos * periodo_dias) - total_dias_indisponiveis_diario)
     query_diario_base = ChecklistPreenchido.query.join(Checklist).join(Veiculo).filter(
-        Checklist.tipo == 'DIÁRIO', func.date(ChecklistPreenchido.data_preenchimento) == hoje
+        Checklist.tipo == 'DIÁRIO',
+        ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc),
+        Veiculo.id.in_(veiculos_ids) if veiculos_ids else false()
     )
-    if target_unidade: query_diario_base = query_diario_base.filter(Veiculo.unidade == target_unidade)
-    if target_operacao: query_diario_base = query_diario_base.filter(Veiculo.operacao == target_operacao)
-    
-    checklists_diarios_hoje = query_diario_base.with_entities(func.count(distinct(ChecklistPreenchido.veiculo_id))).scalar()
-    total_esperado_diario = total_veiculos
-    percentual_diario = (checklists_diarios_hoje / total_esperado_diario * 100) if total_esperado_diario > 0 else 0
+    checklists_diarios_periodo = query_diario_base.with_entities(ChecklistPreenchido.veiculo_id, func.date(ChecklistPreenchido.data_preenchimento)).distinct().count() or 0
+    percentual_diario = (checklists_diarios_periodo / total_esperado_diario * 100) if total_esperado_diario > 0 else 0
     
     # --- KPI: Adesão Mensal ---
+    total_esperado_mensal = max(0, total_veiculos - len(veiculos_indisponiveis_mensal))
     query_mensal_base = ChecklistPreenchido.query.join(Checklist).join(Veiculo).filter(
-        Checklist.tipo == 'MENSAL', func.date(ChecklistPreenchido.data_preenchimento) >= inicio_mes
+        Checklist.tipo == 'MENSAL',
+        ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc),
+        Veiculo.id.in_(veiculos_ids) if veiculos_ids else false()
     )
-    if target_unidade: query_mensal_base = query_mensal_base.filter(Veiculo.unidade == target_unidade)
-    if target_operacao: query_mensal_base = query_mensal_base.filter(Veiculo.operacao == target_operacao)
-    
-    checklists_mensais_mes = query_mensal_base.with_entities(func.count(distinct(ChecklistPreenchido.veiculo_id))).scalar()
-    total_esperado_mensal = total_veiculos
-    percentual_mensal = (checklists_mensais_mes / total_esperado_mensal * 100) if total_esperado_mensal > 0 else 0
+    checklists_mensais_periodo = query_mensal_base.with_entities(func.count(distinct(ChecklistPreenchido.veiculo_id))).scalar() or 0
+    percentual_mensal = (checklists_mensais_periodo / total_esperado_mensal * 100) if total_esperado_mensal > 0 else 0
 
-    # --- KPI: Adesão Geral (NOVO) ---
-    checklists_gerais_preenchidos = checklists_diarios_hoje + checklists_mensais_mes
+    # --- KPI: Adesão Geral ---
+    checklists_gerais_preenchidos = checklists_diarios_periodo + checklists_mensais_periodo
     total_esperado_geral = total_esperado_diario + total_esperado_mensal
     percentual_geral = (checklists_gerais_preenchidos / total_esperado_geral * 100) if total_esperado_geral > 0 else 0
     
@@ -891,51 +911,41 @@ def dashboard():
     if target_operacao: motoristas_query_base = motoristas_query_base.filter(Motorista.operacao == target_operacao)
     total_motoristas = motoristas_query_base.count()
     
-    # --- 4. GRÁFICOS E RANKING (AGORA DE ADESÃO GERAL) ---
+    # --- 4. GRÁFICOS E RANKING (LÓGICA ADAPTADA PARA PERÍODO) ---
     ranking_adesao = []
     if user_role == 'admin' and not target_unidade and not target_operacao:
-        # 1. Total de veículos ATIVOS por unidade
-        total_veiculos_por_unidade_query = db.session.query(
-            Veiculo.unidade, func.count(Veiculo.id)
-        ).filter(Veiculo.ativo == True, Veiculo.unidade.isnot(None)).group_by(Veiculo.unidade).all()
-        total_veiculos_map = dict(total_veiculos_por_unidade_query)
-
-        # 2. Preenchimentos DIÁRIOS por unidade
-        preenchidos_diario_query = db.session.query(
-            Veiculo.unidade, func.count(distinct(ChecklistPreenchido.veiculo_id))
-        ).join(ChecklistPreenchido, Veiculo.id == ChecklistPreenchido.veiculo_id)\
-         .join(Checklist, ChecklistPreenchido.checklist_id == Checklist.id)\
-         .filter(
-            Checklist.tipo == 'DIÁRIO',
-            func.date(ChecklistPreenchido.data_preenchimento) == hoje,
-            Veiculo.ativo == True
-        ).group_by(Veiculo.unidade).all()
-        preenchidos_diario_map = dict(preenchidos_diario_query)
-
-        # 3. Preenchimentos MENSAIS por unidade
-        preenchidos_mensal_query = db.session.query(
-            Veiculo.unidade, func.count(distinct(ChecklistPreenchido.veiculo_id))
-        ).join(ChecklistPreenchido, Veiculo.id == ChecklistPreenchido.veiculo_id)\
-         .join(Checklist, ChecklistPreenchido.checklist_id == Checklist.id)\
-         .filter(
-            Checklist.tipo == 'MENSAL',
-            func.date(ChecklistPreenchido.data_preenchimento) >= inicio_mes,
-            Veiculo.ativo == True
-        ).group_by(Veiculo.unidade).all()
-        preenchidos_mensal_map = dict(preenchidos_mensal_query)
-
-        # 4. Calcular a taxa de adesão GERAL
-        for unidade_nome, total_v in total_veiculos_map.items():
-            preenchidos_d = preenchidos_diario_map.get(unidade_nome, 0)
-            preenchidos_m = preenchidos_mensal_map.get(unidade_nome, 0)
+        unidades_para_ranking = [u[0] for u in db.session.query(Veiculo.unidade).filter(Veiculo.unidade.isnot(None)).distinct()]
+        for unidade_nome in unidades_para_ranking:
+            veiculos_unidade = Veiculo.query.filter(Veiculo.ativo == True, Veiculo.unidade == unidade_nome).all()
+            veiculos_unidade_ids = {v.id for v in veiculos_unidade}
             
-            total_preenchidos = preenchidos_d + preenchidos_m
-            total_esperado = total_v * 2 # 1 diário + 1 mensal por veículo
+            if not veiculos_unidade_ids: continue
 
-            if total_esperado > 0:
-                taxa = (total_preenchidos / total_esperado) * 100
-                ranking_adesao.append({'unidade': unidade_nome, 'taxa': round(taxa)})
+            dias_indisp_unidade, veiculos_indisp_mensal_unidade = 0, set()
+            indisp_unidade_q = VeiculoIndisponibilidade.query.filter(
+                VeiculoIndisponibilidade.veiculo_id.in_(veiculos_unidade_ids),
+                VeiculoIndisponibilidade.data_inicio <= data_fim,
+                or_(VeiculoIndisponibilidade.data_fim == None, VeiculoIndisponibilidade.data_fim >= data_inicio)
+            ).all()
+            for ind in indisp_unidade_q:
+                overlap_start = max(ind.data_inicio, data_inicio)
+                overlap_end = min(ind.data_fim or data_fim, data_fim)
+                dias = (overlap_end - overlap_start).days + 1
+                if dias > 0:
+                    if ind.tipo_checklist == 'DIÁRIO' or ind.tipo_checklist is None: dias_indisp_unidade += dias
+                    if ind.tipo_checklist == 'MENSAL': veiculos_indisp_mensal_unidade.add(ind.veiculo_id)
 
+            esperado_d = max(0, (len(veiculos_unidade_ids) * periodo_dias) - dias_indisp_unidade)
+            esperado_m = max(0, len(veiculos_unidade_ids) - len(veiculos_indisp_mensal_unidade))
+            
+            preenchido_d = db.session.query(ChecklistPreenchido).join(Checklist).filter(Checklist.tipo == 'DIÁRIO', ChecklistPreenchido.veiculo_id.in_(veiculos_unidade_ids), ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc)).with_entities(ChecklistPreenchido.veiculo_id, func.date(ChecklistPreenchido.data_preenchimento)).distinct().count()
+            preenchido_m = db.session.query(ChecklistPreenchido).join(Checklist).filter(Checklist.tipo == 'MENSAL', ChecklistPreenchido.veiculo_id.in_(veiculos_unidade_ids), ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc)).distinct(ChecklistPreenchido.veiculo_id).count()
+
+            total_esperado_unidade = esperado_d + esperado_m
+            total_preenchido_unidade = preenchido_d + preenchido_m
+            taxa = (total_preenchido_unidade / total_esperado_unidade * 100) if total_esperado_unidade > 0 else 0
+            ranking_adesao.append({'unidade': unidade_nome, 'taxa': round(taxa)})
+        
         ranking_adesao.sort(key=lambda x: x['taxa'], reverse=True)
 
     # --- Restante dos gráficos ---
@@ -957,10 +967,10 @@ def dashboard():
         checklists_gerais_preenchidos=checklists_gerais_preenchidos,
         total_esperado_geral=total_esperado_geral,
         percentual_geral=percentual_geral,
-        checklists_diarios_hoje=checklists_diarios_hoje,
+        checklists_diarios_periodo=checklists_diarios_periodo,
         total_esperado_diario=total_esperado_diario,
         percentual_diario=percentual_diario,
-        checklists_mensais_mes=checklists_mensais_mes,
+        checklists_mensais_periodo=checklists_mensais_periodo,
         total_esperado_mensal=total_esperado_mensal,
         percentual_mensal=percentual_mensal,
         tempo_medio_diario=tempo_medio_diario,
@@ -976,8 +986,212 @@ def dashboard():
         operacoes_disponiveis=operacoes_disponiveis_filtro,
         operacao_selecionada=operacao_selecionada,
         operacoes_por_unidade_json=operacoes_por_unidade,
-        config_unidade=config_unidade
+        config_unidade=config_unidade,
+        data_inicio=data_inicio,
+        data_fim=data_fim
     )
+
+
+#ROTA PARA DESCONSIDERAR OS DOMINGOS NO CÁLCULO DE ADESÃO DIÁRIA
+
+# @admin_bp.route('/dashboard')
+# @login_required()
+# def dashboard():
+#     # --- 1. FILTROS E PERMISSÕES ---
+#     user_role = session.get('role')
+#     user_unidade = session.get('unidade')
+    
+#     unidade_selecionada = request.args.get('unidade') if user_role == 'admin' else user_unidade
+#     operacao_selecionada = request.args.get('operacao')
+#     data_inicio_str = request.args.get('data_inicio')
+#     data_fim_str = request.args.get('data_fim')
+    
+#     if unidade_selecionada == 'todas': unidade_selecionada = None
+#     if operacao_selecionada == 'todas': operacao_selecionada = None
+
+#     target_unidade = unidade_selecionada
+#     target_operacao = operacao_selecionada
+
+#     # --- 2. DADOS PARA PREENCHER OS FILTROS DINÂMICOS ---
+#     unidades_disponiveis = []
+#     operacoes_por_unidade = {}
+#     if user_role == 'admin':
+#         unidades_db = db.session.query(Veiculo.unidade).distinct().filter(Veiculo.unidade.isnot(None)).all()
+#         unidades_disponiveis = sorted([u[0] for u in unidades_db])
+#         operacoes_raw = db.session.query(Veiculo.unidade, Veiculo.operacao).distinct().filter(Veiculo.unidade.isnot(None), Veiculo.operacao.isnot(None)).all()
+#         for unidade, operacao in operacoes_raw:
+#             if unidade not in operacoes_por_unidade: operacoes_por_unidade[unidade] = []
+#             operacoes_por_unidade[unidade].append(operacao)
+#         for unidade in operacoes_por_unidade: operacoes_por_unidade[unidade].sort()
+#     operacoes_disponiveis_filtro = operacoes_por_unidade.get(unidade_selecionada, [])
+
+#     # --- 3. CÁLCULO DOS KPIs ---
+#     hoje = date.today()
+#     data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date() if data_inicio_str else hoje.replace(day=1)
+#     if data_fim_str:
+#         data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+#     else:
+#         proximo_mes = hoje.replace(day=28) + timedelta(days=4)
+#         data_fim = proximo_mes - timedelta(days=proximo_mes.day)
+
+#     dias_uteis_periodo = 0
+#     for i in range((data_fim - data_inicio).days + 1):
+#         if (data_inicio + timedelta(days=i)).weekday() != 6: # 6 = Domingo
+#             dias_uteis_periodo += 1
+
+#     brt_tz = timezone(timedelta(hours=-3))
+#     utc_tz = timezone.utc
+#     start_utc = datetime.combine(data_inicio, datetime.min.time(), tzinfo=brt_tz).astimezone(utc_tz)
+#     end_utc = datetime.combine(data_fim, datetime.max.time(), tzinfo=brt_tz).astimezone(utc_tz)
+
+#     veiculos_query_base = Veiculo.query.filter(Veiculo.ativo == True)
+#     if target_unidade: veiculos_query_base = veiculos_query_base.filter(Veiculo.unidade == target_unidade)
+#     if target_operacao: veiculos_query_base = veiculos_query_base.filter(Veiculo.operacao == target_operacao)
+    
+#     veiculos_filtrados = veiculos_query_base.all()
+#     veiculos_ids = {v.id for v in veiculos_filtrados}
+#     total_veiculos = len(veiculos_filtrados)
+    
+#     total_dias_indisponiveis_diario = 0
+#     veiculos_indisponiveis_mensal = set()
+#     if veiculos_ids:
+#         indisp_query = VeiculoIndisponibilidade.query.filter(
+#             VeiculoIndisponibilidade.veiculo_id.in_(veiculos_ids),
+#             VeiculoIndisponibilidade.data_inicio <= data_fim,
+#             or_(VeiculoIndisponibilidade.data_fim == None, VeiculoIndisponibilidade.data_fim >= data_inicio)
+#         ).all()
+#         for ind in indisp_query:
+#             overlap_start = max(ind.data_inicio, data_inicio)
+#             overlap_end = min(ind.data_fim or data_fim, data_fim)
+#             if overlap_start <= overlap_end:
+#                 if ind.tipo_checklist == 'MENSAL':
+#                     veiculos_indisponiveis_mensal.add(ind.veiculo_id)
+#                 if ind.tipo_checklist == 'DIÁRIO' or ind.tipo_checklist is None:
+#                     current_day = overlap_start
+#                     while current_day <= overlap_end:
+#                         if current_day.weekday() != 6:
+#                             total_dias_indisponiveis_diario += 1
+#                         current_day += timedelta(days=1)
+
+#     dias_potenciais_diario = total_veiculos * dias_uteis_periodo
+#     total_esperado_diario = max(0, dias_potenciais_diario - total_dias_indisponiveis_diario)
+#     query_diario_base = ChecklistPreenchido.query.join(Checklist).join(Veiculo).filter(
+#         Checklist.tipo == 'DIÁRIO', ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc),
+#         Veiculo.id.in_(veiculos_ids) if veiculos_ids else false()
+#     )
+#     checklists_diarios_periodo = query_diario_base.with_entities(ChecklistPreenchido.veiculo_id, func.date(ChecklistPreenchido.data_preenchimento)).distinct().count() or 0
+#     percentual_diario = (checklists_diarios_periodo / total_esperado_diario * 100) if total_esperado_diario > 0 else 0
+    
+#     total_esperado_mensal = max(0, total_veiculos - len(veiculos_indisponiveis_mensal))
+#     query_mensal_base = ChecklistPreenchido.query.join(Checklist).join(Veiculo).filter(
+#         Checklist.tipo == 'MENSAL', ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc),
+#         Veiculo.id.in_(veiculos_ids) if veiculos_ids else false()
+#     )
+#     checklists_mensais_periodo = query_mensal_base.with_entities(func.count(distinct(ChecklistPreenchido.veiculo_id))).scalar() or 0
+#     percentual_mensal = (checklists_mensais_periodo / total_esperado_mensal * 100) if total_esperado_mensal > 0 else 0
+
+#     checklists_gerais_preenchidos = checklists_diarios_periodo + checklists_mensais_periodo
+#     total_esperado_geral = total_esperado_diario + total_esperado_mensal
+#     percentual_geral = (checklists_gerais_preenchidos / total_esperado_geral * 100) if total_esperado_geral > 0 else 0
+    
+#     avg_tempo_diario_seg = query_diario_base.with_entities(func.avg(ChecklistPreenchido.tempo_preenchimento)).scalar()
+#     tempo_medio_diario = formatar_segundos(avg_tempo_diario_seg)
+#     avg_tempo_mensal_seg = query_mensal_base.with_entities(func.avg(ChecklistPreenchido.tempo_preenchimento)).scalar()
+#     tempo_medio_mensal = formatar_segundos(avg_tempo_mensal_seg)
+
+#     pendencias_query_base = Pendencia.query.join(Veiculo, Veiculo.id == Pendencia.veiculo_id).filter(Pendencia.status == 'PENDENTE')
+#     if target_unidade: pendencias_query_base = pendencias_query_base.filter(Veiculo.unidade == target_unidade)
+#     if target_operacao: pendencias_query_base = pendencias_query_base.filter(Veiculo.operacao == target_operacao)
+#     total_pendencias = pendencias_query_base.count()
+    
+#     motoristas_query_base = Motorista.query.filter(Motorista.ativo == True)
+#     if target_unidade: motoristas_query_base = motoristas_query_base.filter(Motorista.unidade == target_unidade)
+#     if target_operacao: motoristas_query_base = motoristas_query_base.filter(Motorista.operacao == target_operacao)
+#     total_motoristas = motoristas_query_base.count()
+    
+#     ranking_adesao = []
+#     if user_role == 'admin' and not target_unidade and not target_operacao:
+#         unidades_para_ranking = [u[0] for u in db.session.query(Veiculo.unidade).filter(Veiculo.unidade.isnot(None)).distinct()]
+#         for unidade_nome in unidades_para_ranking:
+#             veiculos_unidade = Veiculo.query.filter(Veiculo.ativo == True, Veiculo.unidade == unidade_nome).all()
+#             veiculos_unidade_ids = {v.id for v in veiculos_unidade}
+#             if not veiculos_unidade_ids: continue
+            
+#             dias_indisp_unidade, veiculos_indisp_mensal_unidade = 0, set()
+#             indisp_unidade_q = VeiculoIndisponibilidade.query.filter(
+#                 VeiculoIndisponibilidade.veiculo_id.in_(veiculos_unidade_ids),
+#                 VeiculoIndisponibilidade.data_inicio <= data_fim,
+#                 or_(VeiculoIndisponibilidade.data_fim == None, VeiculoIndisponibilidade.data_fim >= data_inicio)
+#             ).all()
+#             for ind in indisp_unidade_q:
+#                 overlap_start_unidade = max(ind.data_inicio, data_inicio)
+#                 overlap_end_unidade = min(ind.data_fim or data_fim, data_fim)
+#                 if overlap_start_unidade <= overlap_end_unidade:
+#                     if ind.tipo_checklist == 'MENSAL':
+#                         veiculos_indisp_mensal_unidade.add(ind.veiculo_id)
+#                     if ind.tipo_checklist == 'DIÁRIO' or ind.tipo_checklist is None:
+#                         current_day_unidade = overlap_start_unidade
+#                         while current_day_unidade <= overlap_end_unidade:
+#                             if current_day_unidade.weekday() != 6:
+#                                 dias_indisp_unidade += 1
+#                             current_day_unidade += timedelta(days=1)
+
+#             esperado_d = max(0, (len(veiculos_unidade_ids) * dias_uteis_periodo) - dias_indisp_unidade)
+#             esperado_m = max(0, len(veiculos_unidade_ids) - len(veiculos_indisp_mensal_unidade))
+            
+#             preenchido_d = db.session.query(ChecklistPreenchido).join(Checklist).filter(Checklist.tipo == 'DIÁRIO', ChecklistPreenchido.veiculo_id.in_(veiculos_unidade_ids), ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc)).with_entities(ChecklistPreenchido.veiculo_id, func.date(ChecklistPreenchido.data_preenchimento)).distinct().count()
+#             preenchido_m = db.session.query(ChecklistPreenchido).join(Checklist).filter(Checklist.tipo == 'MENSAL', ChecklistPreenchido.veiculo_id.in_(veiculos_unidade_ids), ChecklistPreenchido.data_preenchimento.between(start_utc, end_utc)).distinct(ChecklistPreenchido.veiculo_id).count()
+
+#             total_esperado_unidade = esperado_d + esperado_m
+#             total_preenchido_unidade = preenchido_d + preenchido_m
+#             taxa = (total_preenchido_unidade / total_esperado_unidade * 100) if total_esperado_unidade > 0 else 0
+#             ranking_adesao.append({'unidade': unidade_nome, 'taxa': round(taxa)})
+        
+#         ranking_adesao.sort(key=lambda x: x['taxa'], reverse=True)
+
+#     pendencias_por_setor_query = db.session.query(ChecklistItem.setor_responsavel, func.count(Pendencia.id).label('total')).join(Pendencia, Pendencia.item_id == ChecklistItem.id).join(Veiculo, Veiculo.id == Pendencia.veiculo_id).filter(Pendencia.status == 'PENDENTE', ChecklistItem.setor_responsavel.isnot(None))
+#     if target_unidade: pendencias_por_setor_query = pendencias_por_setor_query.filter(Veiculo.unidade == target_unidade)
+#     if target_operacao: pendencias_por_setor_query = pendencias_por_setor_query.filter(Veiculo.operacao == target_operacao)
+#     pendencias_por_setor = pendencias_por_setor_query.group_by(ChecklistItem.setor_responsavel).order_by(desc('total')).all()
+
+#     top_veiculos_query = db.session.query(Veiculo.nome_conjunto, func.count(Pendencia.id).label('total_pendencias')).join(Pendencia, Veiculo.id == Pendencia.veiculo_id).filter(Pendencia.status == 'PENDENTE')
+#     if target_unidade: top_veiculos_query = top_veiculos_query.filter(Veiculo.unidade == target_unidade)
+#     if target_operacao: top_veiculos_query = top_veiculos_query.filter(Veiculo.operacao == target_operacao)
+#     top_veiculos_pendencias = top_veiculos_query.group_by(Veiculo.nome_conjunto).order_by(desc('total_pendencias')).limit(5).all()
+
+#     config_unidade = UnidadeConfig.query.filter_by(unidade=user_unidade).first() if user_role == 'master' else None
+
+#     # --- 5. RENDERIZAÇÃO ---
+#     return render_template(
+#         'adm.html',
+#         checklists_gerais_preenchidos=checklists_gerais_preenchidos,
+#         total_esperado_geral=total_esperado_geral,
+#         percentual_geral=percentual_geral,
+#         checklists_diarios_periodo=checklists_diarios_periodo,
+#         total_esperado_diario=total_esperado_diario,
+#         percentual_diario=percentual_diario,
+#         checklists_mensais_periodo=checklists_mensais_periodo,
+#         total_esperado_mensal=total_esperado_mensal,
+#         percentual_mensal=percentual_mensal,
+#         tempo_medio_diario=tempo_medio_diario,
+#         tempo_medio_mensal=tempo_medio_mensal,
+#         total_pendencias=total_pendencias,
+#         total_veiculos=total_veiculos,
+#         total_motoristas=total_motoristas,
+#         pendencias_por_setor=pendencias_por_setor,
+#         top_veiculos_pendencias=top_veiculos_pendencias,
+#         ranking_adesao=ranking_adesao,
+#         unidades_disponiveis=unidades_disponiveis,
+#         unidade_selecionada=unidade_selecionada,
+#         operacoes_disponiveis=operacoes_disponiveis_filtro,
+#         operacao_selecionada=operacao_selecionada,
+#         operacoes_por_unidade_json=operacoes_por_unidade,
+#         config_unidade=config_unidade,
+#         data_inicio=data_inicio,
+#         data_fim=data_fim
+#     )
+
+
 
 
 
@@ -2710,7 +2924,7 @@ def gerar_relatorio_pdf():
             self.metadata_info = ""
 
         def header(self):
-            if not self.checklist_title: return
+            if not self.checklist_title: return # Não desenha o cabeçalho se o título estiver vazio
             
             self.set_font('Arial', 'B', 14)
             self.cell(0, 8, self.checklist_title.encode('latin-1', 'replace').decode('latin-1'), 0, 1, 'C')
@@ -2741,9 +2955,9 @@ def gerar_relatorio_pdf():
         p = ChecklistPreenchido.query.get(preenchido_id)
         if p:
             preenchimentos.append(p)
+            # Define o nome do arquivo para PDF individual
             date_str = p.data_preenchimento.strftime('%d%m%Y')
-            safe_conjunto_nome = "".join(c if c.isalnum() else "_" for c in p.veiculo.nome_conjunto)
-            filename = f"relatorio_{safe_conjunto_nome}_{date_str}.pdf"
+            filename = f"relatorio_{p.veiculo.nome_conjunto}_{date_str}.pdf"
     else:
         tipo_checklist = request.args.get('tipo_checklist')
         veiculo_id = request.args.get('veiculo_id')
@@ -2756,13 +2970,13 @@ def gerar_relatorio_pdf():
         if veiculo_id and veiculo_id != 'todos':
             query = query.filter(ChecklistPreenchido.veiculo_id == veiculo_id)
         preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
-        
+        # Define um nome de arquivo genérico para relatórios consolidados
         if veiculo_id and veiculo_id != 'todos':
             veiculo_obj = Veiculo.query.get(veiculo_id)
-            safe_conjunto_nome = "".join(c if c.isalnum() else "_" for c in veiculo_obj.nome_conjunto)
-            filename = f"consolidado_{safe_conjunto_nome}.pdf"
+            filename = f"consolidado_{veiculo_obj.nome_conjunto}.pdf"
         else:
             filename = "consolidado_geral.pdf"
+
 
     if not preenchimentos:
         flash('Nenhum checklist preenchido encontrado.', 'warning')
@@ -2774,6 +2988,7 @@ def gerar_relatorio_pdf():
     utc_tz = timezone.utc
     
     for p in preenchimentos:
+        # ATUALIZA OS ATRIBUTOS DO PDF ANTES DE ADICIONAR A PÁGINA
         checklist_atual = p.checklist
         pdf.checklist_title = {'DIÁRIO': 'CHECKLIST DIÁRIO FR MAN 06 DIÁRIO', 'MENSAL': 'CHECKLIST MENSAL/ADEQUAÇÃO FR MAN 07 MENSAL'}.get(checklist_atual.tipo, checklist_atual.titulo)
         pdf.veiculo_info = f"Veículo: {p.veiculo.nome_conjunto}"
@@ -2808,8 +3023,8 @@ def gerar_relatorio_pdf():
                     if not text: return 0
                     test_pdf = FPDF()
                     test_pdf.set_font('Arial', '', 9)
-                    encoded_text = text.encode('latin-1', 'replace').decode('latin-1')
-                    lines = test_pdf.get_string_width(encoded_text) / width
+                    text = text.encode('latin-1', 'replace').decode('latin-1')
+                    lines = test_pdf.get_string_width(text) / width
                     return line_height * (int(lines) + 1.5)
 
                 needed_height = calculate_height(desc_text, 115)
@@ -2866,14 +3081,12 @@ def gerar_relatorio_pdf():
         pdf.line(x_motorista + 5, y_signatures + 32, x_motorista + 85, y_signatures + 32); pdf.set_xy(x_motorista + 5, y_signatures + 33); pdf.set_font('Arial', 'I', 8); pdf.cell(80, 5, 'Motorista', 0, 0, 'C')
         if p.assinatura_responsavel: pdf.line(x_responsavel, y_signatures + 32, x_responsavel + 80, y_signatures + 32); pdf.set_xy(x_responsavel, y_signatures + 33); pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
 
-    # --- Bloco try/except REINSERIDO ---
     try:
         pdf_output = bytes(pdf.output(dest='S'))
     except TypeError:
         pdf_output = pdf.output(dest='S').encode('latin-1')
 
-    # --- Nome de arquivo dinâmico UTILIZADO ---
-    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': f'attachment;filename="{filename}"'})
+    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
 
 
 

@@ -4,9 +4,9 @@
 
 {% block header %}
 Dashboard
-{% if unidade_selecionada or operacao_selecionada %}
+{% if unidade_selecionada or operacao_selecionada or (data_inicio and data_fim) %}
     <span class="badge bg-primary ms-2 fs-6 fw-normal">
-        {{ unidade_selecionada if unidade_selecionada else "Todas Unidades" }} / {{ operacao_selecionada if operacao_selecionada else "Todas Operações" }}
+        {{ unidade_selecionada if unidade_selecionada else "Geral" }} / {{ operacao_selecionada if operacao_selecionada else "Geral" }} / {{ data_inicio.strftime('%d/%m/%Y') }} a {{ data_fim.strftime('%d/%m/%Y') }}
     </span>
 {% else %}
     <span class="badge bg-secondary ms-2 fs-6 fw-normal">Visão Geral</span>
@@ -15,13 +15,13 @@ Dashboard
 
 {% block content %}
 
-{# --- SEÇÃO DE FILTROS (APENAS PARA ADMIN) --- #}
-{% if session.role == 'admin' %}
+{# --- SEÇÃO DE FILTROS COM DATAS --- #}
 <div class="card shadow-sm mb-4">
     <div class="card-body">
         <form method="GET" action="{{ url_for('admin.dashboard') }}" class="row g-3 align-items-end">
-            <div class="col-md-4">
-                <label for="unidade" class="form-label fw-bold">Filtrar por Unidade</label>
+            {% if session.role == 'admin' %}
+            <div class="col-md-3">
+                <label for="unidade" class="form-label fw-bold">Unidade</label>
                 <select name="unidade" id="unidade" class="form-select">
                     <option value="todas">Todas as Unidades</option>
                     {% for u in unidades_disponiveis %}
@@ -29,8 +29,8 @@ Dashboard
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4">
-                <label for="operacao" class="form-label fw-bold">Filtrar por Operação</label>
+            <div class="col-md-3">
+                <label for="operacao" class="form-label fw-bold">Operação</label>
                 <select name="operacao" id="operacao" class="form-select" {% if not unidade_selecionada %}disabled{% endif %}>
                     <option value="todas">Todas as Operações</option>
                     {% for o in operacoes_disponiveis %}
@@ -38,16 +38,25 @@ Dashboard
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
             <div class="col-md-2">
+                <label for="data_inicio" class="form-label fw-bold">Data Início</label>
+                <input type="date" id="data_inicio" name="data_inicio" class="form-control" value="{{ data_inicio.strftime('%Y-%m-%d') if data_inicio else '' }}">
+            </div>
+            <div class="col-md-2">
+                <label for="data_fim" class="form-label fw-bold">Data Fim</label>
+                <input type="date" id="data_fim" name="data_fim" class="form-control" value="{{ data_fim.strftime('%Y-%m-%d') if data_fim else '' }}">
+            </div>
+            <div class="col-md-1">
                 <button type="submit" class="btn btn-primary w-100">Filtrar</button>
             </div>
-             <div class="col-md-2">
+             <div class="col-md-1">
                 <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary w-100">Limpar</a>
             </div>
         </form>
     </div>
 </div>
-{% endif %}
+
 
 {# --- SEÇÃO DE CARDS DE KPI --- #}
 <div class="row">
@@ -55,7 +64,7 @@ Dashboard
     <div class="col-12 mb-4">
         <div class="card h-100">
             <div class="card-header py-3">
-                 <h6 class="m-0 fw-bold text-primary">Adesão Geral de Checklists</h6>
+                 <h6 class="m-0 fw-bold text-primary">Adesão de Checklists no Período</h6>
             </div>
             <div class="card-body">
                 <!-- Barra de Progresso Principal -->
@@ -87,25 +96,25 @@ Dashboard
                 <div class="row mt-3">
                     <!-- Adesão Diária -->
                     <div class="col-md-6 border-end-md">
-                        <div class="text-xs fw-bold text-primary text-uppercase mb-1">Adesão Diária (Hoje)</div>
+                        <div class="text-xs fw-bold text-primary text-uppercase mb-1">Adesão Diária (Período)</div>
                         <div class="progress mb-1" style="height: 0.8rem;">
                             {% set progress_color_diario = 'bg-primary' %}
                             <div class="progress-bar {{ progress_color_diario }}" role="progressbar" style="width: {{ percentual_diario }}%" aria-valuenow="{{ percentual_diario }}" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
                         <div class="d-flex justify-content-between text-muted text-xs">
-                            <span>{{ checklists_diarios_hoje }} / {{ total_esperado_diario }} preenchidos</span>
+                            <span>{{ checklists_diarios_periodo }} / {{ total_esperado_diario }} preenchidos</span>
                             <span>{{ '%.0f'|format(percentual_diario) }}%</span>
                         </div>
                     </div>
                     <!-- Adesão Mensal -->
                     <div class="col-md-6 mt-3 mt-md-0">
-                        <div class="text-xs fw-bold text-info text-uppercase mb-1">Adesão Mensal (Mês)</div>
+                        <div class="text-xs fw-bold text-info text-uppercase mb-1">Adesão Mensal (Período)</div>
                         <div class="progress mb-1" style="height: 0.8rem;">
                             {% set progress_color_mensal = 'bg-info' %}
                             <div class="progress-bar {{ progress_color_mensal }}" role="progressbar" style="width: {{ percentual_mensal }}%" aria-valuenow="{{ percentual_mensal }}" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
                         <div class="d-flex justify-content-between text-muted text-xs">
-                            <span>{{ checklists_mensais_mes }} / {{ total_esperado_mensal }} preenchidos</span>
+                            <span>{{ checklists_mensais_periodo }} / {{ total_esperado_mensal }} preenchidos</span>
                             <span>{{ '%.0f'|format(percentual_mensal) }}%</span>
                         </div>
                     </div>
