@@ -2869,8 +2869,12 @@ def gerar_relatorio_pdf():
         pdf.line(x_motorista + 5, y_signatures + 32, x_motorista + 85, y_signatures + 32); pdf.set_xy(x_motorista + 5, y_signatures + 33); pdf.set_font('Arial', 'I', 8); pdf.cell(80, 5, 'Motorista', 0, 0, 'C')
         if p.assinatura_responsavel: pdf.line(x_responsavel, y_signatures + 32, x_responsavel + 80, y_signatures + 32); pdf.set_xy(x_responsavel, y_signatures + 33); pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
 
-    pdf_output = bytes(pdf.output(dest='S'))
-    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': f'attachment;filename={filename}'})
+    try:
+        pdf_output = bytes(pdf.output(dest='S'))
+    except TypeError:
+        pdf_output = pdf.output(dest='S').encode('latin-1')
+
+    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
 
 
 
