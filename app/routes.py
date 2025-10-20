@@ -2710,7 +2710,7 @@ def gerar_relatorio_pdf():
             self.metadata_info = ""
 
         def header(self):
-            if not self.checklist_title: return # Não desenha o cabeçalho se o título estiver vazio
+            if not self.checklist_title: return
             
             self.set_font('Arial', 'B', 14)
             self.cell(0, 8, self.checklist_title.encode('latin-1', 'replace').decode('latin-1'), 0, 1, 'C')
@@ -2741,9 +2741,9 @@ def gerar_relatorio_pdf():
         p = ChecklistPreenchido.query.get(preenchido_id)
         if p:
             preenchimentos.append(p)
-            # Define o nome do arquivo para PDF individual
             date_str = p.data_preenchimento.strftime('%d%m%Y')
-            filename = f"relatorio_{p.veiculo.nome_conjunto}_{date_str}.pdf"
+            safe_conjunto_nome = "".join(c if c.isalnum() else "_" for c in p.veiculo.nome_conjunto)
+            filename = f"relatorio_{safe_conjunto_nome}_{date_str}.pdf"
     else:
         tipo_checklist = request.args.get('tipo_checklist')
         veiculo_id = request.args.get('veiculo_id')
@@ -2756,13 +2756,13 @@ def gerar_relatorio_pdf():
         if veiculo_id and veiculo_id != 'todos':
             query = query.filter(ChecklistPreenchido.veiculo_id == veiculo_id)
         preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
-        # Define um nome de arquivo genérico para relatórios consolidados
+        
         if veiculo_id and veiculo_id != 'todos':
             veiculo_obj = Veiculo.query.get(veiculo_id)
-            filename = f"consolidado_{veiculo_obj.nome_conjunto}.pdf"
+            safe_conjunto_nome = "".join(c if c.isalnum() else "_" for c in veiculo_obj.nome_conjunto)
+            filename = f"consolidado_{safe_conjunto_nome}.pdf"
         else:
             filename = "consolidado_geral.pdf"
-
 
     if not preenchimentos:
         flash('Nenhum checklist preenchido encontrado.', 'warning')
@@ -2774,7 +2774,6 @@ def gerar_relatorio_pdf():
     utc_tz = timezone.utc
     
     for p in preenchimentos:
-        # ATUALIZA OS ATRIBUTOS DO PDF ANTES DE ADICIONAR A PÁGINA
         checklist_atual = p.checklist
         pdf.checklist_title = {'DIÁRIO': 'CHECKLIST DIÁRIO FR MAN 06 DIÁRIO', 'MENSAL': 'CHECKLIST MENSAL/ADEQUAÇÃO FR MAN 07 MENSAL'}.get(checklist_atual.tipo, checklist_atual.titulo)
         pdf.veiculo_info = f"Veículo: {p.veiculo.nome_conjunto}"
@@ -2809,8 +2808,8 @@ def gerar_relatorio_pdf():
                     if not text: return 0
                     test_pdf = FPDF()
                     test_pdf.set_font('Arial', '', 9)
-                    text = text.encode('latin-1', 'replace').decode('latin-1')
-                    lines = test_pdf.get_string_width(text) / width
+                    encoded_text = text.encode('latin-1', 'replace').decode('latin-1')
+                    lines = test_pdf.get_string_width(encoded_text) / width
                     return line_height * (int(lines) + 1.5)
 
                 needed_height = calculate_height(desc_text, 115)
@@ -2867,12 +2866,14 @@ def gerar_relatorio_pdf():
         pdf.line(x_motorista + 5, y_signatures + 32, x_motorista + 85, y_signatures + 32); pdf.set_xy(x_motorista + 5, y_signatures + 33); pdf.set_font('Arial', 'I', 8); pdf.cell(80, 5, 'Motorista', 0, 0, 'C')
         if p.assinatura_responsavel: pdf.line(x_responsavel, y_signatures + 32, x_responsavel + 80, y_signatures + 32); pdf.set_xy(x_responsavel, y_signatures + 33); pdf.cell(80, 5, 'Responsável', 0, 0, 'C')
 
+    # --- Bloco try/except REINSERIDO ---
     try:
         pdf_output = bytes(pdf.output(dest='S'))
     except TypeError:
         pdf_output = pdf.output(dest='S').encode('latin-1')
 
-    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': 'attachment;filename=relatorio_consolidado.pdf'})
+    # --- Nome de arquivo dinâmico UTILIZADO ---
+    return Response(pdf_output, mimetype='application/pdf', headers={'Content-Disposition': f'attachment;filename="{filename}"'})
 
 
 
