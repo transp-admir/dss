@@ -110,7 +110,7 @@
                                                     <h5 class="modal-title" id="resolverModalLabel-{{ pendencia.id }}">Resolver Pendência: {{ pendencia.item.texto }}</h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                 </div>
-                                                <form action="{{ url_for('admin.resolver_pendencia') }}" method="POST">
+                                                <form action="{{ url_for('admin.gerenciar_pendencias') }}" method="POST">
                                                     <div class="modal-body">
                                                         <input type="hidden" name="pendencia_id" value="{{ pendencia.id }}">
                                                         <p><strong>Veículo:</strong> {{ veiculo.nome_conjunto }}</p>

@@ -1426,19 +1426,26 @@ def excluir_documento(documento_id):
 @login_required()
 def gerenciar_pendencias():
     user_role = session.get('role')
-    # --- CORREÇÃO: Usar o 'setor' salvo na sessão ---
     user_setor = session.get('setor')
+    user_unidade = session.get('unidade')
 
-    # Query base que busca apenas pendências com status 'PENDENTE'
+    # --- CORREÇÃO DEFINITIVA ---
+    # Inicia a query base com o filtro de status PENDENTE
     query = Pendencia.query.filter(Pendencia.status == 'PENDENTE')
 
-    # Se o usuário NÃO for 'admin', filtra as pendências pelo setor responsável
+    # Aplica filtros de segurança para qualquer usuário que não seja 'admin'
     if user_role != 'admin':
-        # A consulta agora junta com ChecklistItem e compara o setor_responsavel
-        query = query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
-                     .filter(ChecklistItem.setor_responsavel == user_setor)
+        # 1. Filtra pela UNIDADE do usuário (requer join com Veiculo)
+        query = query.join(Veiculo, Pendencia.veiculo_id == Veiculo.id)
+        if user_unidade:
+            query = query.filter(Veiculo.unidade == user_unidade)
+        
+        # 2. Adicionalmente, filtra pelo SETOR do usuário (se ele tiver um)
+        if user_setor:
+            query = query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
+                         .filter(ChecklistItem.setor_responsavel == user_setor)
 
-    # Filtra por um veículo específico, se solicitado
+    # Filtra por um veículo específico do dropdown, se solicitado (lógica mantida)
     veiculo_id_str = request.args.get('veiculo_id')
     veiculo_id = int(veiculo_id_str) if veiculo_id_str else None
     if veiculo_id:
@@ -1446,16 +1453,17 @@ def gerenciar_pendencias():
 
     pendencias = query.order_by(Pendencia.data_criacao.desc()).all()
 
-    # Agrupa as pendências pelo veículo
+    # Agrupa as pendências pelo veículo (lógica mantida)
     pendencias_agrupadas = defaultdict(list)
     for pendencia in pendencias:
         pendencias_agrupadas[pendencia.veiculo].append(pendencia)
 
-    # Busca veículos para popular o filtro da página
-    user_unidade = session.get('unidade')
+    # Busca veículos para popular o filtro da página (lógica mantida)
+    # Esta parte já estava correta, filtrando os veículos do dropdown pela unidade.
     veiculos_query = Veiculo.query
     if user_role != 'admin':
-        veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
+        if user_unidade:
+            veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
     
     todos_veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
 
@@ -1469,39 +1477,55 @@ def gerenciar_pendencias():
 
 
 
-@admin_bp.route('/pendencias/resolver', methods=['POST'])
-@login_required()
-def resolver_pendencia():
+
+@admin_bp.route('/pendencias', methods=['GET'])
+@login_required
+def ver_pendencias():
     user_role = session.get('role')
-    user_setor = session.get('setor')
+    user_setor = session.get('setor_responsavel')
+    user_unidade = session.get('unidade')
 
-    pendencia_id = request.form.get('pendencia_id')
-    pendencia = Pendencia.query.get(pendencia_id)
+    page = request.args.get('page', 1, type=int)
+    status_filter = request.args.get('status', 'PENDENTE')
+    veiculo_id_filter = request.args.get('veiculo_id')
 
-    if not pendencia:
-        flash('Pendência não encontrada.', 'danger')
-        return redirect(url_for('admin.gerenciar_pendencias'))
+    # Base da query com joins necessários
+    query = Pendencia.query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
+                           .join(Veiculo, Pendencia.veiculo_id == Veiculo.id)\
+                           .order_by(Pendencia.data_abertura.desc())
 
-    # --- VERIFICAÇÃO DE SEGURANÇA CORRIGIDA ---
-    # Se não for admin, verifica se o setor responsável do item é o mesmo do usuário
-    if user_role != 'admin':
-        if not pendencia.item or pendencia.item.setor_responsavel != user_setor:
-            flash('Você não tem permissão para resolver pendências deste setor.', 'danger')
-            return redirect(url_for('admin.gerenciar_pendencias'))
+    # Aplica filtros de status e veículo
+    if status_filter:
+        query = query.filter(Pendencia.status == status_filter)
+    
+    if veiculo_id_filter:
+        query = query.filter(Pendencia.veiculo_id == veiculo_id_filter)
 
-    if pendencia.status != 'PENDENTE':
-        flash('Esta pendência já foi resolvida ou finalizada.', 'warning')
-        return redirect(url_for('admin.gerenciar_pendencias'))
+    # Aplica filtros de segurança para usuários não-admin
+    if user_role not in ['admin', 'master']:
+        if user_setor:
+            query = query.filter(ChecklistItem.setor_responsavel == user_setor)
+        # NOVO: Adiciona o filtro por unidade do usuário
+        if user_unidade:
+            query = query.filter(Veiculo.unidade == user_unidade)
 
-    # Atualiza a pendência
-    pendencia.status = request.form.get('status')
-    pendencia.observacao_admin = request.form.get('observacao_admin')
-    pendencia.numero_os = request.form.get('numero_os')
-    pendencia.data_resolucao = datetime.utcnow()
-    db.session.commit()
+    pendencias = query.paginate(page=page, per_page=20, error_out=False)
+    
+    # Filtra a lista de veículos do dropdown pela unidade do usuário
+    veiculos_query = Veiculo.query.order_by(Veiculo.nome_conjunto)
+    if user_role not in ['admin', 'master'] and user_unidade:
+        veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
+    veiculos = veiculos_query.all()
 
-    flash(f'Pendência atualizada com sucesso.', 'success')
-    return redirect(url_for('admin.gerenciar_pendencias'))
+    # Converte veiculo_id_filter para int para a seleção no template
+    veiculo_selecionado = int(veiculo_id_filter) if veiculo_id_filter else None
+
+    return render_template('admin_pendencias.html', 
+                           pendencias=pendencias, 
+                           veiculos=veiculos, 
+                           status_selecionado=status_filter, 
+                           veiculo_selecionado=veiculo_selecionado)
+
 
 
 
