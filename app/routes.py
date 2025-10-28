@@ -1422,30 +1422,65 @@ def excluir_documento(documento_id):
 
 # --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (COM FILTRO DE UNIDADE) ---
 
-@admin_bp.route('/pendencias', methods=['GET'])
+# Substitua a função gerenciar_pendencias() e delete a função resolver_pendencia() por este bloco:
+@admin_bp.route('/pendencias', methods=['GET', 'POST'])
 @login_required()
 def gerenciar_pendencias():
     user_role = session.get('role')
     user_setor = session.get('setor')
     user_unidade = session.get('unidade')
 
-    # --- CORREÇÃO DEFINITIVA ---
-    # Inicia a query base com o filtro de status PENDENTE
+    # --- LÓGICA PARA RESOLVER PENDÊNCIA (POST) ---
+    if request.method == 'POST':
+        pendencia_id = request.form.get('pendencia_id')
+        pendencia = Pendencia.query.get(pendencia_id)
+
+        if not pendencia:
+            flash('Pendência não encontrada.', 'danger')
+            return redirect(url_for('admin.gerenciar_pendencias'))
+
+        # Verificação de segurança: não-admins só podem atuar na sua unidade e/ou setor
+        if user_role != 'admin':
+            # 1. Verifica se a pendência pertence à unidade do usuário
+            if user_unidade and (not pendencia.veiculo or pendencia.veiculo.unidade != user_unidade):
+                flash('Você não tem permissão para resolver pendências de outra unidade.', 'danger')
+                return redirect(url_for('admin.gerenciar_pendencias'))
+            
+            # 2. Se o usuário for 'comum', verifica também se a pendência é do seu setor
+            if user_role == 'comum' and user_setor and (not pendencia.item or pendencia.item.setor_responsavel != user_setor):
+                flash('Você não tem permissão para resolver pendências deste setor.', 'danger')
+                return redirect(url_for('admin.gerenciar_pendencias'))
+
+        if pendencia.status != 'PENDENTE':
+            flash('Esta pendência já foi resolvida ou finalizada.', 'warning')
+            return redirect(url_for('admin.gerenciar_pendencias'))
+
+        # Atualiza os dados da pendência
+        pendencia.status = request.form.get('status')
+        pendencia.observacao_admin = request.form.get('observacao_admin')
+        pendencia.numero_os = request.form.get('numero_os')
+        pendencia.data_resolucao = datetime.utcnow()
+        # Se você tiver uma coluna para salvar quem resolveu, adicione aqui:
+        # pendencia.usuario_resolucao_id = session.get('user_id')
+        db.session.commit()
+
+        flash(f'Pendência do veículo {pendencia.veiculo.nome_conjunto} atualizada com sucesso.', 'success')
+        return redirect(url_for('admin.gerenciar_pendencias'))
+
+    # --- LÓGICA PARA EXIBIR PENDÊNCIAS (GET) ---
     query = Pendencia.query.filter(Pendencia.status == 'PENDENTE')
 
-    # Aplica filtros de segurança para qualquer usuário que não seja 'admin'
+    # Aplica filtros de segurança para a visualização
     if user_role != 'admin':
-        # 1. Filtra pela UNIDADE do usuário (requer join com Veiculo)
         query = query.join(Veiculo, Pendencia.veiculo_id == Veiculo.id)
         if user_unidade:
             query = query.filter(Veiculo.unidade == user_unidade)
         
-        # 2. Adicionalmente, filtra pelo SETOR do usuário (se ele tiver um)
-        if user_setor:
+        if user_role == 'comum' and user_setor:
             query = query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
                          .filter(ChecklistItem.setor_responsavel == user_setor)
 
-    # Filtra por um veículo específico do dropdown, se solicitado (lógica mantida)
+    # Filtra por um veículo específico do dropdown
     veiculo_id_str = request.args.get('veiculo_id')
     veiculo_id = int(veiculo_id_str) if veiculo_id_str else None
     if veiculo_id:
@@ -1453,19 +1488,18 @@ def gerenciar_pendencias():
 
     pendencias = query.order_by(Pendencia.data_criacao.desc()).all()
 
-    # Agrupa as pendências pelo veículo (lógica mantida)
+    # Agrupa pendências por veículo para a exibição
     pendencias_agrupadas = defaultdict(list)
     for pendencia in pendencias:
-        pendencias_agrupadas[pendencia.veiculo].append(pendencia)
+        if pendencia.veiculo: # Garante que pendências órfãs não quebrem a página
+            pendencias_agrupadas[pendencia.veiculo].append(pendencia)
 
-    # Busca veículos para popular o filtro da página (lógica mantida)
-    # Esta parte já estava correta, filtrando os veículos do dropdown pela unidade.
-    veiculos_query = Veiculo.query
-    if user_role != 'admin':
-        if user_unidade:
-            veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
+    # Popula o dropdown de veículos com base na permissão do usuário
+    veiculos_query = Veiculo.query.order_by(Veiculo.nome_conjunto)
+    if user_role != 'admin' and user_unidade:
+        veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
     
-    todos_veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
+    todos_veiculos = veiculos_query.all()
 
     return render_template(
         'admin_pendencias.html',
