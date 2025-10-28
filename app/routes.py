@@ -1421,8 +1421,7 @@ def excluir_documento(documento_id):
 #-----------------------------------------------------------------------
 
 # --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (COM FILTRO DE UNIDADE) ---
-
-# Substitua a função gerenciar_pendencias() e delete a função resolver_pendencia() por este bloco:
+# Apague a função resolver_pendencia (se ainda existir) e substitua a gerenciar_pendencias por esta:
 @admin_bp.route('/pendencias', methods=['GET', 'POST'])
 @login_required()
 def gerenciar_pendencias():
@@ -1430,7 +1429,7 @@ def gerenciar_pendencias():
     user_setor = session.get('setor')
     user_unidade = session.get('unidade')
 
-    # --- LÓGICA PARA RESOLVER PENDÊNCIA (POST) ---
+    # --- LÓGICA PARA RESOLVER UMA PENDÊNCIA (MÉTODO POST) ---
     if request.method == 'POST':
         pendencia_id = request.form.get('pendencia_id')
         pendencia = Pendencia.query.get(pendencia_id)
@@ -1439,20 +1438,20 @@ def gerenciar_pendencias():
             flash('Pendência não encontrada.', 'danger')
             return redirect(url_for('admin.gerenciar_pendencias'))
 
-        # Verificação de segurança: não-admins só podem atuar na sua unidade e/ou setor
+        # --- APLICAÇÃO CORRETA DAS REGRAS DE SEGURANÇA (POST) ---
         if user_role != 'admin':
-            # 1. Verifica se a pendência pertence à unidade do usuário
+            # Regra 1: Usuário deve ser da mesma unidade da pendência.
             if user_unidade and (not pendencia.veiculo or pendencia.veiculo.unidade != user_unidade):
-                flash('Você não tem permissão para resolver pendências de outra unidade.', 'danger')
+                flash('Você não tem permissão para alterar pendências de outra unidade.', 'danger')
                 return redirect(url_for('admin.gerenciar_pendencias'))
             
-            # 2. Se o usuário for 'comum', verifica também se a pendência é do seu setor
-            if user_role == 'comum' and user_setor and (not pendencia.item or pendencia.item.setor_responsavel != user_setor):
-                flash('Você não tem permissão para resolver pendências deste setor.', 'danger')
+            # Regra 2: Se o usuário tiver um setor, ele só pode alterar pendências do seu setor.
+            if user_setor and (not pendencia.item or pendencia.item.setor_responsavel != user_setor):
+                flash('Você não tem permissão para alterar pendências deste setor.', 'danger')
                 return redirect(url_for('admin.gerenciar_pendencias'))
 
         if pendencia.status != 'PENDENTE':
-            flash('Esta pendência já foi resolvida ou finalizada.', 'warning')
+            flash('Esta pendência não está mais com o status PENDENTE.', 'warning')
             return redirect(url_for('admin.gerenciar_pendencias'))
 
         # Atualiza os dados da pendência
@@ -1460,27 +1459,27 @@ def gerenciar_pendencias():
         pendencia.observacao_admin = request.form.get('observacao_admin')
         pendencia.numero_os = request.form.get('numero_os')
         pendencia.data_resolucao = datetime.utcnow()
-        # Se você tiver uma coluna para salvar quem resolveu, adicione aqui:
-        # pendencia.usuario_resolucao_id = session.get('user_id')
         db.session.commit()
 
-        flash(f'Pendência do veículo {pendencia.veiculo.nome_conjunto} atualizada com sucesso.', 'success')
+        flash(f'Pendência do veículo {pendencia.veiculo.nome_conjunto} foi atualizada com sucesso.', 'success')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
-    # --- LÓGICA PARA EXIBIR PENDÊNCIAS (GET) ---
+    # --- LÓGICA PARA EXIBIR A LISTA DE PENDÊNCIAS (MÉTODO GET) ---
     query = Pendencia.query.filter(Pendencia.status == 'PENDENTE')
 
-    # Aplica filtros de segurança para a visualização
+    # --- APLICAÇÃO CORRETA DAS REGRAS DE SEGURANÇA (GET) ---
     if user_role != 'admin':
         query = query.join(Veiculo, Pendencia.veiculo_id == Veiculo.id)
+        # Regra 1: Filtra pela unidade do usuário.
         if user_unidade:
             query = query.filter(Veiculo.unidade == user_unidade)
         
-        if user_role == 'comum' and user_setor:
+        # Regra 2: Se o usuário tiver um setor, filtra também pelo setor.
+        if user_setor:
             query = query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
                          .filter(ChecklistItem.setor_responsavel == user_setor)
 
-    # Filtra por um veículo específico do dropdown
+    # Filtra por um veículo específico do dropdown (lógica mantida)
     veiculo_id_str = request.args.get('veiculo_id')
     veiculo_id = int(veiculo_id_str) if veiculo_id_str else None
     if veiculo_id:
@@ -1488,13 +1487,13 @@ def gerenciar_pendencias():
 
     pendencias = query.order_by(Pendencia.data_criacao.desc()).all()
 
-    # Agrupa pendências por veículo para a exibição
+    # Agrupa pendências por veículo para a exibição (lógica mantida)
     pendencias_agrupadas = defaultdict(list)
     for pendencia in pendencias:
-        if pendencia.veiculo: # Garante que pendências órfãs não quebrem a página
+        if pendencia.veiculo:
             pendencias_agrupadas[pendencia.veiculo].append(pendencia)
 
-    # Popula o dropdown de veículos com base na permissão do usuário
+    # Popula o dropdown de veículos (lógica mantida, já estava correta)
     veiculos_query = Veiculo.query.order_by(Veiculo.nome_conjunto)
     if user_role != 'admin' and user_unidade:
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
@@ -1507,6 +1506,7 @@ def gerenciar_pendencias():
         todos_veiculos=todos_veiculos,
         veiculo_selecionado_id=veiculo_id
     )
+
 
 
 
