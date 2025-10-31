@@ -2968,14 +2968,29 @@ def acessar_documento(documento_id):
 
 
 #relatorio de status diario
-
-# Substitua a função gerar_relatorio_pdf() existente por esta:
-# Substitua a função gerar_relatorio_pdf() existente por esta:
-# Substitua a função gerar_relatorio_pdf() existente por esta:
+# Substitua a função gerar_relatorio_pdf() inteira por este bloco corrigido:
 @admin_bp.route('/gerar_relatorio_pdf')
 def gerar_relatorio_pdf():
     if 'admin_user' not in session:
         return redirect(url_for('admin.login'))
+
+    # --- CORREÇÃO: Função para limpar caracteres inválidos para a fonte do PDF ---
+    def sanitize_for_pdf(text):
+        if text is None:
+            return ''
+        # Converte para string para garantir
+        safe_text = str(text)
+        # Substitui caracteres problemáticos por equivalentes seguros
+        replacements = {
+            '‐': '-', '–': '-', '—': '-', '“': '"', '”': '"',
+            '‘': "'", '’': "'", '…': '...', '€': 'EUR'
+        }
+        for bad_char, good_char in replacements.items():
+            safe_text = safe_text.replace(bad_char, good_char)
+        
+        # A codificação 'latin-1' com 'replace' é a camada final de segurança
+        return safe_text.encode('latin-1', 'replace').decode('latin-1')
+    # --- FIM DA CORREÇÃO ---
 
     class PDF(FPDF):
         def __init__(self, *args, **kwargs):
@@ -2988,11 +3003,12 @@ def gerar_relatorio_pdf():
             if not self.checklist_title: return
             
             self.set_font('Arial', 'B', 14)
-            self.cell(0, 8, self.checklist_title.encode('latin-1', 'replace').decode('latin-1'), 0, 1, 'C')
+            # Aplica a sanitização
+            self.cell(0, 8, sanitize_for_pdf(self.checklist_title), 0, 1, 'C')
             self.set_font('Arial', 'B', 10)
-            self.cell(0, 8, self.metadata_info.encode('latin-1', 'replace').decode('latin-1'), 0, 1, 'C')
+            self.cell(0, 8, sanitize_for_pdf(self.metadata_info), 0, 1, 'C')
             self.set_font('Arial', 'I', 10)
-            self.cell(0, 8, self.veiculo_info.encode('latin-1', 'replace').decode('latin-1'), 0, 1, 'C')
+            self.cell(0, 8, sanitize_for_pdf(self.veiculo_info), 0, 1, 'C')
             self.ln(4)
 
         def footer(self):
@@ -3010,6 +3026,7 @@ def gerar_relatorio_pdf():
 
     preenchido_id = request.args.get('preenchido_id')
     preenchimentos = []
+    # Aplica sanitização no nome do arquivo para segurança
     filename = "relatorio.pdf"
 
     if preenchido_id:
@@ -3017,7 +3034,9 @@ def gerar_relatorio_pdf():
         if p:
             preenchimentos.append(p)
             date_str = p.data_preenchimento.strftime('%d%m%Y')
-            filename = f"relatorio_{p.veiculo.nome_conjunto}_{date_str}.pdf"
+            # Aplica sanitização aqui também
+            safe_veiculo_name = sanitize_for_pdf(p.veiculo.nome_conjunto).replace(' ', '_')
+            filename = f"relatorio_{safe_veiculo_name}_{date_str}.pdf"
     else:
         tipo_checklist = request.args.get('tipo_checklist')
         veiculo_id = request.args.get('veiculo_id')
@@ -3032,7 +3051,8 @@ def gerar_relatorio_pdf():
         preenchimentos = query.order_by(ChecklistPreenchido.data_preenchimento.desc()).all()
         if veiculo_id and veiculo_id != 'todos':
             veiculo_obj = Veiculo.query.get(veiculo_id)
-            filename = f"consolidado_{veiculo_obj.nome_conjunto}.pdf"
+            safe_veiculo_name = sanitize_for_pdf(veiculo_obj.nome_conjunto).replace(' ', '_')
+            filename = f"consolidado_{safe_veiculo_name}.pdf"
         else:
             filename = "consolidado_geral.pdf"
 
@@ -3056,7 +3076,8 @@ def gerar_relatorio_pdf():
         pdf.set_font('Arial', 'B', 12)
         pdf.cell(0, 10, f"Data do Preenchimento: {hora_local_obj.strftime('%d/%m/%Y')}", 0, 1, 'L')
         pdf.set_font('Arial', 'I', 10)
-        pdf.cell(0, 8, f"Preenchido por: {p.motorista.nome} às {hora_local_obj.strftime('%H:%M')}", 0, 1, 'L')
+        # Aplica sanitização
+        pdf.cell(0, 8, sanitize_for_pdf(f"Preenchido por: {p.motorista.nome} às {hora_local_obj.strftime('%H:%M')}"), 0, 1, 'L')
         pdf.ln(2)
 
         def get_natural_sort_key(text):
@@ -3066,43 +3087,49 @@ def gerar_relatorio_pdf():
         for item_principal in sorted(itens_principais, key=lambda i: get_natural_sort_key(i.ordem)):
             pdf.set_font('Arial', 'B', 10)
             pdf.set_fill_color(224, 224, 224)
-            pdf.cell(0, 7, item_principal.texto.encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'C', 1)
+            # Aplica sanitização
+            pdf.cell(0, 7, sanitize_for_pdf(item_principal.texto), 1, 1, 'C', 1)
             pdf.draw_table_header()
 
             for sub_item in sorted(item_principal.sub_itens, key=lambda si: get_natural_sort_key(si.ordem)):
                 resposta_obj = next((r for r in p.respostas if r.item_id == sub_item.id), None)
                 line_height = 6
-                desc_text = sub_item.texto
-                obs_text = f"Obs: {resposta_obj.observacao}" if resposta_obj and resposta_obj.observacao else ""
+                # Aplica sanitização
+                desc_text = sanitize_for_pdf(sub_item.texto)
+                obs_text = sanitize_for_pdf(f"Obs: {resposta_obj.observacao}") if resposta_obj and resposta_obj.observacao else ""
                 
+                # SUA LÓGICA DE LAYOUT ORIGINAL - NÃO FOI ALTERADA
                 def calculate_height(text, width):
                     if not text: return 0
                     test_pdf = FPDF(); test_pdf.set_font('Arial', '', 9)
-                    text = text.encode('latin-1', 'replace').decode('latin-1')
+                    # Usa o texto já sanitizado para o cálculo
+                    text = sanitize_for_pdf(text)
                     lines = test_pdf.get_string_width(text) / width
                     return line_height * (int(lines) + 1.5)
-                needed_height = calculate_height(desc_text, 115)
-                if obs_text: needed_height += calculate_height(obs_text, 175)
+                needed_height = calculate_height(sub_item.texto, 115) # Passa o texto original
+                if obs_text: needed_height += calculate_height(resposta_obj.observacao, 175) # Passa o texto original
                 if pdf.get_y() + needed_height > pdf.page_break_trigger:
                     pdf.add_page(); pdf.draw_table_header()
 
                 x_start, y_start = pdf.get_x(), pdf.get_y()
                 pdf.set_x(x_start + 15)
-                pdf.multi_cell(115, line_height, desc_text.encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
+                # Usa o texto sanitizado para renderizar
+                pdf.multi_cell(115, line_height, desc_text, 1, 'L')
                 altura_real = pdf.get_y() - y_start
                 
                 pdf.set_xy(x_start, y_start)
                 pdf.cell(15, altura_real, str(sub_item.ordem), 1, 0, 'C')
                 pdf.set_xy(x_start + 130, y_start)
-                pdf.cell(60, altura_real, resposta_obj.resposta if resposta_obj else '-', 1, 1, 'C')
+                # Aplica sanitização
+                pdf.cell(60, altura_real, sanitize_for_pdf(resposta_obj.resposta if resposta_obj else '-'), 1, 1, 'C')
+                # FIM DA SUA LÓGICA DE LAYOUT
 
-                # --- CORREÇÃO DEFINITIVA ---
                 if obs_text:
                     pdf.set_font('Arial', 'I', 8)
                     pdf.set_fill_color(245, 245, 245)
-                    # Desenha as células e força uma quebra de linha explícita no final
                     pdf.cell(15, 5, '', border=1, ln=0, fill=1)
-                    pdf.cell(175, 5, obs_text.encode('latin-1', 'replace').decode('latin-1'), border=1, ln=1, fill=1)
+                    # Usa o texto sanitizado para renderizar
+                    pdf.cell(175, 5, obs_text, border=1, ln=1, fill=1)
                     pdf.set_font('Arial', '', 9)
 
         if p.extintores_check.all():
@@ -3110,14 +3137,24 @@ def gerar_relatorio_pdf():
             pdf.ln(5); pdf.set_font('Arial', 'B', 10); pdf.set_fill_color(224, 224, 224); pdf.cell(0, 7, "Controle de Extintores", 1, 1, 'C', 1)
             pdf.set_font('Arial', 'B', 9); pdf.cell(40, 7, 'Local', 1, 0, 'C', 1); pdf.cell(20, 7, 'Tipo', 1, 0, 'C', 1); pdf.cell(20, 7, 'Peso (KG)', 1, 0, 'C', 1); pdf.cell(30, 7, 'Vencimento', 1, 0, 'C', 1); pdf.cell(20, 7, 'Trocado?', 1, 0, 'C', 1); pdf.cell(60, 7, 'Motivo da Troca', 1, 1, 'C', 1); pdf.set_font('Arial', '', 9)
             for ext in p.extintores_check.all():
-                 pdf.cell(40, 6, (ext.local or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'L'); pdf.cell(20, 6, (ext.tipo or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C'); pdf.cell(20, 6, str(ext.peso or ''), 1, 0, 'C'); pdf.cell(30, 6, ext.vencimento.strftime('%d/%m/%Y') if ext.vencimento else '', 1, 0, 'C'); pdf.cell(20, 6, (ext.trocado or '').encode('latin-1', 'replace').decode('latin-1'), 1, 0, 'C'); pdf.cell(60, 6, (ext.motivo_troca or '').encode('latin-1', 'replace').decode('latin-1'), 1, 1, 'L')
+                 # --- CORREÇÃO APLICADA AQUI ---
+                 pdf.cell(40, 6, sanitize_for_pdf(ext.local or ''), 1, 0, 'L')
+                 pdf.cell(20, 6, sanitize_for_pdf(ext.tipo or ''), 1, 0, 'C')
+                 pdf.cell(20, 6, sanitize_for_pdf(ext.peso or ''), 1, 0, 'C')
+                 pdf.cell(30, 6, ext.vencimento.strftime('%d/%m/%Y') if ext.vencimento else '', 1, 0, 'C')
+                 pdf.cell(20, 6, sanitize_for_pdf(ext.trocado or ''), 1, 0, 'C')
+                 pdf.cell(60, 6, sanitize_for_pdf(ext.motivo_troca or ''), 1, 1, 'L')
+                 # --- FIM DA CORREÇÃO ---
 
         if pdf.get_y() + 65 > pdf.page_break_trigger: pdf.add_page()
         pdf.ln(5); pdf.set_font('Arial', 'B', 11); pdf.cell(0, 8, 'Observações Gerais e Assinaturas', 0, 1, 'L')
         obs_text_list = [f"Outros Problemas: {p.outros_problemas}" for p in [p] if p.outros_problemas] + [f"Soluções Adotadas: {p.solucoes_adotadas}" for p in [p] if p.solucoes_adotadas] + [f"Pendências Gerais: {p.pendencias_gerais}" for p in [p] if p.pendencias_gerais]
         pdf.set_font('Arial', '', 9)
-        if obs_text_list: pdf.multi_cell(0, 5, "\n".join(obs_text_list).encode('latin-1', 'replace').decode('latin-1'), 1, 'L')
-        else: pdf.cell(0, 8, "Nenhuma observação geral registrada.", 1, 1, 'C')
+        if obs_text_list:
+            # Aplica sanitização
+            pdf.multi_cell(0, 5, sanitize_for_pdf("\n".join(obs_text_list)), 1, 'L')
+        else:
+            pdf.cell(0, 8, "Nenhuma observação geral registrada.", 1, 1, 'C')
         pdf.ln(10)
         
         y_signatures = pdf.get_y(); x_motorista = pdf.get_x(); x_responsavel = x_motorista + 95
