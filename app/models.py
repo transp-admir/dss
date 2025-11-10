@@ -253,3 +253,29 @@ class UnidadeConfig(db.Model):
     unidade = db.Column(db.String(100), unique=True, nullable=False)
     # Define o nível de permissão para troca: NENHUMA, UNIDADE, OPERACAO
     motorista_pode_trocar_veiculo = db.Column(db.String(20), nullable=False, default='NENHUMA')
+
+
+class SolicitacaoServico(db.Model):
+    __tablename__ = 'solicitacoes_servico'
+    id = db.Column(db.Integer, primary_key=True)
+    placa = db.Column(db.String(10), nullable=False)
+    descricao = db.Column(db.Text, nullable=False)
+    data_solicitacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_previsao_parada = db.Column(db.Date)
+    status = db.Column(db.String(50), default='Em Análise')
+    
+    # Foreign key to our app's 'usuario' table
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False) 
+    usuario = db.relationship('Usuario')
+
+    # Foreign key to our app's 'veiculo' table
+    veiculo_id = db.Column(db.Integer, db.ForeignKey('veiculo.id'), nullable=True)
+    veiculo = db.relationship('Veiculo', backref=db.backref('solicitacoes_servico', lazy='dynamic'))
+
+    # --- CAMPOS PARA INTEGRAÇÃO ---
+    id_externo = db.Column(db.String(100), nullable=True, index=True)
+    observacao_externa = db.Column(db.Text, nullable=True)
+    data_resposta_externa = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f'<SolicitacaoServico {self.id} - {self.placa}>'

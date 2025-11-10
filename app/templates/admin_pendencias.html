@@ -1,8 +1,8 @@
 {% extends "base_adm.html" %}
 
-{% block title %}Gerenciar Pendências{% endblock %}
+{% block title %}Gerenciar Pendências e Solicitações{% endblock %}
 
-{% block header %}Pendências de Checklist{% endblock %}
+{% block header %}Pendências e Solicitações{% endblock %}
 
 {% block content %}
 <div class="card">
@@ -21,14 +21,12 @@
                 </select>
             </div>
             
-            {# NOVO FILTRO POR TIPO DE CHECKLIST #}
             <div class="col-md-5">
-                <label for="tipo_checklist" class="form-label">Filtrar por Tipo de Checklist</label>
-                <select name="tipo_checklist" id="tipo_checklist" class="form-select">
-                    <option value="todos" {% if not tipo_selecionado or tipo_selecionado == 'todos' %}selected{% endif %}>Todos os Tipos</option>
-                    {% for tipo in tipos_checklist %}
-                        <option value="{{ tipo }}" {% if tipo == tipo_selecionado %}selected{% endif %}>{{ tipo }}</option>
-                    {% endfor %}
+                <label for="tipo_item" class="form-label">Filtrar por Tipo de Item</label>
+                <select name="tipo_item" id="tipo_item" class="form-select">
+                    <option value="todos" {% if tipo_selecionado == 'todos' %}selected{% endif %}>Todos os Tipos</option>
+                    <option value="checklist" {% if tipo_selecionado == 'checklist' %}selected{% endif %}>Pendência de Checklist</option>
+                    <option value="servico" {% if tipo_selecionado == 'servico' %}selected{% endif %}>Solicitação de Serviço</option>
                 </select>
             </div>
 
@@ -40,23 +38,21 @@
 </div>
 
 <div class="mt-4">
-    {% if not pendencias_agrupadas %}
+    {% if not itens_agrupados %}
         <div class="alert alert-success text-center">
             <i class="fas fa-check-circle fa-2x mb-2"></i>
-            <p class="mb-0">Nenhuma pendência encontrada para os filtros selecionados.</p>
+            <p class="mb-0">Nenhum item pendente encontrado para os filtros selecionados.</p>
         </div>
     {% else %}
         <div class="accordion" id="accordionPendencias">
-            {% for veiculo, pendencias in pendencias_agrupadas.items() %}
+            {% for veiculo, itens in itens_agrupados.items()|sort(attribute='0.nome_conjunto') %}
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="heading-{{ veiculo.id }}">
-                        {# 1. O botão agora começa colapsado (aria-expanded="false" e class="collapsed") #}
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ veiculo.id }}" aria-expanded="false" aria-controls="collapse-{{ veiculo.id }}">
                             <span class="fw-bold me-3">{{ veiculo.nome_conjunto }}</span>
-                            <span class="badge bg-danger">{{ pendencias|length }} Pendência(s)</span>
+                            <span class="badge bg-secondary">{{ itens|length }} Item(s)</span>
                         </button>
                     </h2>
-                    {# 2. O conteúdo do acordeão não tem mais a classe "show" para começar fechado #}
                     <div id="collapse-{{ veiculo.id }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ veiculo.id }}" data-bs-parent="#accordionPendencias">
                         <div class="accordion-body">
                             <div class="table-responsive">
@@ -64,73 +60,129 @@
                                     <thead>
                                         <tr>
                                             <th>Data</th>
-                                            <th>Item do Checklist</th>
-                                            <th>Observação (Item)</th>
+                                            <th>Tipo</th>
+                                            <th>Descrição</th>
+                                            <th>Observação</th>
                                             <th>Reportado por</th>
                                             <th class="text-center">Ação</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {% for pendencia in pendencias %}
+                                        {% for item in itens %}
                                             <tr>
-                                                <td>{{ pendencia.data_criacao.strftime('%d/%m/%Y %H:%M') }}</td>
+                                                <td class="small">{{ item.data_criacao.strftime('%d/%m/%Y %H:%M') }}</td>
                                                 <td>
-                                                    {{ pendencia.item.texto if pendencia.item else 'Item não encontrado' }}
-                                                    <br>
-                                                    <small class="text-muted">({{ pendencia.item.checklist.tipo if pendencia.item and pendencia.item.checklist else 'Tipo desconhecido' }})</small>
+                                                    {% if item.tipo == 'pendencia' %}
+                                                        <span class="badge bg-danger">Checklist</span>
+                                                    {% elif item.tipo == 'servico' %}
+                                                        <span class="badge bg-info text-dark">Serviço</span>
+                                                    {% endif %}
                                                 </td>
-                                                <td>{{ pendencia.resposta_abertura.observacao if pendencia.resposta_abertura else 'N/A' }}</td>
-                                                <td>{{ pendencia.resposta_abertura.preenchimento.motorista.nome if pendencia.resposta_abertura and pendencia.resposta_abertura.preenchimento and pendencia.resposta_abertura.preenchimento.motorista else 'Motorista não encontrado' }}</td>
+                                                <td>
+                                                    {{ item.descricao }}
+                                                    <br>
+                                                    <small class="text-muted">Origem: {{ item.origem }}</small>
+                                                </td>
+                                                <td>{{ item.observacao }}</td>
+                                                <td>{{ item.reportado_por }}</td>
                                                 <td class="text-center">
-                                                    <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#resolverPendenciaModal-{{ pendencia.id }}">
-                                                        <i class="fas fa-edit"></i> Resolver
-                                                    </button>
+                                                    {% if item.tipo == 'pendencia' %}
+                                                        <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#resolverPendenciaModal-{{ item.id }}">
+                                                            <i class="fas fa-edit"></i> Resolver
+                                                        </button>
+                                                    {% elif item.tipo == 'servico' %}
+                                                        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#analisarSolicitacaoModal-{{ item.id }}">
+                                                            <i class="fas fa-search"></i> Analisar
+                                                        </button>
+                                                    {% endif %}
                                                 </td>
                                             </tr>
 
-                                            <!-- Modal para Resolver Pendência -->
-                                            <div class="modal fade" id="resolverPendenciaModal-{{ pendencia.id }}" tabindex="-1" aria-labelledby="resolverPendenciaModalLabel-{{ pendencia.id }}" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title" id="resolverPendenciaModalLabel-{{ pendencia.id }}">Resolver Pendência</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            <!-- MODAL PARA PENDÊNCIA DE CHECKLIST -->
+                                            {% if item.tipo == 'pendencia' %}
+                                                <div class="modal fade" id="resolverPendenciaModal-{{ item.id }}" tabindex="-1" aria-hidden="true">
+                                                    <div class="modal-dialog">
+                                                        <div class="modal-content">
+                                                            <form method="POST" action="{{ url_for('admin.gerenciar_pendencias') }}">
+                                                                <div class="modal-header">
+                                                                    <h5 class="modal-title">Resolver Pendência de Checklist</h5>
+                                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                                </div>
+                                                                <div class="modal-body">
+                                                                    <input type="hidden" name="pendencia_id" value="{{ item.id }}">
+                                                                    <div class="mb-3">
+                                                                        <strong>Veículo:</strong> {{ item.veiculo.nome_conjunto }}<br>
+                                                                        <strong>Item:</strong> {{ item.descricao }}
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label">Novo Status</label>
+                                                                        <select class="form-select" name="status">
+                                                                            <option value="RESOLVIDO">Resolvido</option>
+                                                                            <option value="FINALIZADO">Finalizado (sem resolução)</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label">Número da O.S. (Opcional)</label>
+                                                                        <input type="text" class="form-control" name="numero_os">
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label">Observação da Resolução</label>
+                                                                        <textarea class="form-control" name="observacao_admin" rows="3"></textarea>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="modal-footer">
+                                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                                    <button type="submit" class="btn btn-primary">Salvar Resolução</button>
+                                                                </div>
+                                                            </form>
                                                         </div>
-                                                        <form method="POST" action="{{ url_for('admin.gerenciar_pendencias') }}">
-                                                            <div class="modal-body">
-                                                                <input type="hidden" name="pendencia_id" value="{{ pendencia.id }}">
-                                                                
-                                                                <div class="mb-3">
-                                                                    <strong>Veículo:</strong> {{ veiculo.nome_conjunto }}<br>
-                                                                    <strong>Item:</strong> {{ pendencia.item.texto if pendencia.item else 'N/A' }}
-                                                                </div>
-
-                                                                <div class="mb-3">
-                                                                    <label for="status-{{ pendencia.id }}" class="form-label">Novo Status</label>
-                                                                    <select class="form-select" id="status-{{ pendencia.id }}" name="status">
-                                                                        <option value="RESOLVIDO">Resolvido</option>
-                                                                        <option value="FINALIZADO">Finalizado (sem resolução)</option>
-                                                                    </select>
-                                                                </div>
-                                                                
-                                                                <div class="mb-3">
-                                                                    <label for="numero_os-{{ pendencia.id }}" class="form-label">Número da O.S. (Opcional)</label>
-                                                                    <input type="text" class="form-control" id="numero_os-{{ pendencia.id }}" name="numero_os">
-                                                                </div>
-
-                                                                <div class="mb-3">
-                                                                    <label for="observacao_admin-{{ pendencia.id }}" class="form-label">Observação da Resolução</label>
-                                                                    <textarea class="form-control" id="observacao_admin-{{ pendencia.id }}" name="observacao_admin" rows="3"></textarea>
-                                                                </div>
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                                <button type="submit" class="btn btn-primary">Salvar Resolução</button>
-                                                            </div>
-                                                        </form>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            {% endif %}
+
+                                            <!-- NOVO MODAL PARA SOLICITAÇÃO DE SERVIÇO -->
+                                            {% if item.tipo == 'servico' %}
+                                                <div class="modal fade" id="analisarSolicitacaoModal-{{ item.id }}" tabindex="-1" aria-hidden="true">
+                                                    <div class="modal-dialog">
+                                                        <div class="modal-content">
+                                                            <form method="POST" action="{{ url_for('admin.atualizar_solicitacao') }}">
+                                                                <div class="modal-header">
+                                                                    <h5 class="modal-title">Analisar Solicitação de Serviço</h5>
+                                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                                </div>
+                                                                <div class="modal-body">
+                                                                    <input type="hidden" name="solicitacao_id" value="{{ item.id }}">
+                                                                    <div class="mb-3">
+                                                                        <strong>Veículo:</strong> {{ item.veiculo.nome_conjunto }}<br>
+                                                                        <strong>Placa Reportada:</strong> {{ item.objeto_original.placa }}<br>
+                                                                        <strong>Descrição do Problema:</strong><p>{{ item.descricao }}</p>
+                                                                        <strong>Reportado por:</strong> {{ item.reportado_por }}
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label">Ação / Novo Status</label>
+                                                                        <select class="form-select" name="status">
+                                                                            <option value="Aprovado - Em Execução">Aprovar e Abrir O.S.</option>
+                                                                            <option value="Recusado">Recusar Solicitação</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label">Número da O.S. (se aplicável)</label>
+                                                                        <input type="text" class="form-control" name="numero_os">
+                                                                    </div>
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label">Observação da Análise</label>
+                                                                        <textarea class="form-control" name="observacao_analise" rows="3" placeholder="Ex: Motivo da recusa, detalhes da aprovação..."></textarea>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="modal-footer">
+                                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                                    <button type="submit" class="btn btn-success">Salvar Análise</button>
+                                                                </div>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            {% endif %}
                                         {% endfor %}
                                     </tbody>
                                 </table>

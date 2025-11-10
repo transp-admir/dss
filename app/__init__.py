@@ -5,6 +5,7 @@ import re
 from markupsafe import Markup
 from flask_migrate import Migrate
 from .extensions import db
+from flask_cors import CORS  # Importa a extensão CORS
 
 def nl2br(value):
     """Converte quebras de linha em tags <br> para renderização em HTML."""
@@ -37,14 +38,13 @@ def create_app():
     # --- INICIALIZAÇÃO DE EXTENSÕES ---
     db.init_app(app)
     migrate.init_app(app, db)
+    CORS(app, resources={r"/api/*": {"origins": "*"}})  # Inicializa o CORS para a API
 
     # --- REGISTRO DE FILTROS JINJA ---
     app.jinja_env.filters['nl2br'] = nl2br
     app.jinja_env.filters['youtube_id'] = youtube_id
 
     # --- IMPORTAÇÃO DE MODELOS E ROTAS (CORREÇÃO) ---
-    # Os modelos e rotas são importados aqui para garantir que sejam registrados
-    # antes que o contexto da aplicação seja estritamente necessário.
     from . import models
     from . import routes
 

@@ -12,7 +12,7 @@ from .models import (
     clean_cpf,Usuario, Motorista, Conteudo, Assinatura, Checklist, 
     ChecklistItem, Placa, Veiculo, ChecklistPreenchido, 
     ChecklistResposta, Pendencia, DocumentoFixo, ExtintorCheck,
-    VeiculoIndisponibilidade, MotoristaIsencao, UnidadeConfig
+    VeiculoIndisponibilidade, MotoristaIsencao, UnidadeConfig,SolicitacaoServico
 )
 
 # --- IMPORTAÇÃO DE FUNÇÕES DE DATA E HORA ---
@@ -59,6 +59,9 @@ import tempfile
 from datetime import timezone, timedelta
 from sqlalchemy import case
 from sqlalchemy import func, desc, distinct
+import requests
+from datetime import timezone
+
 
 
 # --- DEFINIÇÃO DO BLUEPRINT DA ÁREA PÚBLICA (ACESSO DE MOTORISTAS) ---
@@ -138,6 +141,67 @@ def salvar_config_unidade():
         flash('Configuração da unidade não encontrada.', 'danger')
 
     return redirect(url_for('admin.dashboard'))
+
+# --- DECORADOR DE VERIFICAÇÃO DE CHAVE DE API ---
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-KEY')
+        # Usa a mesma chave de API configurada no arquivo .env
+        server_api_key = os.environ.get('SECRET_API_KEY') 
+        if not server_api_key or not api_key or api_key != server_api_key:
+            return jsonify({'status': 'erro', 'mensagem': 'Acesso negado: chave de API inválida ou ausente.'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# --- ROTA DA API PARA RECEBER A FINALIZAÇÃO DE UMA PENDÊNCIA ---
+
+@main_bp.route('/api/finalizar_pendencia', methods=['POST'])
+@require_api_key
+def api_finalizar_pendencia():
+    """
+    Endpoint para receber a finalização de uma pendência do sistema de manutenção,
+    localizar a pendência correta pelo ID da resposta do checklist e atualizá-la.
+    """
+    # 1. Validação inicial do JSON
+    data = request.get_json()
+    if not data:
+        return jsonify({'status': 'erro', 'mensagem': 'Nenhum dado JSON enviado.'}), 400
+
+    id_checklist_resposta = data.get('id_checklist')
+    novo_status = data.get('status')
+    numero_os = data.get('numero_os')
+    observacao = data.get('observacao')
+
+    if not id_checklist_resposta or not novo_status:
+        return jsonify({'status': 'erro', 'mensagem': 'Campos obrigatórios ausentes: id_checklist e status são necessários.'}), 400
+
+    # 2. Busca a Pendência usando o ID da Resposta que a originou
+    pendencia = Pendencia.query.filter_by(resposta_abertura_id=id_checklist_resposta).first()
+
+    if not pendencia:
+        return jsonify({'status': 'erro', 'mensagem': f'Nenhuma pendência encontrada para o id_checklist {id_checklist_resposta}.'}), 404
+
+    if pendencia.status != 'PENDENTE':
+        return jsonify({'status': 'aviso', 'mensagem': f'A pendência {pendencia.id} já foi finalizada anteriormente com o status "{pendencia.status}".'}), 200
+
+    # 3. Atualiza a pendência (mesma lógica da tela de pendências)
+    pendencia.status = novo_status 
+    pendencia.numero_os = numero_os
+    pendencia.observacao_admin = observacao
+    pendencia.data_resolucao = datetime.utcnow()
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'status': 'sucesso',
+            'mensagem': f'Pendência {pendencia.id} do sistema Checklist foi atualizada para "{novo_status}" com sucesso.'
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'erro', 'mensagem': f'Erro interno ao salvar as alterações no checklist: {str(e)}'}), 500
+
 
 
 @main_bp.route('/motorista/trocar_veiculo', methods=['POST'])
@@ -612,7 +676,7 @@ def ver_conteudo(conteudo_id):
 
 
 
-from datetime import timezone
+# Lembre-se de ter 'import requests' e 'import os' no topo do seu arquivo routes.py
 
 @main_bp.route('/checklist/preencher/<int:checklist_id>', methods=['GET', 'POST'])
 def preencher_checklist(checklist_id):
@@ -699,12 +763,12 @@ def preencher_checklist(checklist_id):
 
         db.session.flush()
 
+        # --- CICLO DE PROCESSAMENTO DAS RESPOSTAS (VERSÃO ROBUSTA) ---
         for resposta in respostas_adicionadas:
             if resposta.resposta == 'NAO CONFORME':
+                # Cria a pendência local
                 pendencia_existente = Pendencia.query.filter_by(
-                    item_id=resposta.item_id,
-                    veiculo_id=veiculo_do_motorista.id,
-                    status='PENDENTE'
+                    item_id=resposta.item_id, veiculo_id=veiculo_do_motorista.id, status='PENDENTE'
                 ).first()
                 if not pendencia_existente:
                     nova_pendencia = Pendencia(
@@ -713,38 +777,67 @@ def preencher_checklist(checklist_id):
                         resposta_abertura_id=resposta.id
                     )
                     db.session.add(nova_pendencia)
+                
+                # --- VERIFICAÇÃO ROBUSTA DO SETOR ---
+                # Compara em minúsculas, sem acento e sem espaços extras.
+                if resposta.item and resposta.item.setor_responsavel and \
+                   'manutencao' in resposta.item.setor_responsavel.lower().strip():
+                    
+                    secret_key = os.environ.get('SECRET_API_KEY')
+                    if not secret_key:
+                        flash(f'Item "{resposta.item.texto}": FALHA GRAVE. Chave de API não configurada.', 'danger')
+                        continue
+
+                    webhook_url = 'http://127.0.0.1:5000/ss/api/ss/nova'
+                    
+                    headers = { 'X-API-KEY': secret_key, 'Content-Type': 'application/json' }
+                    
+                    payload = {
+                        "placa": veiculo_do_motorista.placa_cavalo.numero if veiculo_do_motorista.placa_cavalo else "N/A",
+                        "descricao": f"Item: {resposta.item.texto}. Obs: {resposta.observacao}",
+                        "solicitante_externo": motorista.nome,
+                        "unidade_solicitante": motorista.unidade,
+                        "operacao_solicitante": motorista.operacao or '',
+                        "id_origem_checklist": resposta.id
+                    }
+
+                    try:
+                        response = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
+                        response.raise_for_status()
+                        msg_sucesso = response.json().get('mensagem', 'Solicitação enviada com sucesso.')
+                        flash(f'Item "{resposta.item.texto}": {msg_sucesso}', 'success')
+
+                    except requests.exceptions.RequestException as e:
+                        error_message = str(e)
+                        if hasattr(e, 'response') and e.response is not None:
+                            try:
+                                error_details = e.response.json().get('mensagem', e.response.text)
+                                error_message = f"Erro {e.response.status_code}: {error_details}"
+                            except ValueError:
+                                error_message = f"Erro {e.response.status_code}: {e.response.text}"
+                        
+                        flash(f'Item "{resposta.item.texto}": FALHA ao enviar para manutenção. Detalhe: {error_message}', 'danger')
         
         db.session.commit()
-        flash('Checklist enviado com sucesso!', 'success')
+        flash('Checklist finalizado e salvo!', 'info')
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    # --- LÓGICA DE ORDENAÇÃO CORRIGIDA ---
+    # --- LÓGICA GET (inalterada) ---
     session['checklist_start_time'] = datetime.now(timezone.utc).isoformat()
-
-    def natural_sort_key(text):
-        return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', str(text or '0'))]
-
+    def natural_sort_key(text): return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', str(text or '0'))]
     itens_principais_query = checklist.itens.filter_by(parent_id=None).all()
     itens_principais_sorted = sorted(itens_principais_query, key=lambda i: natural_sort_key(i.ordem))
-
     itens_com_subitens = []
     for item in itens_principais_sorted:
         sub_itens_query = item.sub_itens.all()
         sub_itens_sorted = sorted(sub_itens_query, key=lambda si: natural_sort_key(si.ordem))
         itens_com_subitens.append((item, sub_itens_sorted))
-    
     pendencias_abertas = set()
     if veiculo_do_motorista:
         lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
         pendencias_abertas = {p.item_id for p in lista_pendencias}
+    return render_template('motorista_preencher_checklist.html', checklist=checklist, veiculo=veiculo_do_motorista, itens_com_subitens=itens_com_subitens, pendencias_abertas=pendencias_abertas)
 
-    return render_template(
-        'motorista_preencher_checklist.html',
-        checklist=checklist,
-        veiculo=veiculo_do_motorista,
-        itens_com_subitens=itens_com_subitens, # <--- Passando a lista ordenada
-        pendencias_abertas=pendencias_abertas
-    )
 
 
 
@@ -1420,8 +1513,7 @@ def excluir_documento(documento_id):
 
 #-----------------------------------------------------------------------
 
-# --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS (COM FILTRO DE UNIDADE) ---
-# Substitua a função gerenciar_pendencias() inteira por este bloco corrigido:
+# --- ROTAS DE GERENCIAMENTO DE PENDÊNCIAS E SOLICITAÇÕES (VERSÃO UNIFICADA) ---
 @admin_bp.route('/pendencias', methods=['GET', 'POST'])
 @login_required()
 def gerenciar_pendencias():
@@ -1429,21 +1521,20 @@ def gerenciar_pendencias():
     user_setor = session.get('setor')
     user_unidade = session.get('unidade')
 
-    # --- LÓGICA PARA RESOLVER UMA PENDÊNCIA (MÉTODO POST) ---
+    # Lógica POST para resolver pendências (inalterada)
     if request.method == 'POST':
         pendencia_id = request.form.get('pendencia_id')
         pendencia = Pendencia.query.get(pendencia_id)
 
         if not pendencia:
-            flash('Pendência não encontrada.', 'danger')
+            flash('Pendência de checklist não encontrada.', 'danger')
             return redirect(url_for('admin.gerenciar_pendencias'))
 
-        # Validações de segurança para a ação de resolver
+        # Validações de permissão (inalteradas)
         if user_role != 'admin':
             if user_unidade and (not pendencia.veiculo or pendencia.veiculo.unidade != user_unidade):
                 flash('Você não tem permissão para alterar pendências de outra unidade.', 'danger')
                 return redirect(url_for('admin.gerenciar_pendencias'))
-            
             if user_setor and (not pendencia.item or pendencia.item.setor_responsavel != user_setor):
                 flash('Você não tem permissão para alterar pendências deste setor.', 'danger')
                 return redirect(url_for('admin.gerenciar_pendencias'))
@@ -1461,116 +1552,173 @@ def gerenciar_pendencias():
         flash(f'Pendência do veículo {pendencia.veiculo.nome_conjunto} foi atualizada com sucesso.', 'success')
         return redirect(request.referrer or url_for('admin.gerenciar_pendencias'))
 
-    # --- LÓGICA PARA EXIBIR A LISTA DE PENDÊNCIAS (MÉTODO GET) ---
-    
-    # 1. Inicia a consulta e une todas as tabelas necessárias de uma vez para evitar ambiguidade.
-    query = Pendencia.query.join(
-        Veiculo, Pendencia.veiculo_id == Veiculo.id
-    ).join(
-        ChecklistItem, Pendencia.item_id == ChecklistItem.id
-    ).join(
-        Checklist, ChecklistItem.checklist_id == Checklist.id
-    )
+    # --- LÓGICA GET (COM CORREÇÃO DE FILTRO) ---
 
-    # 2. Aplica o filtro de status padrão.
-    query = query.filter(Pendencia.status == 'PENDENTE')
-
-    # 3. Aplica os filtros de segurança com base no perfil do usuário.
-    if user_role != 'admin':
-        if user_unidade:
-            query = query.filter(Veiculo.unidade == user_unidade)
-        if user_setor:
-            query = query.filter(ChecklistItem.setor_responsavel == user_setor)
-
-    # 4. Captura e aplica os filtros da interface do usuário.
+    # 1. Filtros da Interface (inalterados)
     veiculo_id_str = request.args.get('veiculo_id')
-    tipo_selecionado = request.args.get('tipo_checklist')
+    tipo_selecionado = request.args.get('tipo_item', 'todos')
 
-    if veiculo_id_str:
-        query = query.filter(Pendencia.veiculo_id == int(veiculo_id_str))
+    # 2. Base de Consulta (CORRIGIDO PARA FILTRAR STATUS ABERTOS)
+    pendencias_query = Pendencia.query.join(Veiculo, Pendencia.veiculo_id == Veiculo.id).filter(Pendencia.status == 'PENDENTE')
+    solicitacoes_query = SolicitacaoServico.query.join(Veiculo, SolicitacaoServico.veiculo_id == Veiculo.id).filter(SolicitacaoServico.status == 'Em Análise')
 
-    if tipo_selecionado and tipo_selecionado != 'todos':
-        query = query.filter(Checklist.tipo == tipo_selecionado)
+    # 3. Aplicar filtros de permissão (inalterados)
+    if user_role != 'admin' and user_unidade:
+        pendencias_query = pendencias_query.filter(Veiculo.unidade == user_unidade)
+        solicitacoes_query = solicitacoes_query.filter(Veiculo.unidade == user_unidade)
+    if user_role == 'comum' and user_setor:
+        pendencias_query = pendencias_query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
+                                           .filter(ChecklistItem.setor_responsavel == user_setor)
 
-    # 5. Executa a consulta e prepara os dados para o template.
-    pendencias = query.order_by(Pendencia.data_criacao.desc()).all()
+    # 4. Aplicar filtros de tela (inalterados)
+    if veiculo_id_str and veiculo_id_str.isdigit():
+        pendencias_query = pendencias_query.filter(Pendencia.veiculo_id == int(veiculo_id_str))
+        solicitacoes_query = solicitacoes_query.filter(SolicitacaoServico.veiculo_id == int(veiculo_id_str))
+
+    # 5. Executar consultas e estruturar dados (inalterados)
+    itens_unificados = []
     
-    pendencias_agrupadas = defaultdict(list)
-    for pendencia in pendencias:
-        if pendencia.veiculo:
-            pendencias_agrupadas[pendencia.veiculo].append(pendencia)
+    pendencias_db = pendencias_query.all() if tipo_selecionado in ['todos', 'checklist'] else []
+    solicitacoes_db = solicitacoes_query.all() if tipo_selecionado in ['todos', 'servico'] else []
+    
+    usuario_ids = {s.usuario_id for s in solicitacoes_db if s.usuario_id}
+    usuarios = Usuario.query.filter(Usuario.id.in_(list(usuario_ids))).all()
+    usuario_map = {u.id: u.nome for u in usuarios}
 
-    # 6. Popula os dropdowns de filtro.
+    for p in pendencias_db:
+        itens_unificados.append({
+            'tipo': 'pendencia',
+            'id': p.id,
+            'data_criacao': p.data_criacao,
+            'descricao': p.item.texto if p.item else 'Item não encontrado',
+            'origem': f"Checklist {p.item.checklist.tipo if p.item and p.item.checklist else ''}",
+            'reportado_por': p.resposta_abertura.preenchimento.motorista.nome if p.resposta_abertura and p.resposta_abertura.preenchimento and p.resposta_abertura.preenchimento.motorista else 'N/A',
+            'observacao': f"Status: {p.status} | Obs: {p.resposta_abertura.observacao if p.resposta_abertura else ''}",
+            'veiculo': p.veiculo,
+            'objeto_original': p,
+            'status_raw': p.status
+        })
+
+    for s in solicitacoes_db:
+        itens_unificados.append({
+            'tipo': 'servico',
+            'id': s.id,
+            'data_criacao': s.data_solicitacao,
+            'descricao': s.descricao,
+            'origem': 'Manutenção',
+            'reportado_por': usuario_map.get(s.usuario_id, 'Usuário não encontrado'),
+            'observacao': f"Status: {s.status} | Placa: {s.placa}",
+            'veiculo': s.veiculo,
+            'objeto_original': s,
+            'status_raw': s.status
+        })
+    
+    # 6. Agrupar e Ordenar (inalterados)
+    itens_agrupados = defaultdict(list)
+    for item in itens_unificados:
+        if item['veiculo']:
+            itens_agrupados[item['veiculo']].append(item)
+
+    for veiculo in itens_agrupados:
+        itens_agrupados[veiculo].sort(key=lambda x: x['data_criacao'], reverse=True)
+
+    # 7. Popula os dropdowns de filtro (inalterados)
     veiculos_query = Veiculo.query.order_by(Veiculo.nome_conjunto)
     if user_role != 'admin' and user_unidade:
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
     todos_veiculos = veiculos_query.all()
     
-    tipos_checklist_db = db.session.query(Checklist.tipo).distinct().order_by(Checklist.tipo).all()
-    tipos_checklist = [tipo[0] for tipo in tipos_checklist_db]
-
     return render_template(
         'admin_pendencias.html',
-        pendencias_agrupadas=pendencias_agrupadas,
+        itens_agrupados=itens_agrupados,
         todos_veiculos=todos_veiculos,
-        veiculo_selecionado_id=int(veiculo_id_str) if veiculo_id_str else None,
-        tipos_checklist=tipos_checklist,
+        veiculo_selecionado_id=int(veiculo_id_str) if veiculo_id_str and veiculo_id_str.isdigit() else None,
         tipo_selecionado=tipo_selecionado
     )
 
 
+@admin_bp.route('/solicitacao/atualizar', methods=['POST'])
+@login_required()
+def atualizar_solicitacao():
+    solicitacao_id = request.form.get('solicitacao_id')
+    novo_status_local = request.form.get('status')
+    observacao = request.form.get('observacao_analise')
+    numero_os = request.form.get('numero_os')
 
+    solicitacao = SolicitacaoServico.query.get(solicitacao_id)
+    if not solicitacao:
+        flash('Solicitação de serviço não encontrada.', 'danger')
+        return redirect(url_for('admin.gerenciar_pendencias'))
 
-
-
-
-@admin_bp.route('/pendencias', methods=['GET'])
-@login_required
-def ver_pendencias():
+    # Validação de segurança
     user_role = session.get('role')
-    user_setor = session.get('setor_responsavel')
     user_unidade = session.get('unidade')
+    if user_role not in ['admin', 'master'] or (user_role == 'master' and solicitacao.veiculo.unidade != user_unidade):
+        flash('Você não tem permissão para analisar esta solicitação.', 'danger')
+        return redirect(url_for('admin.gerenciar_pendencias'))
 
-    page = request.args.get('page', 1, type=int)
-    status_filter = request.args.get('status', 'PENDENTE')
-    veiculo_id_filter = request.args.get('veiculo_id')
-
-    # Base da query com joins necessários
-    query = Pendencia.query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
-                           .join(Veiculo, Pendencia.veiculo_id == Veiculo.id)\
-                           .order_by(Pendencia.data_abertura.desc())
-
-    # Aplica filtros de status e veículo
-    if status_filter:
-        query = query.filter(Pendencia.status == status_filter)
+    # 1. Atualiza o banco de dados local
+    solicitacao.status = novo_status_local
+    solicitacao.observacao_analise = observacao
+    solicitacao.numero_os = numero_os
+    solicitacao.data_analise = datetime.utcnow()
+    solicitacao.usuario_analise_id = session.get('user_id')
     
-    if veiculo_id_filter:
-        query = query.filter(Pendencia.veiculo_id == veiculo_id_filter)
+    db.session.commit()
+    flash(f'Solicitação para o veículo {solicitacao.veiculo.nome_conjunto} foi atualizada localmente.', 'info')
 
-    # Aplica filtros de segurança para usuários não-admin
-    if user_role not in ['admin', 'master']:
-        if user_setor:
-            query = query.filter(ChecklistItem.setor_responsavel == user_setor)
-        # NOVO: Adiciona o filtro por unidade do usuário
-        if user_unidade:
-            query = query.filter(Veiculo.unidade == user_unidade)
+    # 2. Envia a notificação para o sistema de manutenção (Webhook)
+    if solicitacao.id_externo:
+        webhook_url = 'http://127.0.0.1:5000/ss/webhook/atualizar_status'
+        
+        status_para_manutencao = "Aprovada" if novo_status_local == "Aprovado - Em Execução" else "Negada"
 
-    pendencias = query.paginate(page=page, per_page=20, error_out=False)
-    
-    # Filtra a lista de veículos do dropdown pela unidade do usuário
-    veiculos_query = Veiculo.query.order_by(Veiculo.nome_conjunto)
-    if user_role not in ['admin', 'master'] and user_unidade:
-        veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
-    veiculos = veiculos_query.all()
+        payload = {
+            "id_externo": str(solicitacao.id_externo),
+            "novo_status": status_para_manutencao,
+            "observacao": observacao
+        }
 
-    # Converte veiculo_id_filter para int para a seleção no template
-    veiculo_selecionado = int(veiculo_id_filter) if veiculo_id_filter else None
+        # --- INÍCIO DO BLOCO DE DEPURAÇÃO ---
+        print("\n--- [DEBUG] WEBHOOK PARA MANUTENÇÃO ---")
+        print(f"[DEBUG] URL: {webhook_url}")
+        print(f"[DEBUG] PAYLOAD ENVIADO: {payload}")
+        # --- FIM DO BLOCO DE DEPURAÇÃO ---
 
-    return render_template('admin_pendencias.html', 
-                           pendencias=pendencias, 
-                           veiculos=veiculos, 
-                           status_selecionado=status_filter, 
-                           veiculo_selecionado=veiculo_selecionado)
+        try:
+            # O parâmetro 'json=payload' garante o Content-Type: application/json
+            response = requests.post(webhook_url, json=payload, timeout=5)
+
+            # --- INÍCIO DO BLOCO DE DEPURAÇÃO ---
+            print(f"[DEBUG] STATUS DA RESPOSTA: {response.status_code}")
+            print(f"[DEBUG] CORPO DA RESPOSTA DO ERRO: {response.text}") # Imprime a resposta completa do erro
+            print("--- [DEBUG] FIM DO WEBHOOK ---\n")
+            # --- FIM DO BLOCO DE DEPURAÇÃO ---
+
+            # Levanta um erro para respostas 4xx ou 5xx
+            response.raise_for_status() 
+            
+            flash('Atualização enviada com sucesso para o sistema de manutenção.', 'success')
+
+        except requests.exceptions.RequestException as e:
+            # Captura erros de conexão ou erros HTTP (como o 400)
+            error_message = str(e)
+            try:
+                # Tenta extrair uma mensagem mais clara se a resposta for JSON
+                error_details = response.json().get('mensagem', response.text)
+                error_message = f"Erro {response.status_code}: {error_details}"
+            except Exception:
+                pass 
+
+            flash(f'FALHA AO NOTIFICAR MANUTENÇÃO: {error_message}', 'danger')
+
+    else:
+        flash('Aviso: Esta solicitação não possui um ID Externo e não pôde ser sincronizada.', 'warning')
+
+    return redirect(request.referrer or url_for('admin.gerenciar_pendencias'))
+
+
+
 
 
 
@@ -2603,23 +2751,6 @@ def view_checklist_preenchido(preenchido_id):
     return render_template('checklist_preenchido_detail.html', preenchido=preenchido)
 
 
-@admin_bp.route('/pendencias')
-@login_required()
-def pendencias():
-    user_role = session.get('role')
-    user_unidade = session.get('unidade')
-
-    query = Pendencia.query.filter_by(resolvida=False)
-    if user_role != 'admin':
-        # Junta as tabelas para chegar na unidade do motorista
-        query = query.join(ChecklistResposta, Pendencia.resposta_id == ChecklistResposta.id)\
-                     .join(ChecklistPreenchido, ChecklistResposta.checklist_preenchido_id == ChecklistPreenchido.id)\
-                     .join(Motorista, ChecklistPreenchido.motorista_id == Motorista.id)\
-                     .filter(Motorista.unidade == user_unidade)
-
-    lista_pendencias = query.order_by(Pendencia.data_criacao.desc()).all()
-    
-    return render_template('pendencias.html', pendencias=lista_pendencias)
 
 
 @admin_bp.route('/checklist/item/<int:item_id>/json', methods=['GET'])
@@ -3308,3 +3439,96 @@ def gerar_relatorio_status_diario():
         data_fim=data_fim,
         veiculos_selecionados_nomes=veiculos_selecionados_nomes
     )
+
+
+# --- ROTA DA API PARA RECEBER SOLICITAÇÕES DE SERVIÇO ---
+
+@main_bp.route('/api/solicitacao_servico', methods=['POST'])
+def api_solicitacao_servico():
+    """
+    Endpoint para receber solicitações de serviço do sistema de manutenção,
+    encontrar o veículo (conjunto) correto com base na placa e salvar a solicitação.
+    """
+    # 1. Validação inicial da requisição
+    data = request.get_json()
+    if not data:
+        return jsonify({'status': 'erro', 'mensagem': 'Nenhum dado JSON enviado.'}), 400
+
+    # 2. Extração dos dados obrigatórios
+    placa_str = data.get('placa')
+    descricao = data.get('descricao')
+    solicitante_nome = data.get('solicitante')
+    id_externo = data.get('id_externo')
+
+    if not all([placa_str, descricao, solicitante_nome]):
+        campos_faltando = [campo for campo in ['placa', 'descricao', 'solicitante'] if not data.get(campo)]
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Campos obrigatórios ausentes: {", ".join(campos_faltando)}'
+        }), 400
+
+    # 3. Busca da Placa e do Veículo (Conjunto) associado
+    placa_obj = Placa.query.filter_by(numero=placa_str.upper()).first()
+    if not placa_obj:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'A placa "{placa_str}" não foi encontrada no sistema.'
+        }), 404
+
+    veiculo_associado = None
+    if placa_obj.tipo == 'CAVALO':
+        veiculo_associado = Veiculo.query.filter(
+            Veiculo.placa_cavalo_id == placa_obj.id,
+            Veiculo.ativo == True
+        ).first()
+    elif placa_obj.tipo == 'CARRETA':
+        veiculo_associado = Veiculo.query.filter(
+            or_(
+                Veiculo.placa_carreta1_id == placa_obj.id,
+                Veiculo.placa_carreta2_id == placa_obj.id
+            ),
+            Veiculo.ativo == True
+        ).first()
+
+    if not veiculo_associado:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Nenhum conjunto ATIVO foi encontrado para a placa "{placa_str}". A solicitação não pode ser atribuída.'
+        }), 404
+
+    # 4. Busca do Usuário que está fazendo a solicitação
+    usuario = Usuario.query.filter(func.lower(Usuario.nome) == solicitante_nome.lower()).first()
+    if not usuario:
+        usuario = Usuario.query.get(1) # Fallback para o usuário admin (ID 1)
+        if not usuario:
+            return jsonify({
+                'status': 'erro',
+                'mensagem': f'Usuário solicitante "{solicitante_nome}" não encontrado e nenhum usuário padrão (admin) configurado.'
+            }), 404
+
+    # 5. Criação e Persistência da Solicitação de Serviço
+    try:
+        nova_solicitacao = SolicitacaoServico(
+            placa=placa_str.upper(),
+            descricao=descricao,
+            data_solicitacao=datetime.utcnow(),
+            status='Em Análise',
+            usuario_id=usuario.id,
+            veiculo_id=veiculo_associado.id,
+            id_externo=id_externo
+        )
+        db.session.add(nova_solicitacao)
+        db.session.commit()
+
+        # 6. Retorno de Sucesso
+        return jsonify({
+            'status': 'sucesso',
+            'mensagem': 'Solicitação de serviço registrada com sucesso.',
+            'id_interno': nova_solicitacao.id,
+            'veiculo_associado': veiculo_associado.nome_conjunto,
+            'solicitante_registrado': usuario.nome
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'erro', 'mensagem': f'Ocorreu um erro interno ao salvar a solicitação: {str(e)}'}), 500
