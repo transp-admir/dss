@@ -1521,7 +1521,7 @@ def gerenciar_pendencias():
     user_setor = session.get('setor')
     user_unidade = session.get('unidade')
 
-    # Lógica POST para resolver pendências (inalterada)
+    # --- LÓGICA POST (inalterada) ---
     if request.method == 'POST':
         pendencia_id = request.form.get('pendencia_id')
         pendencia = Pendencia.query.get(pendencia_id)
@@ -1530,7 +1530,6 @@ def gerenciar_pendencias():
             flash('Pendência de checklist não encontrada.', 'danger')
             return redirect(url_for('admin.gerenciar_pendencias'))
 
-        # Validações de permissão (inalteradas)
         if user_role != 'admin':
             if user_unidade and (not pendencia.veiculo or pendencia.veiculo.unidade != user_unidade):
                 flash('Você não tem permissão para alterar pendências de outra unidade.', 'danger')
@@ -1552,30 +1551,34 @@ def gerenciar_pendencias():
         flash(f'Pendência do veículo {pendencia.veiculo.nome_conjunto} foi atualizada com sucesso.', 'success')
         return redirect(request.referrer or url_for('admin.gerenciar_pendencias'))
 
-    # --- LÓGICA GET (COM CORREÇÃO DE FILTRO) ---
+    # --- LÓGICA GET (COM FILTRO DE SETOR CORRIGIDO E GENERALIZADO) ---
 
-    # 1. Filtros da Interface (inalterados)
     veiculo_id_str = request.args.get('veiculo_id')
     tipo_selecionado = request.args.get('tipo_item', 'todos')
 
-    # 2. Base de Consulta (CORRIGIDO PARA FILTRAR STATUS ABERTOS)
     pendencias_query = Pendencia.query.join(Veiculo, Pendencia.veiculo_id == Veiculo.id).filter(Pendencia.status == 'PENDENTE')
     solicitacoes_query = SolicitacaoServico.query.join(Veiculo, SolicitacaoServico.veiculo_id == Veiculo.id).filter(SolicitacaoServico.status == 'Em Análise')
 
-    # 3. Aplicar filtros de permissão (inalterados)
+    # 1. Filtro de UNIDADE para não-admins
     if user_role != 'admin' and user_unidade:
         pendencias_query = pendencias_query.filter(Veiculo.unidade == user_unidade)
         solicitacoes_query = solicitacoes_query.filter(Veiculo.unidade == user_unidade)
-    if user_role == 'comum' and user_setor:
+
+    # 2. Filtro de SETOR para não-admins (ESTA É A CORREÇÃO PRINCIPAL)
+    if user_role != 'admin' and user_setor:
+        # Mostra apenas pendências do setor do usuário
         pendencias_query = pendencias_query.join(ChecklistItem, Pendencia.item_id == ChecklistItem.id)\
                                            .filter(ChecklistItem.setor_responsavel == user_setor)
+        
+        # Garante que solicitações de serviço genéricas não apareçam para usuários de setor
+        solicitacoes_query = solicitacoes_query.filter(SolicitacaoServico.id == -1)
 
-    # 4. Aplicar filtros de tela (inalterados)
+    # 3. Filtros de tela (inalterado)
     if veiculo_id_str and veiculo_id_str.isdigit():
         pendencias_query = pendencias_query.filter(Pendencia.veiculo_id == int(veiculo_id_str))
         solicitacoes_query = solicitacoes_query.filter(SolicitacaoServico.veiculo_id == int(veiculo_id_str))
 
-    # 5. Executar consultas e estruturar dados (inalterados)
+    # O restante da função permanece exatamente igual...
     itens_unificados = []
     
     pendencias_db = pendencias_query.all() if tipo_selecionado in ['todos', 'checklist'] else []
@@ -1587,33 +1590,23 @@ def gerenciar_pendencias():
 
     for p in pendencias_db:
         itens_unificados.append({
-            'tipo': 'pendencia',
-            'id': p.id,
-            'data_criacao': p.data_criacao,
+            'tipo': 'pendencia', 'id': p.id, 'data_criacao': p.data_criacao,
             'descricao': p.item.texto if p.item else 'Item não encontrado',
             'origem': f"Checklist {p.item.checklist.tipo if p.item and p.item.checklist else ''}",
             'reportado_por': p.resposta_abertura.preenchimento.motorista.nome if p.resposta_abertura and p.resposta_abertura.preenchimento and p.resposta_abertura.preenchimento.motorista else 'N/A',
             'observacao': f"Status: {p.status} | Obs: {p.resposta_abertura.observacao if p.resposta_abertura else ''}",
-            'veiculo': p.veiculo,
-            'objeto_original': p,
-            'status_raw': p.status
+            'veiculo': p.veiculo, 'objeto_original': p, 'status_raw': p.status
         })
 
     for s in solicitacoes_db:
         itens_unificados.append({
-            'tipo': 'servico',
-            'id': s.id,
-            'data_criacao': s.data_solicitacao,
-            'descricao': s.descricao,
-            'origem': 'Manutenção',
+            'tipo': 'servico', 'id': s.id, 'data_criacao': s.data_solicitacao,
+            'descricao': s.descricao, 'origem': 'Manutenção',
             'reportado_por': usuario_map.get(s.usuario_id, 'Usuário não encontrado'),
             'observacao': f"Status: {s.status} | Placa: {s.placa}",
-            'veiculo': s.veiculo,
-            'objeto_original': s,
-            'status_raw': s.status
+            'veiculo': s.veiculo, 'objeto_original': s, 'status_raw': s.status
         })
     
-    # 6. Agrupar e Ordenar (inalterados)
     itens_agrupados = defaultdict(list)
     for item in itens_unificados:
         if item['veiculo']:
@@ -1622,7 +1615,6 @@ def gerenciar_pendencias():
     for veiculo in itens_agrupados:
         itens_agrupados[veiculo].sort(key=lambda x: x['data_criacao'], reverse=True)
 
-    # 7. Popula os dropdowns de filtro (inalterados)
     veiculos_query = Veiculo.query.order_by(Veiculo.nome_conjunto)
     if user_role != 'admin' and user_unidade:
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
