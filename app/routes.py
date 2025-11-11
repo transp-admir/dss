@@ -53,7 +53,7 @@ from sqlalchemy import and_, or_
 
 # --- IMPORTAÇÃO DE BIBLIOTECA PARA GERAÇÃO DE DOCUMENTOS PDF ---
 from fpdf import FPDF
-
+from sqlalchemy import false
 import base64
 import tempfile
 from datetime import timezone, timedelta
@@ -755,18 +755,19 @@ def preencher_checklist(checklist_id):
                         pass
                 
                 novo_extintor = ExtintorCheck(
-                    preenchimento=novo_preenchimento,
-                    local=local, tipo=tipo, peso=peso,
+                    preenchimento=novo_preenchimento, local=local, tipo=tipo, peso=peso,
                     vencimento=vencimento_data, trocado=trocado, motivo_troca=motivo_troca
                 )
                 db.session.add(novo_extintor)
 
         db.session.flush()
 
-        # --- CICLO DE PROCESSAMENTO DAS RESPOSTAS (VERSÃO ROBUSTA) ---
+        alguma_pendencia_registrada = False
+
         for resposta in respostas_adicionadas:
             if resposta.resposta == 'NAO CONFORME':
-                # Cria a pendência local
+                alguma_pendencia_registrada = True
+
                 pendencia_existente = Pendencia.query.filter_by(
                     item_id=resposta.item_id, veiculo_id=veiculo_do_motorista.id, status='PENDENTE'
                 ).first()
@@ -778,20 +779,12 @@ def preencher_checklist(checklist_id):
                     )
                     db.session.add(nova_pendencia)
                 
-                # --- VERIFICAÇÃO ROBUSTA DO SETOR ---
-                # Compara em minúsculas, sem acento e sem espaços extras.
                 if resposta.item and resposta.item.setor_responsavel and \
                    'manutencao' in resposta.item.setor_responsavel.lower().strip():
                     
                     secret_key = os.environ.get('SECRET_API_KEY')
-                    if not secret_key:
-                        flash(f'Item "{resposta.item.texto}": FALHA GRAVE. Chave de API não configurada.', 'danger')
-                        continue
-
                     webhook_url = 'http://127.0.0.1:5000/ss/api/ss/nova'
-                    
                     headers = { 'X-API-KEY': secret_key, 'Content-Type': 'application/json' }
-                    
                     payload = {
                         "placa": veiculo_do_motorista.placa_cavalo.numero if veiculo_do_motorista.placa_cavalo else "N/A",
                         "descricao": f"Item: {resposta.item.texto}. Obs: {resposta.observacao}",
@@ -801,25 +794,23 @@ def preencher_checklist(checklist_id):
                         "id_origem_checklist": resposta.id
                     }
 
+                    # --- LÓGICA DE LOG PARA DESENVOLVEDOR ---
                     try:
-                        response = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
-                        response.raise_for_status()
-                        msg_sucesso = response.json().get('mensagem', 'Solicitação enviada com sucesso.')
-                        flash(f'Item "{resposta.item.texto}": {msg_sucesso}', 'success')
-
+                        if not secret_key:
+                            print(f"--- FALHA DE API (CONFIG): Chave de API não configurada. Pendência para item '{resposta.item.texto}' não enviada. ---")
+                        else:
+                            response = requests.post(webhook_url, json=payload, headers=headers, timeout=5)
+                            response.raise_for_status()
+                            print(f"--- SUCESSO DE API: Pendência para item '{resposta.item.texto}' comunicada. Status: {response.status_code} ---")
                     except requests.exceptions.RequestException as e:
-                        error_message = str(e)
-                        if hasattr(e, 'response') and e.response is not None:
-                            try:
-                                error_details = e.response.json().get('mensagem', e.response.text)
-                                error_message = f"Erro {e.response.status_code}: {error_details}"
-                            except ValueError:
-                                error_message = f"Erro {e.response.status_code}: {e.response.text}"
-                        
-                        flash(f'Item "{resposta.item.texto}": FALHA ao enviar para manutenção. Detalhe: {error_message}', 'danger')
+                        print(f"--- FALHA DE API (COMUNICAÇÃO): Erro ao comunicar pendência '{resposta.item.texto}'. Erro: {str(e)} ---")
         
         db.session.commit()
+
         flash('Checklist finalizado e salvo!', 'info')
+        if alguma_pendencia_registrada:
+            flash('Pendências registradas para análise da equipe responsável.', 'info')
+
         return redirect(url_for('main.lista_checklists_motorista'))
 
     # --- LÓGICA GET (inalterada) ---
