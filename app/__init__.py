@@ -1,11 +1,11 @@
 from flask import Flask
-from dotenv import load_dotenv
+from flask_migrate import Migrate
+from flask_cors import CORS
+from markupsafe import Markup
 import os
 import re
-from markupsafe import Markup
-from flask_migrate import Migrate
 from .extensions import db
-from flask_cors import CORS  # Importa a extensão CORS
+from config import config  # Importa o dicionário de configurações
 
 def nl2br(value):
     """Converte quebras de linha em tags <br> para renderização em HTML."""
@@ -19,16 +19,15 @@ def youtube_id(url):
 
 migrate = Migrate()
 
-def create_app():
+def create_app(config_name=None):
     """Função que cria e configura a aplicação Flask (Application Factory)."""
-    load_dotenv()
-    app = Flask(__name__, instance_relative_config=True)
+    if config_name is None:
+        config_name = os.getenv('FLASK_CONFIG', 'default')
 
-    # --- CONFIGURAÇÃO ---
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'uma-chave-padrao-fraca')
-    default_db_uri = 'sqlite:///' + os.path.join(app.instance_path, 'database.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI', default_db_uri)
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app = Flask(__name__, instance_relative_config=True)
+    
+    # --- CONFIGURAÇÃO A PARTIR DO OBJETO ---
+    app.config.from_object(config[config_name])
 
     try:
         os.makedirs(app.instance_path)
@@ -38,17 +37,15 @@ def create_app():
     # --- INICIALIZAÇÃO DE EXTENSÕES ---
     db.init_app(app)
     migrate.init_app(app, db)
-    CORS(app, resources={r"/api/*": {"origins": "*"}})  # Inicializa o CORS para a API
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     # --- REGISTRO DE FILTROS JINJA ---
     app.jinja_env.filters['nl2br'] = nl2br
     app.jinja_env.filters['youtube_id'] = youtube_id
 
-    # --- IMPORTAÇÃO DE MODELOS E ROTAS (CORREÇÃO) ---
-    from . import models
-    from . import routes
+    # --- IMPORTAÇÃO E REGISTRO DE BLUEPRINTS ---
+    from . import routes, models  # A importação de models é necessária para o Flask-Migrate
 
-    # --- REGISTRO DE BLUEPRINTS ---
     with app.app_context():
         app.register_blueprint(routes.admin_bp)
         app.register_blueprint(routes.main_bp)
