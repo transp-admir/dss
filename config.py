@@ -15,8 +15,9 @@ class DevelopmentConfig(Config):
         'sqlite:///' + os.path.join(basedir, 'instance', 'app-dev.db')
 
 class ProductionConfig(Config):
-    SQLALCHEMY_DATABASE_URI = os.environ.get('PROD_DATABASE_URI')
-    # Adicione outras configurações de produção aqui, se necessário
+    # A configuração de produção agora aponta para o banco de dados SQLite principal.
+    SQLALCHEMY_DATABASE_URI = os.environ.get('PROD_DATABASE_URI') or \
+        'sqlite:///' + os.path.join(basedir, 'instance', 'app.db')
 
 config = {
     'development': DevelopmentConfig,
