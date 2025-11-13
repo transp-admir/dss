@@ -61,6 +61,7 @@ from sqlalchemy import case
 from sqlalchemy import func, desc, distinct
 import requests
 from datetime import timezone
+from flask import g
 
 
 
@@ -676,8 +677,6 @@ def ver_conteudo(conteudo_id):
 
 
 
-# Lembre-se de ter 'import requests' e 'import os' no topo do seu arquivo routes.py
-
 @main_bp.route('/checklist/preencher/<int:checklist_id>', methods=['GET', 'POST'])
 def preencher_checklist(checklist_id):
     if 'motorista_id' not in session:
@@ -783,7 +782,12 @@ def preencher_checklist(checklist_id):
                    'manutencao' in resposta.item.setor_responsavel.lower().strip():
                     
                     secret_key = os.environ.get('SECRET_API_KEY')
-                    webhook_url = 'http://127.0.0.1:5000/ss/api/ss/nova'
+                    
+                    # --- CORREÇÃO APLICADA AQUI ---
+                    # A URL agora é carregada dinamicamente a partir da configuração do ambiente
+                    webhook_url = g.webhook_nova
+                    # --- FIM DA CORREÇÃO ---
+
                     headers = { 'X-API-KEY': secret_key, 'Content-Type': 'application/json' }
                     payload = {
                         "placa": veiculo_do_motorista.placa_cavalo.numero if veiculo_do_motorista.placa_cavalo else "N/A",
@@ -794,9 +798,10 @@ def preencher_checklist(checklist_id):
                         "id_origem_checklist": resposta.id
                     }
 
-                    # --- LÓGICA DE LOG PARA DESENVOLVEDOR ---
                     try:
-                        if not secret_key:
+                        if not webhook_url:
+                             print(f"--- FALHA DE API (CONFIG): URL do Webhook 'nova' não configurada. Pendência para item '{resposta.item.texto}' não enviada. ---")
+                        elif not secret_key:
                             print(f"--- FALHA DE API (CONFIG): Chave de API não configurada. Pendência para item '{resposta.item.texto}' não enviada. ---")
                         else:
                             response = requests.post(webhook_url, json=payload, headers=headers, timeout=5)
@@ -1652,7 +1657,10 @@ def atualizar_solicitacao():
 
     # 2. Envia a notificação para o sistema de manutenção (Webhook)
     if solicitacao.id_externo:
-        webhook_url = 'http://127.0.0.1:5000/ss/webhook/atualizar_status'
+        # --- CORREÇÃO APLICADA AQUI ---
+        # A URL agora é carregada dinamicamente a partir da configuração do ambiente
+        webhook_url = g.webhook_atualizar
+        # --- FIM DA CORREÇÃO ---
         
         status_para_manutencao = "Aprovada" if novo_status_local == "Aprovado - Em Execução" else "Negada"
 
@@ -1662,39 +1670,22 @@ def atualizar_solicitacao():
             "observacao": observacao
         }
 
-        # --- INÍCIO DO BLOCO DE DEPURAÇÃO ---
-        print("\n--- [DEBUG] WEBHOOK PARA MANUTENÇÃO ---")
-        print(f"[DEBUG] URL: {webhook_url}")
-        print(f"[DEBUG] PAYLOAD ENVIADO: {payload}")
-        # --- FIM DO BLOCO DE DEPURAÇÃO ---
-
         try:
-            # O parâmetro 'json=payload' garante o Content-Type: application/json
-            response = requests.post(webhook_url, json=payload, timeout=5)
-
-            # --- INÍCIO DO BLOCO DE DEPURAÇÃO ---
-            print(f"[DEBUG] STATUS DA RESPOSTA: {response.status_code}")
-            print(f"[DEBUG] CORPO DA RESPOSTA DO ERRO: {response.text}") # Imprime a resposta completa do erro
-            print("--- [DEBUG] FIM DO WEBHOOK ---\n")
-            # --- FIM DO BLOCO DE DEPURAÇÃO ---
-
-            # Levanta um erro para respostas 4xx ou 5xx
-            response.raise_for_status() 
-            
-            flash('Atualização enviada com sucesso para o sistema de manutenção.', 'success')
+            if not webhook_url:
+                flash('FALHA AO NOTIFICAR MANUTENÇÃO: A URL do webhook de atualização não está configurada.', 'danger')
+            else:
+                response = requests.post(webhook_url, json=payload, timeout=5)
+                response.raise_for_status() 
+                flash('Atualização enviada com sucesso para o sistema de manutenção.', 'success')
 
         except requests.exceptions.RequestException as e:
-            # Captura erros de conexão ou erros HTTP (como o 400)
             error_message = str(e)
             try:
-                # Tenta extrair uma mensagem mais clara se a resposta for JSON
                 error_details = response.json().get('mensagem', response.text)
                 error_message = f"Erro {response.status_code}: {error_details}"
             except Exception:
                 pass 
-
             flash(f'FALHA AO NOTIFICAR MANUTENÇÃO: {error_message}', 'danger')
-
     else:
         flash('Aviso: Esta solicitação não possui um ID Externo e não pôde ser sincronizada.', 'warning')
 
