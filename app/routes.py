@@ -778,16 +778,12 @@ def preencher_checklist(checklist_id):
                     )
                     db.session.add(nova_pendencia)
                 
+                # --- INÍCIO DO BLOCO AJUSTADO ---
                 if resposta.item and resposta.item.setor_responsavel and \
                    'manutencao' in resposta.item.setor_responsavel.lower().strip():
                     
                     secret_key = os.environ.get('SECRET_API_KEY')
-                    
-                    # --- CORREÇÃO APLICADA AQUI ---
-                    # A URL agora é carregada dinamicamente a partir da configuração do ambiente
-                    webhook_url = g.webhook_nova
-                    # --- FIM DA CORREÇÃO ---
-
+                    webhook_url = g.webhook_nova # USA A URL DINÂMICA
                     headers = { 'X-API-KEY': secret_key, 'Content-Type': 'application/json' }
                     payload = {
                         "placa": veiculo_do_motorista.placa_cavalo.numero if veiculo_do_motorista.placa_cavalo else "N/A",
@@ -799,21 +795,24 @@ def preencher_checklist(checklist_id):
                     }
 
                     try:
-                        if not webhook_url:
-                             print(f"--- FALHA DE API (CONFIG): URL do Webhook 'nova' não configurada. Pendência para item '{resposta.item.texto}' não enviada. ---")
-                        elif not secret_key:
-                            print(f"--- FALHA DE API (CONFIG): Chave de API não configurada. Pendência para item '{resposta.item.texto}' não enviada. ---")
+                        # 1. Valida a configuração antes de enviar
+                        if not webhook_url or not secret_key:
+                            flash(f"FALHA DE CONFIGURAÇÃO: URL ou Chave de API não definida no servidor. Pendência para '{resposta.item.texto}' não foi enviada.", 'warning')
                         else:
-                            response = requests.post(webhook_url, json=payload, headers=headers, timeout=5)
-                            response.raise_for_status()
-                            print(f"--- SUCESSO DE API: Pendência para item '{resposta.item.texto}' comunicada. Status: {response.status_code} ---")
+                            # 2. Tenta enviar a notificação
+                            response = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
+                            response.raise_for_status() # Lança um erro para status 4xx ou 5xx
+                            flash(f"SUCESSO: Pendência do item '{resposta.item.texto}' foi comunicada à Manutenção.", 'success')
+
                     except requests.exceptions.RequestException as e:
-                        print(f"--- FALHA DE API (COMUNICAÇÃO): Erro ao comunicar pendência '{resposta.item.texto}'. Erro: {str(e)} ---")
+                        # 3. Captura erros de comunicação (timeout, DNS, erro HTTP)
+                        flash(f"FALHA DE API: Erro ao comunicar pendência '{resposta.item.texto}'. Detalhe: {str(e)}", 'danger')
+                # --- FIM DO BLOCO AJUSTADO ---
         
         db.session.commit()
 
         flash('Checklist finalizado e salvo!', 'info')
-        if alguma_pendencia_registrada:
+        if alguma_pendencia_registrada and not any('manutencao' in (r.item.setor_responsavel.lower().strip() if r.item and r.item.setor_responsavel else "") for r in respostas_adicionadas if r.resposta == 'NAO CONFORME'):
             flash('Pendências registradas para análise da equipe responsável.', 'info')
 
         return redirect(url_for('main.lista_checklists_motorista'))
@@ -833,7 +832,6 @@ def preencher_checklist(checklist_id):
         lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
         pendencias_abertas = {p.item_id for p in lista_pendencias}
     return render_template('motorista_preencher_checklist.html', checklist=checklist, veiculo=veiculo_do_motorista, itens_com_subitens=itens_com_subitens, pendencias_abertas=pendencias_abertas)
-
 
 
 
@@ -1638,14 +1636,12 @@ def atualizar_solicitacao():
         flash('Solicitação de serviço não encontrada.', 'danger')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
-    # Validação de segurança
     user_role = session.get('role')
     user_unidade = session.get('unidade')
     if user_role not in ['admin', 'master'] or (user_role == 'master' and solicitacao.veiculo.unidade != user_unidade):
         flash('Você não tem permissão para analisar esta solicitação.', 'danger')
         return redirect(url_for('admin.gerenciar_pendencias'))
 
-    # 1. Atualiza o banco de dados local
     solicitacao.status = novo_status_local
     solicitacao.observacao_analise = observacao
     solicitacao.numero_os = numero_os
@@ -1655,13 +1651,9 @@ def atualizar_solicitacao():
     db.session.commit()
     flash(f'Solicitação para o veículo {solicitacao.veiculo.nome_conjunto} foi atualizada localmente.', 'info')
 
-    # 2. Envia a notificação para o sistema de manutenção (Webhook)
+    # --- INÍCIO DO BLOCO AJUSTADO ---
     if solicitacao.id_externo:
-        # --- CORREÇÃO APLICADA AQUI ---
-        # A URL agora é carregada dinamicamente a partir da configuração do ambiente
-        webhook_url = g.webhook_atualizar
-        # --- FIM DA CORREÇÃO ---
-        
+        webhook_url = g.webhook_atualizar # USA A URL DINÂMICA
         status_para_manutencao = "Aprovada" if novo_status_local == "Aprovado - Em Execução" else "Negada"
 
         payload = {
@@ -1672,11 +1664,11 @@ def atualizar_solicitacao():
 
         try:
             if not webhook_url:
-                flash('FALHA AO NOTIFICAR MANUTENÇÃO: A URL do webhook de atualização não está configurada.', 'danger')
+                flash('FALHA DE CONFIGURAÇÃO: A URL do webhook de atualização não está configurada.', 'warning')
             else:
-                response = requests.post(webhook_url, json=payload, timeout=5)
+                response = requests.post(webhook_url, json=payload, timeout=10)
                 response.raise_for_status() 
-                flash('Atualização enviada com sucesso para o sistema de manutenção.', 'success')
+                flash('SUCESSO: Atualização enviada para o sistema de manutenção.', 'success')
 
         except requests.exceptions.RequestException as e:
             error_message = str(e)
@@ -1688,10 +1680,9 @@ def atualizar_solicitacao():
             flash(f'FALHA AO NOTIFICAR MANUTENÇÃO: {error_message}', 'danger')
     else:
         flash('Aviso: Esta solicitação não possui um ID Externo e não pôde ser sincronizada.', 'warning')
+    # --- FIM DO BLOCO AJUSTADO ---
 
     return redirect(request.referrer or url_for('admin.gerenciar_pendencias'))
-
-
 
 
 
