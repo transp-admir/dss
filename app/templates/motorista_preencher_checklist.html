@@ -4,18 +4,30 @@
 
 {% block head %}
 <style>
-    /* Estilos gerais e de validação */
-    .extintor-card { border: 1px solid #dee2e6; border-radius: 0.25rem; }
-    .extintor-header { background-color: #f8f9fa; padding: 0.75rem 1.25rem; font-weight: bold; border-bottom: 1px solid #dee2e6; }
-    .extintor-body { padding: 1.25rem; display: grid; grid-template-columns: 1fr; gap: 1rem; }
-    @media (min-width: 768px) {
-        .extintor-body { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: end; }
+
+    /* ==================== AJUSTES PARA CORRIGIR O CANVAS NO MOBILE ==================== */
+
+    .signature-pad-wrapper {
+        position: relative;
+        width: 100%;
+        min-height: 220px;              /* Altura garantida no mobile */
+        height: 220px !important;
+        background: #fff;
+        border: 1px solid #ced4da;
+        border-radius: .25rem;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
     }
-    .form-group-radio .btn-group { width: 100%; }
-    .form-group-radio label { margin-bottom: 0.5rem; display: block; }
-    .item-invalido, .is-invalid { border: 2px solid #dc3545 !important; border-radius: .25rem; }
-    
-    /* --- ESTILOS PARA ASSINATURA UNIFICADA --- */
+
+    .signature-pad-wrapper canvas {
+        width: 100% !important;
+        height: 100% !important;
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+
     .signature-display-placeholder {
         border: 1px dashed #ced4da;
         border-radius: .25rem;
@@ -31,24 +43,36 @@
         border-radius: .25rem;
     }
 
-    /* Wrapper para CADA área de assinatura dentro do modal */
-    .signature-pad-wrapper {
-        position: relative;
-        width: 100%;
-        height: 200px; /* Altura ideal para mobile */
-        -webkit-touch-callout: none;
-        user-select: none;
-        touch-action: none; /* Previne rolagem ao assinar */
-        border: 1px solid #ced4da;
-        border-radius: .25rem;
-        background-color: #fff;
+    /* ==================== SEU CSS ORIGINAL (MANTIDO) ==================== */
+
+    .extintor-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
     }
-    .signature-pad-wrapper canvas {
-        position: absolute;
-        left: 0;
-        top: 0;
+    .extintor-header {
+        background-color: #f8f9fa;
+        padding: 0.75rem 1.25rem;
+        font-weight: bold;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .extintor-body {
+        padding: 1.25rem;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    @media (min-width: 768px) {
+        .extintor-body {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            align-items: end;
+        }
+    }
+    .form-group-radio .btn-group {
         width: 100%;
-        height: 100%;
+    }
+    .item-invalido, .is-invalid {
+        border: 2px solid #dc3545 !important;
+        border-radius: .25rem;
     }
 </style>
 {% endblock %}
@@ -59,113 +83,181 @@
 {% endblock %}
 
 {% block content %}
+
+<!-- ========================================================== -->
+<!-- ====================== FORM COMPLETO ===================== -->
+<!-- ========================================================== -->
+
 <form method="POST" action="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}" id="checklist-form" novalidate>
+
     <input type="hidden" name="data_preenchimento_local" id="data_preenchimento_local_input">
 
     {% if not veiculo %}
-        <div class="alert alert-danger" role="alert">
-            <strong>Atenção!</strong> Você não está vinculado a nenhum veículo. Por favor, contate o administrador.
+        <div class="alert alert-danger">
+            <strong>Atenção!</strong> Você não está vinculado a nenhum veículo.
         </div>
     {% else %}
-        <div class="alert alert-info" role="alert">
+
+        <div class="alert alert-info">
             Preenchendo checklist para o veículo: <strong>{{ veiculo.nome_conjunto }}</strong>
         </div>
 
-        <!-- Seção de Itens do Checklist (sem alterações) -->
         {% for item, sub_itens in itens_com_subitens %}
+
             {% if item.texto == '__BLOCO_EXTINTORES__' %}
-                 <div class="card mt-4 mb-3">
-                    <div class="card-header"><h5>Controle de Extintores</h5></div>
+                <!-- ==================== BLOCO EXTINTORES ==================== -->
+                <div class="card mt-4 mb-3">
+                    <div class="card-header">
+                        <h5>Controle de Extintores</h5>
+                    </div>
                     <div class="card-body">
-                        <p class="text-muted small">Preencha com os dados do extintor ou escreva <strong>N/A</strong>.</p>
+
+                        <p class="text-muted small">
+                            Para os campos "Peso" e "Vencimento", preencha ou coloque <strong>N/A</strong>.
+                        </p>
+
                         {% set locais = ['CABINE', '1° CARRETA L.D', '1° CARRETA L.E', '2° CARRETA L.D', '2° CARRETA L.E'] %}
+
                         {% for i in range(5) %}
                         <div class="extintor-card mb-3">
-                            <div class="extintor-header">{{ locais[i] }}</div>
-                            <div class="extintor-body">
-                                <!-- Campos dos extintores -->
+                            <div class="extintor-header">
+                                {{ locais[i] }}
                                 <input type="hidden" name="extintor-{{ i }}-local" value="{{ locais[i] }}">
-                                <div class="form-group"><label>Tipo</label><input type="text" class="form-control" name="extintor-{{ i }}-tipo" value="ABC"></div>
-                                <div class="form-group"><label>Peso (KG)</label><input type="text" class="form-control extintor-required" name="extintor-{{ i }}-peso" placeholder="Ex: 2.5 ou N/A" required></div>
-                                <div class="form-group"><label>Vencimento</label><input type="text" class="form-control date-mask" name="extintor-{{ i }}-vencimento" placeholder="DD/MM/AAAA ou N/A" required></div>
-                                <div class="form-group-radio"><label>Trocado?</label><div class="btn-group" role="group">
-                                    <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="trocado-sim-{{ i }}" value="Sim" autocomplete="off"><label class="btn btn-outline-primary btn-sm" for="trocado-sim-{{ i }}">Sim</label>
-                                    <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="trocado-nao-{{ i }}" value="Não" autocomplete="off" checked><label class="btn btn-outline-secondary btn-sm" for="trocado-nao-{{ i }}">Não</label>
-                                </div></div>
-                                <div class="form-group"><label>Motivo da Troca</label><input type="text" class="form-control" name="extintor-{{ i }}-motivo"></div>
+                            </div>
+                            <div class="extintor-body">
+
+                                <div class="form-group">
+                                    <label>Tipo</label>
+                                    <input type="text" class="form-control" name="extintor-{{ i }}-tipo" value="ABC">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Peso (KG)</label>
+                                    <input type="text" class="form-control extintor-required" name="extintor-{{ i }}-peso" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Vencimento</label>
+                                    <input type="text" class="form-control date-mask" name="extintor-{{ i }}-vencimento" required>
+                                </div>
+
+                                <div class="form-group-radio">
+                                    <label>Trocado?</label>
+                                    <div class="btn-group w-100">
+                                        <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="ts{{ i }}" value="Sim">
+                                        <label class="btn btn-outline-primary" for="ts{{ i }}">Sim</label>
+
+                                        <input type="radio" class="btn-check" name="extintor-{{ i }}-trocado" id="tn{{ i }}" value="Não" checked>
+                                        <label class="btn btn-outline-secondary" for="tn{{ i }}">Não</label>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Motivo da Troca</label>
+                                    <input type="text" class="form-control" name="extintor-{{ i }}-motivo">
+                                </div>
+
                             </div>
                         </div>
                         {% endfor %}
+
                     </div>
                 </div>
+
             {% else %}
+
+                <!-- ==================== OUTROS ITENS DO CHECKLIST ==================== -->
                 <div class="card mb-3 checklist-item-card">
-                    <div class="card-header fw-bold {% if item.id in pendencias_abertas %}bg-warning text-dark{% endif %}">{{ item.ordem }}. {{ item.texto }} {% if item.id in pendencias_abertas %}<span class="badge bg-danger ms-2">Pendência</span>{% endif %}</div>
-                    <ul class="list-group list-group-flush">
+                    <div class="card-header fw-bold">
+                        {{ item.ordem }}. {{ item.texto }}
+                    </div>
+                    <ul class="list-group">
+
                         {% if sub_itens %}
+
                             {% for sub_item in sub_itens %}
-                                <li class="list-group-item sub-item {% if sub_item.id in pendencias_abertas %}list-group-item-warning{% endif %}" data-ordem="{{ sub_item.ordem }}">
-                                    <div class="mb-2"><strong>{{ sub_item.ordem }}</strong> - {{ sub_item.texto }}</div>
-                                    <div class="btn-group w-100" role="group">
-                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="conforme-{{ sub_item.id }}" value="CONFORME" autocomplete="off" required><label class="btn btn-outline-success" for="conforme-{{ sub_item.id }}">Conforme</label>
-                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="nao-conforme-{{ sub_item.id }}" value="NAO CONFORME" autocomplete="off"><label class="btn btn-outline-danger" for="nao-conforme-{{ sub_item.id }}">Não Conforme</label>
-                                        <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="na-{{ sub_item.id }}" value="N/A" autocomplete="off"><label class="btn btn-outline-secondary" for="na-{{ sub_item.id }}">N/A</label>
-                                    </div>
-                                    <textarea class="form-control mt-2" name="obs-{{ sub_item.id }}" placeholder="Observação (opcional)"></textarea>
-                                </li>
-                            {% endfor %}
-                        {% else %}
-                             <li class="list-group-item single-item" data-ordem="{{ item.ordem }}">
-                                <div class="btn-group w-100" role="group">
-                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="conforme-{{ item.id }}" value="CONFORME" autocomplete="off" required><label class="btn btn-outline-success" for="conforme-{{ item.id }}">Conforme</label>
-                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="nao-conforme-{{ item.id }}" value="NAO CONFORME" autocomplete="off"><label class="btn btn-outline-danger" for="nao-conforme-{{ item.id }}">Não Conforme</label>
-                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="na-{{ item.id }}" value="N/A" autocomplete="off"><label class="btn btn-outline-secondary" for="na-{{ item.id }}">N/A</label>
+                            <li class="list-group-item sub-item">
+                                <div class="mb-2"><strong>{{ sub_item.ordem }}</strong> - {{ sub_item.texto }}</div>
+
+                                <div class="btn-group w-100">
+                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="c{{ sub_item.id }}" value="CONFORME" required>
+                                    <label class="btn btn-outline-success" for="c{{ sub_item.id }}">Conforme</label>
+
+                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="nc{{ sub_item.id }}" value="NAO CONFORME">
+                                    <label class="btn btn-outline-danger" for="nc{{ sub_item.id }}">Não Conforme</label>
+
+                                    <input type="radio" class="btn-check" name="resposta-{{ sub_item.id }}" id="na{{ sub_item.id }}" value="N/A">
+                                    <label class="btn btn-outline-secondary" for="na{{ sub_item.id }}">N/A</label>
                                 </div>
+
+                                <textarea class="form-control mt-2" name="obs-{{ sub_item.id }}" placeholder="Observação (opcional)"></textarea>
+
+                            </li>
+                            {% endfor %}
+
+                        {% else %}
+
+                            <li class="list-group-item single-item">
+                                <div class="btn-group w-100">
+
+                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="c{{ item.id }}" value="CONFORME" required>
+                                    <label class="btn btn-outline-success" for="c{{ item.id }}">Conforme</label>
+
+                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="nc{{ item.id }}" value="NAO CONFORME">
+                                    <label class="btn btn-outline-danger" for="nc{{ item.id }}">Não Conforme</label>
+
+                                    <input type="radio" class="btn-check" name="resposta-{{ item.id }}" id="na{{ item.id }}" value="N/A">
+                                    <label class="btn btn-outline-secondary" for="na{{ item.id }}">N/A</label>
+
+                                </div>
+
                                 <textarea class="form-control mt-2" name="obs-{{ item.id }}" placeholder="Observação (opcional)"></textarea>
                             </li>
+
                         {% endif %}
+
                     </ul>
                 </div>
+
             {% endif %}
+
         {% endfor %}
 
-        <!-- Seção de Observações (sem alterações) -->
+        <!-- ==================== ASSINATURAS ==================== -->
         <div class="card mt-4">
-            <div class="card-header"><h5>Observações Gerais</h5></div>
-            <div class="card-body">
-                <div class="mb-3"><label class="form-label">Outros problemas:</label><textarea class="form-control" name="outros_problemas" rows="3"></textarea></div>
-                <div class="mb-3"><label class="form-label">Soluções adotadas:</label><textarea class="form-control" name="solucoes_adotadas" rows="3"></textarea></div>
-                <div class="mb-3"><label class="form-label">Pendências gerais:</label><textarea class="form-control" name="pendencias_gerais" rows="3"></textarea></div>
+            <div class="card-header text-center">
+                <h5>Assinaturas</h5>
             </div>
-        </div>
-
-        <!-- Termo de Ciência (sem alterações) -->
-        <div class="card mt-4"><div class="card-header bg-light"><h5 class="mb-0">Termo de Ciência e Responsabilidade</h5></div>
             <div class="card-body">
-                <p class="small text-muted">1 - Estou ciente que a utilização dos referidos EPIs e Uniformes são obrigatórios...</p>
-                <p class="small text-muted">2 - Declaro para os devidos fins que o veículo de minha responsabilidade...</p>
-            </div>
-        </div>
 
-        <!-- ***** ÁREA DE ASSINATURA UNIFICADA (CORRIGIDA) ***** -->
-        <div class="card mt-4">
-            <div class="card-header text-center"><h5>Assinaturas</h5></div>
-            <div class="card-body">
                 <div class="row">
-                    <div class="col-md-6 mb-3 mb-md-0">
-                        <label class="form-label">Assinatura do Motorista (Obrigatória)</label>
-                        <div class="signature-display-placeholder" id="signature-motorista-display"><img id="signature-motorista-img" src="" style="display: none;"><span id="signature-motorista-text">Não assinado</span></div>
+
+                    <div class="col-md-6 mb-3">
+                        <label>Assinatura do Motorista (Obrigatória)</label>
+                        <div class="signature-display-placeholder" id="signature-motorista-display">
+                            <img id="signature-motorista-img" style="display:none;">
+                            <span id="signature-motorista-text">Não assinado</span>
+                        </div>
                         <input type="hidden" name="assinatura_motorista" id="assinatura_motorista_input">
                     </div>
+
                     <div class="col-md-6">
-                        <label class="form-label">Assinatura do Responsável (Opcional)</label>
-                        <div class="signature-display-placeholder" id="signature-responsavel-display"><img id="signature-responsavel-img" src="" style="display: none;"><span id="signature-responsavel-text">Não assinado</span></div>
+                        <label>Assinatura do Responsável (Opcional)</label>
+                        <div class="signature-display-placeholder" id="signature-responsavel-display">
+                            <img id="signature-responsavel-img" style="display:none;">
+                            <span id="signature-responsavel-text">Não assinado</span>
+                        </div>
                         <input type="hidden" name="assinatura_responsavel" id="assinatura_responsavel_input">
                     </div>
+
                 </div>
-                 <div class="d-grid mt-3">
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#signature-modal">Abrir para Assinar / Editar</button>
+
+                <div class="d-grid mt-3">
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#signature-modal">
+                        Abrir para Assinar / Editar
+                    </button>
                 </div>
+
             </div>
         </div>
 
@@ -173,32 +265,50 @@
             <button type="submit" class="btn btn-success btn-lg">Enviar Checklist</button>
             <a href="{{ url_for('main.lista_checklists_motorista') }}" class="btn btn-secondary">Cancelar</a>
         </div>
+
     {% endif %}
 </form>
 
-<!-- ***** MODAL ÚNICO - VERSÃO FINAL MOBILE-FIRST ***** -->
-<div class="modal fade" id="signature-modal" tabindex="-1" aria-labelledby="signatureModalLabel" aria-hidden="true">
+<!-- ========================================================== -->
+<!-- ==================== MODAL DE ASSINATURA ================= -->
+<!-- ========================================================== -->
+
+<div class="modal fade" id="signature-modal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
+
       <div class="modal-header">
-        <h5 class="modal-title" id="signatureModalLabel">Registro de Assinaturas</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title">Registro de Assinaturas</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
       </div>
+
       <div class="modal-body">
-          <!-- Assinatura do Motorista (Layout Vertical) -->
-          <h6 class="mt-2 text-center">Assinatura do Motorista (Obrigatória)</h6>
-          <div class="signature-pad-wrapper"><canvas id="signature-canvas-motorista"></canvas></div>
-          <div class="text-center mt-2"><button type="button" class="btn btn-sm btn-outline-secondary" id="clear-motorista">Limpar</button></div>
-          <hr class="my-4">
-          <!-- Assinatura do Responsável (Layout Vertical) -->
-          <h6 class="mt-2 text-center">Assinatura do Responsável (Opcional)</h6>
-          <div class="signature-pad-wrapper"><canvas id="signature-canvas-responsavel"></canvas></div>
-          <div class="text-center mt-2"><button type="button" class="btn btn-sm btn-outline-secondary" id="clear-responsavel">Limpar</button></div>
+
+        <h6>Assinatura do Motorista (Obrigatória)</h6>
+        <div class="signature-pad-wrapper">
+            <canvas id="signature-canvas-motorista"></canvas>
+        </div>
+        <div class="text-center mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-motorista">Limpar</button>
+        </div>
+
+        <hr class="my-4">
+
+        <h6>Assinatura do Responsável (Opcional)</h6>
+        <div class="signature-pad-wrapper">
+            <canvas id="signature-canvas-responsavel"></canvas>
+        </div>
+        <div class="text-center mt-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-responsavel">Limpar</button>
+        </div>
+
       </div>
+
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
         <button type="button" class="btn btn-primary" id="signature-modal-save">Confirmar Assinaturas</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -206,83 +316,116 @@
 {% if veiculo %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const form = document.getElementById('checklist-form');
-    if (!form) return;
 
-    // --- LÓGICA DO MODAL DE ASSINATURA (VERSÃO DEFINITIVA) ---
-    const signatureModalEl = document.getElementById('signature-modal');
-    const signatureModal = bootstrap.Modal.getOrCreateInstance(signatureModalEl);
-    
+<script>
+
+document.addEventListener('DOMContentLoaded', () => {
+
+    const form = document.getElementById('checklist-form');
+
+    /* ==========================================================
+       ============== CONFIGURAÇÃO DOS CANVAS ====================
+       ========================================================== */
+
+    const modalEl = document.getElementById('signature-modal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
     const canvasMotorista = document.getElementById('signature-canvas-motorista');
     const canvasResponsavel = document.getElementById('signature-canvas-responsavel');
-    const signaturePadMotorista = new SignaturePad(canvasMotorista, { backgroundColor: 'rgb(255, 255, 255)' });
-    const signaturePadResponsavel = new SignaturePad(canvasResponsavel, { backgroundColor: 'rgb(255, 255, 255)' });
 
-    function resizeAllCanvases() {
+    const padMotorista = new SignaturePad(canvasMotorista, { backgroundColor: "#fff" });
+    const padResponsavel = new SignaturePad(canvasResponsavel, { backgroundColor: "#fff" });
+
+    function resizeCanvases() {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
+
         [canvasMotorista, canvasResponsavel].forEach(canvas => {
+
             const wrapper = canvas.parentElement;
+
+            // garantir estilos inline corretos
+            canvas.style.width = "100%";
+            canvas.style.height = "100%";
+
+            // ajustar resolução do canvas
             canvas.width = wrapper.offsetWidth * ratio;
             canvas.height = wrapper.offsetHeight * ratio;
-            canvas.getContext("2d").scale(ratio, ratio);
+
+            // resetar transform e aplicar escala correta
+            const ctx = canvas.getContext("2d");
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.scale(ratio, ratio);
         });
-        const motoristaData = document.getElementById('assinatura_motorista_input').value;
-        signaturePadMotorista.clear();
-        if(motoristaData) signaturePadMotorista.fromDataURL(motoristaData);
-        
-        const responsavelData = document.getElementById('assinatura_responsavel_input').value;
-        signaturePadResponsavel.clear();
-        if(responsavelData) signaturePadResponsavel.fromDataURL(responsavelData);
+
+        // Recarregar assinaturas se já existirem
+        const mData = document.getElementById('assinatura_motorista_input').value;
+        const rData = document.getElementById('assinatura_responsavel_input').value;
+
+        if (mData) padMotorista.fromDataURL(mData);
+        if (rData) padResponsavel.fromDataURL(rData);
     }
 
-    signatureModalEl.addEventListener('shown.bs.modal', resizeAllCanvases);
-    window.addEventListener("resize", resizeAllCanvases);
+    // Delay crítico para mobile (garante layout pronto)
+    modalEl.addEventListener('shown.bs.modal', () => {
+        setTimeout(resizeCanvases, 150);
+    });
 
-    document.getElementById('clear-motorista').addEventListener('click', () => signaturePadMotorista.clear());
-    document.getElementById('clear-responsavel').addEventListener('click', () => signaturePadResponsavel.clear());
+    // Safety resize on orientation change or window resize
+    window.addEventListener("resize", resizeCanvases);
 
-    document.getElementById('signature-modal-save').addEventListener('click', function () {
-        if (signaturePadMotorista.isEmpty()) {
-            alert('A assinatura do motorista é obrigatória.');
+    document.getElementById('clear-motorista').onclick = () => padMotorista.clear();
+    document.getElementById('clear-responsavel').onclick = () => padResponsavel.clear();
+
+    /* Safety-net discreto: se o modal foi fechado e a classe modal-open
+       permanece sem backdrop, limpa a classe — correções somente quando necessário. */
+    modalEl.addEventListener('hidden.bs.modal', () => {
+        setTimeout(() => {
+            const backdrop = document.querySelector('.modal-backdrop');
+            if (!backdrop && document.body.classList.contains('modal-open')) {
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            }
+        }, 60);
+    });
+
+    /* ==========================================================
+       ============== SALVANDO ASSINATURAS =======================
+       ========================================================== */
+
+    document.getElementById('signature-modal-save').addEventListener('click', () => {
+
+        if (padMotorista.isEmpty()) {
+            alert("A assinatura do motorista é obrigatória.");
             return;
         }
-        const motoristaDataURL = signaturePadMotorista.toDataURL('image/png');
-        document.getElementById('assinatura_motorista_input').value = motoristaDataURL;
-        document.getElementById('signature-motorista-img').src = motoristaDataURL;
-        document.getElementById('signature-motorista-img').style.display = 'block';
-        document.getElementById('signature-motorista-text').style.display = 'none';
-        document.getElementById('signature-motorista-display').classList.remove('is-invalid');
 
-        if (!signaturePadResponsavel.isEmpty()) {
-            const responsavelDataURL = signaturePadResponsavel.toDataURL('image/png');
-            document.getElementById('assinatura_responsavel_input').value = responsavelDataURL;
-            document.getElementById('signature-responsavel-img').src = responsavelDataURL;
-            document.getElementById('signature-responsavel-img').style.display = 'block';
-            document.getElementById('signature-responsavel-text').style.display = 'none';
+        const mData = padMotorista.toDataURL();
+        document.getElementById('assinatura_motorista_input').value = mData;
+        document.getElementById('signature-motorista-img').src = mData;
+        document.getElementById('signature-motorista-img').style.display = "block";
+        document.getElementById('signature-motorista-text').style.display = "none";
+
+        if (!padResponsavel.isEmpty()) {
+            const rData = padResponsavel.toDataURL();
+            document.getElementById('assinatura_responsavel_input').value = rData;
+            document.getElementById('signature-responsavel-img').src = rData;
+            document.getElementById('signature-responsavel-img').style.display = "block";
+            document.getElementById('signature-responsavel-text').style.display = "none";
         } else {
-            document.getElementById('assinatura_responsavel_input').value = '';
-            document.getElementById('signature-responsavel-img').src = '';
-            document.getElementById('signature-responsavel-img').style.display = 'none';
-            document.getElementById('signature-responsavel-text').style.display = 'block';
+            document.getElementById('assinatura_responsavel_input').value = "";
+            document.getElementById('signature-responsavel-img').style.display = "none";
+            document.getElementById('signature-responsavel-text').style.display = "block";
         }
-        signatureModal.hide();
+
+        modal.hide();
     });
-    
-    // --- GARANTIA DE QUE A TELA NÃO IRÁ TRAVAR ---
-    signatureModalEl.addEventListener('hidden.bs.modal', function (event) {
-        const backdrop = document.querySelector('.modal-backdrop');
-        if (backdrop) {
-            backdrop.remove();
-        }
-        // Força a restauração do estado normal da página
-        document.body.classList.remove('modal-open');
-        document.body.style.overflow = 'auto';
-        document.body.style.paddingRight = '';
-    });
-    
-    // --- LÓGICA DE VALIDAÇÃO DO FORMULÁRIO ---
+
+
+    /* ==========================================================
+       ====================== VALIDAÇÃO ===========================
+       ========================================================== */
+
     document.querySelectorAll('.date-mask').forEach(input => {
         input.addEventListener('input', e => {
             let v = e.target.value.toUpperCase();
@@ -294,45 +437,82 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    form.addEventListener('submit', function (event) {
-        event.preventDefault();
+    form.addEventListener('submit', e => {
+
+        e.preventDefault();
+
+        let primeiro = null;
+        let ok = true;
+
         document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-        let primeiroItemInvalido = null;
-        let isValid = true;
+
         document.querySelectorAll('.sub-item, .single-item').forEach(item => {
             const radios = item.querySelectorAll('input[type="radio"]');
-            if (!Array.from(radios).some(radio => radio.checked)) {
-                isValid = false;
+            if (![...radios].some(r => r.checked)) {
                 item.classList.add('is-invalid');
-                if (!primeiroItemInvalido) primeiroItemInvalido = item;
+                ok = false;
+                if (!primeiro) primeiro = item;
             }
         });
+
         document.querySelectorAll('.extintor-required').forEach(input => {
             if (!input.value.trim()) {
-                isValid = false;
                 input.classList.add('is-invalid');
-                if (!primeiroItemInvalido) primeiroItemInvalido = input;
+                ok = false;
+                if (!primeiro) primeiro = input;
             }
         });
-        const motoristaSignatureInput = document.getElementById('assinatura_motorista_input');
-        if (!motoristaSignatureInput.value) {
-            isValid = false;
-            const placeholder = document.getElementById('signature-motorista-display');
-            placeholder.classList.add('is-invalid');
-            if (!primeiroItemInvalido) primeiroItemInvalido = placeholder;
+
+        if (!document.getElementById('assinatura_motorista_input').value) {
+            ok = false;
+            const d = document.getElementById('signature-motorista-display');
+            d.classList.add('is-invalid');
+            if (!primeiro) primeiro = d;
         }
-        if (!isValid) {
-            alert('Por favor, preencha todos os campos obrigatórios em vermelho.');
-            if (primeiroItemInvalido) {
-                primeiroItemInvalido.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+
+        if (!ok) {
+            alert("Preencha os campos em vermelho.");
+            if (primeiro) primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
+
         document.getElementById('data_preenchimento_local_input').value = new Date().toISOString();
         form.submit();
     });
-});
-</script>
-{% endif %}
 
+});
+
+</script>
+
+<script>
+// Remove travamento após fechar modal
+function liberarTela() {
+    document.body.classList.remove("modal-open");
+    document.body.style.overflow = "";
+    
+    // remover backdrop
+    const backdrops = document.querySelectorAll(".modal-backdrop");
+    backdrops.forEach(b => b.remove());
+}
+
+// Corrigir quando o modal fecha normalmente
+document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('hidden.bs.modal', function () {
+        liberarTela();
+    });
+});
+
+// Corrigir quando você fecha o modal "manualmente" via JS
+window.forceCloseSignatureModal = function () {
+    const modal = bootstrap.Modal.getInstance(
+        document.getElementById("signatureModal")
+    );
+    window.forceCloseSignatureModal();
+
+
+    liberarTela();
+}
+</script>
+
+{% endif %}
 {% endblock %}
