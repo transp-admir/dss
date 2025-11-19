@@ -21,7 +21,6 @@
         grid-template-columns: 1fr;
         gap: 1rem;
     }
-    /* Em telas maiores, mostra os campos lado a lado */
     @media (min-width: 768px) {
         .extintor-body {
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -35,40 +34,44 @@
         margin-bottom: 0.5rem;
         display: block;
     }
-    /* Adiciona um destaque visual para campos inválidos */
     .item-invalido, .is-invalid {
-        border: 2px solid #dc3545 !important; /* Vermelho do Bootstrap para perigo */
+        border: 2px solid #dc3545 !important;
         border-radius: .25rem;
     }
     
-    /* Estilos para a assinatura com modal */
-    .signature-placeholder {
+    /* --- ESTILOS PARA ASSINATURA UNIFICADA --- */
+    .signature-display-placeholder {
         border: 1px dashed #ced4da;
         border-radius: .25rem;
         height: 150px;
         display: flex;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
         background-color: #f8f9fa;
-        margin-bottom: 1rem;
     }
-    .signature-placeholder img {
+    .signature-display-placeholder img {
         max-width: 100%;
         max-height: 100%;
         border-radius: .25rem;
     }
-    .signature-placeholder:hover {
-        background-color: #e9ecef;
-    }
-    #signature-modal .modal-body {
-        touch-action: none; /* Impede a rolagem dentro do modal */
-    }
-    #signature-modal-canvas {
+
+    /* Wrapper para CADA área de assinatura dentro do modal */
+    .signature-pad-wrapper {
+        position: relative;
+        width: 100%;
+        height: 200px;
+        -webkit-touch-callout: none;
+        user-select: none;
+        touch-action: none;
         border: 1px solid #ced4da;
         border-radius: .25rem;
+    }
+    .signature-pad-wrapper canvas {
+        position: absolute;
+        left: 0;
+        top: 0;
         width: 100%;
-        height: 250px;
+        height: 100%;
     }
 </style>
 {% endblock %}
@@ -92,7 +95,6 @@
             Preenchendo checklist para o veículo: <strong>{{ veiculo.nome_conjunto }}</strong>
         </div>
 
-        <!-- ***** CORREÇÃO DA ORDENAÇÃO APLICADA AQUI ***** -->
         {% for item, sub_itens in itens_com_subitens %}
             {% if item.texto == '__BLOCO_EXTINTORES__' %}
                  <div class="card mt-4 mb-3">
@@ -220,66 +222,80 @@
             </div>
         </div>
 
-        <!-- ***** SEÇÃO DE ASSINATURA ATUALIZADA ***** -->
-        <div class="row mt-4">
-            <div class="col-md-6 mb-3 mb-md-0">
-                <div class="card h-100">
-                    <div class="card-header text-center">
-                        <h5>Assinatura do Motorista (Obrigatória)</h5>
-                    </div>
-                    <div class="card-body text-center">
-                        <div class="signature-placeholder" id="signature-motorista-placeholder" data-bs-toggle="modal" data-bs-target="#signature-modal" data-target-pad="motorista">
-                            <img id="signature-motorista-img" src="" alt="Assinatura do Motorista">
-                            <span id="signature-motorista-text">Toque para assinar</span>
+        <!-- ***** ÁREA DE ASSINATURA UNIFICADA ***** -->
+        <div class="card mt-4">
+            <div class="card-header text-center">
+                <h5>Assinaturas</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3 mb-md-0">
+                        <label class="form-label">Assinatura do Motorista (Obrigatória)</label>
+                        <div class="signature-display-placeholder" id="signature-motorista-display">
+                            <img id="signature-motorista-img" src="" style="display: none;">
+                            <span id="signature-motorista-text">Não assinado</span>
                         </div>
                         <input type="hidden" name="assinatura_motorista" id="assinatura_motorista_input">
-                        <div class="mt-2">
-                             <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-signature-motorista">Limpar</button>
-                        </div>
                     </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-header text-center">
-                        <h5>Assinatura do Responsável (Opcional)</h5>
-                    </div>
-                    <div class="card-body text-center">
-                        <div class="signature-placeholder" id="signature-responsavel-placeholder" data-bs-toggle="modal" data-bs-target="#signature-modal" data-target-pad="responsavel">
-                            <img id="signature-responsavel-img" src="" alt="Assinatura do Responsável">
-                            <span id="signature-responsavel-text">Toque para assinar</span>
+                    <div class="col-md-6">
+                        <label class="form-label">Assinatura do Responsável (Opcional)</label>
+                        <div class="signature-display-placeholder" id="signature-responsavel-display">
+                             <img id="signature-responsavel-img" src="" style="display: none;">
+                             <span id="signature-responsavel-text">Não assinado</span>
                         </div>
                         <input type="hidden" name="assinatura_responsavel" id="assinatura_responsavel_input">
-                        <div class="mt-2">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-signature-responsavel">Limpar</button>
-                        </div>
                     </div>
+                </div>
+                 <div class="d-grid mt-3">
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#signature-modal">
+                        Abrir para Assinar / Editar
+                    </button>
                 </div>
             </div>
         </div>
-        <!-- ***** FIM DA SEÇÃO DE ASSINATURA ***** -->
 
         <div class="mt-4 d-grid gap-2">
-            <button type="submit" class="btn btn-primary btn-lg">Enviar Checklist</button>
+            <button type="submit" class="btn btn-success btn-lg">Enviar Checklist</button>
             <a href="{{ url_for('main.lista_checklists_motorista') }}" class="btn btn-secondary">Cancelar</a>
         </div>
     {% endif %}
 </form>
 
-<!-- ***** MODAL DA ASSINATURA ***** -->
+<!-- ***** MODAL ÚNICO PARA AMBAS AS ASSINATURAS ***** -->
 <div class="modal fade" id="signature-modal" tabindex="-1" aria-labelledby="signatureModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="signatureModalLabel">Assine no campo abaixo</h5>
+        <h5 class="modal-title" id="signatureModalLabel">Registro de Assinaturas</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-          <canvas id="signature-modal-canvas"></canvas>
+          
+          <div class="row">
+              <div class="col-md-6">
+                  <h6 class="mt-2 text-center">Assinatura do Motorista (Obrigatória)</h6>
+                  <div class="signature-pad-wrapper">
+                      <canvas id="signature-canvas-motorista"></canvas>
+                  </div>
+                  <div class="text-center mt-2">
+                      <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-motorista">Limpar</button>
+                  </div>
+              </div>
+              <div class="col-md-6">
+                  <h6 class="mt-2 text-center">Assinatura do Responsável (Opcional)</h6>
+                  <div class="signature-pad-wrapper">
+                      <canvas id="signature-canvas-responsavel"></canvas>
+                  </div>
+                  <div class="text-center mt-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-responsavel">Limpar</button>
+                  </div>
+              </div>
+          </div>
+
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="signature-modal-clear">Limpar</button>
-        <button type="button" class="btn btn-primary" id="signature-modal-save">Confirmar Assinatura</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="signature-modal-save">Confirmar Assinaturas</button>
       </div>
     </div>
   </div>
@@ -293,68 +309,95 @@ document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('checklist-form');
     if (!form) return;
 
-    // Lógica do Modal de Assinatura
-    const signatureModal = new bootstrap.Modal(document.getElementById('signature-modal'));
-    const modalCanvas = document.getElementById('signature-modal-canvas');
-    const signaturePad = new SignaturePad(modalCanvas, { backgroundColor: 'rgb(255, 255, 255)' });
-    let currentPad = null;
+    // --- LÓGICA DO MODAL DE ASSINATURA UNIFICADO (VERSÃO DEFINITIVA) ---
+    const signatureModalEl = document.getElementById('signature-modal');
+    const signatureModal = bootstrap.Modal.getOrCreateInstance(signatureModalEl);
+    
+    // Canvases e Pads
+    const canvasMotorista = document.getElementById('signature-canvas-motorista');
+    const canvasResponsavel = document.getElementById('signature-canvas-responsavel');
+    const signaturePadMotorista = new SignaturePad(canvasMotorista, { backgroundColor: 'rgb(255, 255, 255)' });
+    const signaturePadResponsavel = new SignaturePad(canvasResponsavel, { backgroundColor: 'rgb(255, 255, 255)' });
 
-    function resizeCanvas() {
+    function resizeAllCanvases() {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        modalCanvas.width = modalCanvas.offsetWidth * ratio;
-        modalCanvas.height = modalCanvas.offsetHeight * ratio;
-        modalCanvas.getContext("2d").scale(ratio, ratio);
-        signaturePad.clear();
+        
+        [canvasMotorista, canvasResponsavel].forEach(canvas => {
+            const wrapper = canvas.parentElement;
+            canvas.width = wrapper.offsetWidth * ratio;
+            canvas.height = wrapper.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+        });
+
+        // Recarrega as assinaturas existentes nos pads ao reabrir o modal
+        const motoristaData = document.getElementById('assinatura_motorista_input').value;
+        if(motoristaData) {
+            signaturePadMotorista.fromDataURL(motoristaData);
+        } else {
+            signaturePadMotorista.clear();
+        }
+        
+        const responsavelData = document.getElementById('assinatura_responsavel_input').value;
+        if(responsavelData) {
+            signaturePadResponsavel.fromDataURL(responsavelData);
+        } else {
+            signaturePadResponsavel.clear();
+        }
     }
 
-    document.getElementById('signature-modal').addEventListener('shown.bs.modal', function (event) {
-        currentPad = event.relatedTarget.dataset.targetPad;
-        resizeCanvas();
-    });
+    signatureModalEl.addEventListener('shown.bs.modal', resizeAllCanvases);
+    window.addEventListener("resize", resizeAllCanvases);
 
-    window.addEventListener("resize", resizeCanvas);
+    // Botões de limpar dentro do modal
+    document.getElementById('clear-motorista').addEventListener('click', () => signaturePadMotorista.clear());
+    document.getElementById('clear-responsavel').addEventListener('click', () => signaturePadResponsavel.clear());
 
-    document.getElementById('signature-modal-clear').addEventListener('click', () => signaturePad.clear());
-
+    // Botão de salvar do modal
     document.getElementById('signature-modal-save').addEventListener('click', function () {
-        if (signaturePad.isEmpty()) {
-            alert('Por favor, forneça uma assinatura.');
+        if (signaturePadMotorista.isEmpty()) {
+            alert('A assinatura do motorista é obrigatória.');
             return;
         }
 
-        const dataURL = signaturePad.toDataURL('image/png');
-        const placeholder = document.getElementById(`signature-${currentPad}-placeholder`);
-        const text = document.getElementById(`signature-${currentPad}-text`);
-        const img = document.getElementById(`signature-${currentPad}-img`);
-        const input = document.getElementById(`assinatura_${currentPad}_input`);
+        // Processa assinatura do motorista
+        const motoristaDataURL = signaturePadMotorista.toDataURL('image/png');
+        document.getElementById('assinatura_motorista_input').value = motoristaDataURL;
+        document.getElementById('signature-motorista-img').src = motoristaDataURL;
+        document.getElementById('signature-motorista-img').style.display = 'block';
+        document.getElementById('signature-motorista-text').style.display = 'none';
+        document.getElementById('signature-motorista-display').classList.remove('is-invalid');
 
-        input.value = dataURL;
-        img.src = dataURL;
-        img.style.display = 'block';
-        text.style.display = 'none';
-        placeholder.classList.remove('is-invalid');
+        // Processa assinatura do responsável
+        if (!signaturePadResponsavel.isEmpty()) {
+            const responsavelDataURL = signaturePadResponsavel.toDataURL('image/png');
+            document.getElementById('assinatura_responsavel_input').value = responsavelDataURL;
+            document.getElementById('signature-responsavel-img').src = responsavelDataURL;
+            document.getElementById('signature-responsavel-img').style.display = 'block';
+            document.getElementById('signature-responsavel-text').style.display = 'none';
+        } else {
+            document.getElementById('assinatura_responsavel_input').value = '';
+            document.getElementById('signature-responsavel-img').src = '';
+            document.getElementById('signature-responsavel-img').style.display = 'none';
+            document.getElementById('signature-responsavel-text').style.display = 'block';
+        }
         
-        signaturePad.clear();
         signatureModal.hide();
     });
     
-    // Lógica para limpar as assinaturas no formulário principal
-    document.getElementById('clear-signature-motorista').addEventListener('click', function() {
-        document.getElementById('assinatura_motorista_input').value = '';
-        const img = document.getElementById('signature-motorista-img');
-        img.src = '';
-        img.style.display = 'none';
-        document.getElementById('signature-motorista-text').style.display = 'block';
+    // --- INÍCIO DA CORREÇÃO DEFINITIVA PARA DESTRAVAR A TELA ---
+    signatureModalEl.addEventListener('hidden.bs.modal', function (event) {
+        // Esta é uma garantia. O Bootstrap deveria fazer isso, mas vamos forçar.
+        const backdrop = document.querySelector('.modal-backdrop');
+        if (backdrop) {
+            backdrop.remove();
+        }
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = 'auto';
+        document.body.style.paddingRight = '';
     });
-    
-    document.getElementById('clear-signature-responsavel').addEventListener('click', function() {
-        document.getElementById('assinatura_responsavel_input').value = '';
-        const img = document.getElementById('signature-responsavel-img');
-        img.src = '';
-        img.style.display = 'none';
-        document.getElementById('signature-responsavel-text').style.display = 'block';
-    });
+    // --- FIM DA CORREÇÃO DEFINITIVA ---
 
+    // ... (resto do código do formulário)
 
     document.querySelectorAll('.date-mask').forEach(input => {
         input.addEventListener('input', e => {
@@ -378,7 +421,6 @@ document.addEventListener('DOMContentLoaded', function () {
         let primeiroItemInvalido = null;
         let isValid = true;
 
-        // Valida itens do checklist
         document.querySelectorAll('.sub-item, .single-item').forEach(item => {
             const radios = item.querySelectorAll('input[type="radio"]');
             const isChecked = Array.from(radios).some(radio => radio.checked);
@@ -389,7 +431,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // Valida campos de extintor
         document.querySelectorAll('.extintor-required').forEach(input => {
             if (!input.value.trim()) {
                 isValid = false;
@@ -398,11 +439,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // Valida assinatura obrigatória do motorista
         const motoristaSignatureInput = document.getElementById('assinatura_motorista_input');
         if (!motoristaSignatureInput.value) {
             isValid = false;
-            const placeholder = document.getElementById('signature-motorista-placeholder');
+            const placeholder = document.getElementById('signature-motorista-display');
             placeholder.classList.add('is-invalid');
             if (!primeiroItemInvalido) primeiroItemInvalido = placeholder;
         }
