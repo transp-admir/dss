@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('checklist-form');
     if (!form) return;
 
-    // --- INICIALIZAÇÃO DO MODAL E ASSINATURAS ---
+    // --- INICIALIZAÇÃO DO MODAL E ASSINATURAS (sem alterações) ---
     const signatureModalEl = document.getElementById('signature-modal');
     const signatureModal = bootstrap.Modal.getOrCreateInstance(signatureModalEl);
     
@@ -12,9 +12,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const signaturePadMotorista = new SignaturePad(canvasMotorista);
     const signaturePadResponsavel = new SignaturePad(canvasResponsavel);
 
-    // --- FUNÇÕES E EVENTOS DO MODAL (VERSÃO FINAL E CORRIGIDA) ---
-
-    // Função para carregar assinaturas existentes nos pads quando o modal é aberto
     function loadSignatures() {
         signaturePadMotorista.clear();
         const motoristaData = document.getElementById('assinatura_motorista_input').value;
@@ -29,17 +26,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Aciona o carregamento das assinaturas quando o modal é aberto
     signatureModalEl.addEventListener('shown.bs.modal', loadSignatures);
 
-    // Botão de SALVAR do modal
     document.getElementById('signature-modal-save').addEventListener('click', function () {
         if (signaturePadMotorista.isEmpty()) {
             alert('A assinatura do motorista é obrigatória.');
             return;
         }
 
-        // Salva os dados da assinatura na página principal
         const motoristaDataURL = signaturePadMotorista.toDataURL('image/png');
         document.getElementById('assinatura_motorista_input').value = motoristaDataURL;
         document.getElementById('signature-motorista-img').src = motoristaDataURL;
@@ -60,18 +54,13 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('signature-responsavel-text').style.display = 'block';
         }
         
-        // Apenas esconde o modal. O evento 'hidden.bs.modal' cuidará do resto.
         signatureModal.hide();
     });
 
-    // Botões que apenas fecham o modal
     document.getElementById('modal-cancel-btn').addEventListener('click', () => signatureModal.hide());
     document.getElementById('modal-close-x').addEventListener('click', () => signatureModal.hide());
 
-    // ***** A SOLUÇÃO DEFINITIVA PARA A TELA TRAVADA *****
-    // Este evento é disparado pelo Bootstrap APÓS o modal ter sido completamente escondido
     signatureModalEl.addEventListener('hidden.bs.modal', function (event) {
-        // Este código de limpeza agora só roda no momento certo.
         const backdrop = document.querySelector('.modal-backdrop');
         if (backdrop) {
             backdrop.remove();
@@ -81,11 +70,10 @@ document.addEventListener('DOMContentLoaded', function () {
         document.body.style.paddingRight = '';
     });
 
-    // Botões de limpar assinaturas dentro do modal
     document.getElementById('clear-motorista').addEventListener('click', () => signaturePadMotorista.clear());
     document.getElementById('clear-responsavel').addEventListener('click', () => signaturePadResponsavel.clear());
 
-    // --- VALIDAÇÃO DO FORMULÁRIO E MÁSCARAS (Sem alterações) ---
+    // --- VALIDAÇÃO E ENVIO DO FORMULÁRIO (COM A NOVA LÓGICA) ---
 
     document.querySelectorAll('.date-mask').forEach(input => {
         input.addEventListener('input', e => {
@@ -99,11 +87,23 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     form.addEventListener('submit', function (event) {
+        // --- INÍCIO DA CORREÇÃO ---
+        const submitButton = form.querySelector('button[type="submit"]');
+
+        // Previne o envio padrão para fazermos a validação e desabilitar o botão
         event.preventDefault();
+
+        // Se o botão já estiver desabilitado, impede um novo envio
+        if (submitButton && submitButton.disabled) {
+            return;
+        }
+        // --- FIM DA CORREÇÃO ---
+
         document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
         let primeiroItemInvalido = null;
         let isValid = true;
 
+        // Validação dos itens do checklist
         document.querySelectorAll('.sub-item, .single-item').forEach(item => {
             const radios = item.querySelectorAll('input[type="radio"]');
             if (!Array.from(radios).some(radio => radio.checked)) {
@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
+        // Validação dos extintores
         document.querySelectorAll('.extintor-required').forEach(input => {
             if (!input.value.trim()) {
                 isValid = false;
@@ -121,6 +122,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
+        // Validação da assinatura do motorista
         if (!document.getElementById('assinatura_motorista_input').value) {
             isValid = false;
             const placeholder = document.getElementById('signature-motorista-display');
@@ -128,6 +130,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!primeiroItemInvalido) primeiroItemInvalido = placeholder;
         }
 
+        // Se a validação falhar, mostra alerta e para a execução
         if (!isValid) {
             alert('Por favor, preencha todos os campos obrigatórios em vermelho.');
             if (primeiroItemInvalido) {
@@ -136,6 +139,18 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        // --- INÍCIO DA CORREÇÃO ---
+        // Se a validação passou, desabilita o botão para evitar clique duplo
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.innerHTML = `
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                Enviando...
+            `;
+        }
+        // --- FIM DA CORREÇÃO ---
+
+        // Preenche a data e envia o formulário programaticamente
         document.getElementById('data_preenchimento_local_input').value = new Date().toISOString();
         form.submit();
     });

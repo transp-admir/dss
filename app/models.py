@@ -167,6 +167,8 @@ class ChecklistItem(db.Model):
 
 class ChecklistPreenchido(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    # Adicionando um campo de data para a restrição. Ele será preenchido automaticamente.
+    data_preenchimento_brt = db.Column(db.Date, nullable=False)
     data_preenchimento = db.Column(db.DateTime, default=datetime.utcnow)
     motorista_id = db.Column(db.Integer, db.ForeignKey('motorista.id'), nullable=False)
     veiculo_id = db.Column(db.Integer, db.ForeignKey('veiculo.id'), nullable=False)
@@ -182,6 +184,11 @@ class ChecklistPreenchido(db.Model):
     respostas = db.relationship('ChecklistResposta', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
     extintores_check = db.relationship('ExtintorCheck', backref='preenchimento', lazy='dynamic', cascade="all, delete-orphan")
 
+    # --- RESTRIÇÃO DE UNICIDADE (NOVA) ---
+    __table_args__ = (
+        db.UniqueConstraint('data_preenchimento_brt', 'veiculo_id', 'checklist_id', 'motorista_id', name='_dia_veiculo_check_motorista_uc'),
+    )
+    
 class ChecklistResposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     checklist_preenchido_id = db.Column(db.Integer, db.ForeignKey('checklist_preenchido.id'), nullable=False)

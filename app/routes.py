@@ -62,6 +62,9 @@ from sqlalchemy import func, desc, distinct
 import requests
 from datetime import timezone
 from flask import g
+from flask import current_app
+import pytz
+
 
 
 
@@ -691,7 +694,14 @@ def preencher_checklist(checklist_id):
         tempo_em_segundos = None
         
         data_preenchimento_str = request.form.get('data_preenchimento_local')
+        # Garante que a data de preenchimento está sempre em UTC
         data_preenchimento = datetime.fromisoformat(data_preenchimento_str.replace('Z', '+00:00')) if data_preenchimento_str else datetime.now(timezone.utc)
+
+        # --- INÍCIO DA CORREÇÃO ---
+        # Converte a data UTC para o fuso de Brasília (BRT) e extrai apenas a data.
+        brt_tz = timezone(timedelta(hours=-3))
+        data_brt_apenas_data = data_preenchimento.astimezone(brt_tz).date()
+        # --- FIM DA CORREÇÃO ---
 
         if start_time_str:
             try:
@@ -715,6 +725,10 @@ def preencher_checklist(checklist_id):
             veiculo_id=veiculo_do_motorista.id,
             checklist_id=checklist.id,
             data_preenchimento=data_preenchimento,
+            # --- CORREÇÃO APLICADA ---
+            # Adiciona o novo campo obrigatório ao criar o registro.
+            data_preenchimento_brt=data_brt_apenas_data,
+            # --- FIM DA CORREÇÃO ---
             assinatura_motorista=assinatura_motorista_data,
             assinatura_responsavel=request.form.get('assinatura_responsavel'),
             outros_problemas=request.form.get('outros_problemas'),
@@ -778,12 +792,11 @@ def preencher_checklist(checklist_id):
                     )
                     db.session.add(nova_pendencia)
                 
-                # --- INÍCIO DO BLOCO AJUSTADO ---
                 if resposta.item and resposta.item.setor_responsavel and \
                    'manutencao' in resposta.item.setor_responsavel.lower().strip():
                     
                     secret_key = os.environ.get('SECRET_API_KEY')
-                    webhook_url = g.webhook_nova # USA A URL DINÂMICA
+                    webhook_url = g.webhook_nova
                     headers = { 'X-API-KEY': secret_key, 'Content-Type': 'application/json' }
                     payload = {
                         "placa": veiculo_do_motorista.placa_cavalo.numero if veiculo_do_motorista.placa_cavalo else "N/A",
@@ -795,19 +808,15 @@ def preencher_checklist(checklist_id):
                     }
 
                     try:
-                        # 1. Valida a configuração antes de enviar
                         if not webhook_url or not secret_key:
                             flash(f"FALHA DE CONFIGURAÇÃO: URL ou Chave de API não definida no servidor. Pendência para '{resposta.item.texto}' não foi enviada.", 'warning')
                         else:
-                            # 2. Tenta enviar a notificação
                             response = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
-                            response.raise_for_status() # Lança um erro para status 4xx ou 5xx
+                            response.raise_for_status()
                             flash(f"SUCESSO: Pendência do item '{resposta.item.texto}' foi comunicada à Manutenção.", 'success')
 
                     except requests.exceptions.RequestException as e:
-                        # 3. Captura erros de comunicação (timeout, DNS, erro HTTP)
                         flash(f"FALHA DE API: Erro ao comunicar pendência '{resposta.item.texto}'. Detalhe: {str(e)}", 'danger')
-                # --- FIM DO BLOCO AJUSTADO ---
         
         db.session.commit()
 
@@ -1983,13 +1992,13 @@ def registrar_isencao_periodo():
 
 
 @admin_bp.route('/relatorios_consolidados', methods=['GET', 'POST'])
-@login_required() # Usando o decorador para segurança
+@login_required()
 def relatorios_consolidados():
     # --- DEFINIÇÃO DOS FUSOS HORÁRIOS ---
     brt_tz = timezone(timedelta(hours=-3))
     utc_tz = timezone.utc
 
-    # --- LÓGICA DE FILTRO CORRIGIDA ---
+    # --- LÓGICA DE FILTRO (sem alterações) ---
     user_role = session.get('role')
     user_unidade = session.get('unidade')
 
@@ -1998,7 +2007,6 @@ def relatorios_consolidados():
         veiculos_query = veiculos_query.filter(Veiculo.unidade == user_unidade)
     
     veiculos = veiculos_query.order_by(Veiculo.nome_conjunto).all()
-    # --- FIM DA CORREÇÃO ---
     
     resultados_agrupados = None
     filtros = request.form if request.method == 'POST' else {}
@@ -2011,7 +2019,6 @@ def relatorios_consolidados():
         
         query = ChecklistPreenchido.query.join(Checklist).join(Veiculo)
 
-        # Filtra pela unidade do usuário se não for admin (camada extra de segurança)
         if user_role != 'admin':
             query = query.filter(Veiculo.unidade == user_unidade)
 
@@ -2031,14 +2038,19 @@ def relatorios_consolidados():
 
         preenchimentos = query.order_by(Veiculo.nome_conjunto, ChecklistPreenchido.data_preenchimento.desc()).all()
 
+        # --- INÍCIO DA CORREÇÃO ---
+        # 1. Converte o horário UTC do banco para BRT antes de agrupar.
+        #    Isso garante que a data e a hora usadas no relatório estejam corretas.
         for p in preenchimentos:
             p.data_preenchimento_local = p.data_preenchimento.replace(tzinfo=utc_tz).astimezone(brt_tz)
         
+        # 2. Agrupa os resultados usando a data convertida para BRT.
         resultados_agrupados = defaultdict(lambda: defaultdict(list))
         for p in preenchimentos:
             if p.veiculo:
-                data_local = p.data_preenchimento_local.date()
-                resultados_agrupados[p.veiculo.nome_conjunto][data_local].append(p)
+                data_local_brt = p.data_preenchimento_local.date()
+                resultados_agrupados[p.veiculo.nome_conjunto][data_local_brt].append(p)
+        # --- FIM DA CORREÇÃO ---
             
     return render_template('admin_relatorios_consolidados.html', 
                            veiculos=veiculos,
@@ -2431,7 +2443,11 @@ def lista_checklists_motorista():
     ).order_by(Checklist.tipo, Checklist.codigo).all()
     
     checklists_com_status = []
-    hoje = date.today()
+    
+    # --- LÓGICA DE FUSO HORÁRIO CORRIGIDA ---
+    brt_tz = current_app.config.get('TIMEZONE', pytz.timezone('America/Sao_Paulo'))
+    utc_tz = pytz.utc
+    agora_brt = datetime.now(brt_tz)
 
     for checklist in checklists:
         preenchido_no_periodo = False
@@ -2447,18 +2463,26 @@ def lista_checklists_motorista():
             )
             
             if checklist.tipo == 'DIÁRIO':
-                preenchimento = q.filter(db.func.date(ChecklistPreenchido.data_preenchimento) == hoje).first()
-                # --- CORREÇÃO DO ERRO DE DIGITAÇÃO APLICADA AQUI ---
+                # Define o início e o fim do dia de hoje no fuso horário do Brasil, e converte para UTC
+                inicio_dia_brt = agora_brt.replace(hour=0, minute=0, second=0, microsecond=0)
+                fim_dia_brt = agora_brt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                inicio_dia_utc = inicio_dia_brt.astimezone(utc_tz)
+                fim_dia_utc = fim_dia_brt.astimezone(utc_tz)
+
+                preenchimento = q.filter(ChecklistPreenchido.data_preenchimento.between(inicio_dia_utc, fim_dia_utc)).first()
                 if preenchimento:
                     preenchido_no_periodo = True
                     status_texto = "Preenchido Hoje"
             
             elif checklist.tipo == 'MENSAL':
-                preenchimento = q.filter(
-                    db.func.extract('year', ChecklistPreenchido.data_preenchimento) == hoje.year,
-                    db.func.extract('month', ChecklistPreenchido.data_preenchimento) == hoje.month
-                ).first()
-                # --- CORREÇÃO DO ERRO DE DIGITAÇÃO APLICADA AQUI ---
+                # Define o início e o fim do mês corrente no fuso horário do Brasil, e converte para UTC
+                inicio_mes_brt = agora_brt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                proximo_mes_brt = (inicio_mes_brt + timedelta(days=32)).replace(day=1)
+                fim_mes_brt = proximo_mes_brt - timedelta(microseconds=1)
+                inicio_mes_utc = inicio_mes_brt.astimezone(utc_tz)
+                fim_mes_utc = fim_mes_brt.astimezone(utc_tz)
+                
+                preenchimento = q.filter(ChecklistPreenchido.data_preenchimento.between(inicio_mes_utc, fim_mes_utc)).first()
                 if preenchimento:
                     preenchido_no_periodo = True
                     status_texto = "Preenchido este Mês"

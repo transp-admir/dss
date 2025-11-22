@@ -72,7 +72,7 @@
                                 <li class="list-group-item">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span>
-                                            <strong>{{ p.checklist.codigo }}</strong> ({{ p.checklist.tipo }}) - Preenchido por <strong>{{ p.motorista.nome }}</strong> às {{ p.data_preenchimento.strftime('%H:%M') }}
+                                            <strong>{{ p.checklist.codigo }}</strong> ({{ p.checklist.tipo }}) - Preenchido por <strong>{{ p.motorista.nome }}</strong> às {{ p.data_preenchimento_local.strftime('%H:%M') }}
                                         </span>
                                         <div class="btn-group">
                                             <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ p.id }}">
