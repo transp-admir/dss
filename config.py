@@ -6,6 +6,7 @@ class Config:
     """Configuração base da qual as outras herdam."""
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-dificil-de-adivinhar'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    TIMEZONE = 'America/Sao_Paulo'
 
     # Garante que o caminho para o banco de dados seja absoluto
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \

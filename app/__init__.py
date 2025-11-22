@@ -4,6 +4,8 @@ from flask_cors import CORS
 from markupsafe import Markup
 import os
 import re
+import pytz
+from datetime import datetime
 from .extensions import db
 from config import config
 
@@ -24,6 +26,12 @@ def create_app(config_name=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config[config_name])
     
+    # Configuração de fuso horário
+    if 'TIMEZONE' in app.config:
+        app.config['TIMEZONE'] = pytz.timezone(app.config['TIMEZONE'])
+    else:
+        app.config['TIMEZONE'] = pytz.timezone('America/Sao_Paulo')
+
     # Inicializa as configurações específicas do app (como a criação da pasta instance)
     config[config_name].init_app(app)
 
