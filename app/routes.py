@@ -725,8 +725,6 @@ def preencher_checklist(checklist_id):
 
         # Se encontrou um preenchimento, carrega os dados para visualização
         if preenchimento_existente:
-            # --- CORREÇÃO APLICADA AQUI ---
-            # Filtra usando o objeto do relacionamento, e não um _id inexistente.
             respostas = ChecklistResposta.query.filter_by(preenchimento=preenchimento_existente).all()
             respostas_dict = {resposta.item_id: resposta for resposta in respostas}
             extintores_list = ExtintorCheck.query.filter_by(preenchimento_id=preenchimento_existente.id).order_by(ExtintorCheck.id).all()
@@ -782,18 +780,42 @@ def preencher_checklist(checklist_id):
         )
         db.session.add(novo_preenchimento)
 
+        # --- LÓGICA DE PROCESSAMENTO DE RESPOSTAS E PENDÊNCIAS ---
         respostas_adicionadas = []
         for key in request.form:
             if key.startswith('resposta-'):
                 item_id = int(key.split('-')[-1])
+                resposta_valor = request.form.get(key)
+                observacao_valor = request.form.get(f'obs-{item_id}', '')
+
+                # 1. Garante que a observação seja salva apenas para "NAO CONFORME"
+                if resposta_valor != 'NAO CONFORME':
+                    observacao_valor = ''
+                
                 nova_resposta = ChecklistResposta(
                     preenchimento=novo_preenchimento,
                     item_id=item_id,
-                    resposta=request.form.get(key),
-                    observacao=request.form.get(f'obs-{item_id}', '')
+                    resposta=resposta_valor,
+                    observacao=observacao_valor
                 )
                 db.session.add(nova_resposta)
                 respostas_adicionadas.append(nova_resposta)
+
+                # 2. Lógica para fechar pendência existente se o item estiver 'CONFORME'
+                if resposta_valor == 'CONFORME':
+                    pendencia_a_fechar = Pendencia.query.filter_by(
+                        item_id=item_id,
+                        veiculo_id=veiculo_do_motorista.id,
+                        status='PENDENTE'
+                    ).first()
+                    
+                    if pendencia_a_fechar:
+                        pendencia_a_fechar.status = 'RESOLVIDO'
+                        pendencia_a_fechar.data_resolucao = datetime.utcnow()
+                        pendencia_a_fechar.observacao_admin = f"Fechado automaticamente pelo motorista {motorista.nome} ao marcar o item como 'Conforme'."
+                        db.session.add(pendencia_a_fechar)
+        
+        # --- FIM DA LÓGICA ---
 
         for i in range(5):
             local = request.form.get(f'extintor-{i}-local')
