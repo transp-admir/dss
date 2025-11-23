@@ -689,19 +689,66 @@ def preencher_checklist(checklist_id):
     motorista = Motorista.query.get(session['motorista_id'])
     veiculo_do_motorista = motorista.veiculo
 
+    # --- LÓGICA DE VISUALIZAÇÃO E PREPARAÇÃO DE DADOS ---
+    preenchimento_existente = None
+    respostas_dict = {}
+    extintores_list = []
+    pendencias_abertas = set()
+
+    if veiculo_do_motorista:
+        brt_tz = current_app.config.get('TIMEZONE', pytz.timezone('America/Sao_Paulo'))
+        utc_tz = pytz.utc
+        agora_brt = datetime.now(brt_tz)
+
+        q = ChecklistPreenchido.query.filter(
+            and_(
+                ChecklistPreenchido.motorista_id == motorista.id,
+                ChecklistPreenchido.checklist_id == checklist.id,
+                ChecklistPreenchido.veiculo_id == veiculo_do_motorista.id
+            )
+        )
+
+        if checklist.tipo == 'DIÁRIO':
+            inicio_dia_brt = agora_brt.replace(hour=0, minute=0, second=0, microsecond=0)
+            fim_dia_brt = agora_brt.replace(hour=23, minute=59, second=59, microsecond=999999)
+            inicio_dia_utc = inicio_dia_brt.astimezone(utc_tz)
+            fim_dia_utc = fim_dia_brt.astimezone(utc_tz)
+            preenchimento_existente = q.filter(ChecklistPreenchido.data_preenchimento.between(inicio_dia_utc, fim_dia_utc)).order_by(ChecklistPreenchido.id.desc()).first()
+        
+        elif checklist.tipo == 'MENSAL':
+            inicio_mes_brt = agora_brt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            proximo_mes_brt = (inicio_mes_brt + timedelta(days=32)).replace(day=1)
+            fim_mes_brt = proximo_mes_brt - timedelta(microseconds=1)
+            inicio_mes_utc = inicio_mes_brt.astimezone(utc_tz)
+            fim_mes_utc = fim_mes_brt.astimezone(utc_tz)
+            preenchimento_existente = q.filter(ChecklistPreenchido.data_preenchimento.between(inicio_mes_utc, fim_mes_utc)).order_by(ChecklistPreenchido.id.desc()).first()
+
+        # Se encontrou um preenchimento, carrega os dados para visualização
+        if preenchimento_existente:
+            # --- CORREÇÃO APLICADA AQUI ---
+            # Filtra usando o objeto do relacionamento, e não um _id inexistente.
+            respostas = ChecklistResposta.query.filter_by(preenchimento=preenchimento_existente).all()
+            respostas_dict = {resposta.item_id: resposta for resposta in respostas}
+            extintores_list = ExtintorCheck.query.filter_by(preenchimento_id=preenchimento_existente.id).order_by(ExtintorCheck.id).all()
+        
+        # Busca pendências abertas para o veículo para destacar na tela
+        pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
+        pendencias_abertas = {p.item_id for p in pendencias}
+
+    # --- LÓGICA PARA SALVAR (POST) ---
     if request.method == 'POST':
+        if preenchimento_existente:
+             flash('Este checklist já foi preenchido para o período atual.', 'warning')
+             return redirect(url_for('main.lista_checklists_motorista'))
+
         start_time_str = session.pop('checklist_start_time', None)
         tempo_em_segundos = None
         
         data_preenchimento_str = request.form.get('data_preenchimento_local')
-        # Garante que a data de preenchimento está sempre em UTC
         data_preenchimento = datetime.fromisoformat(data_preenchimento_str.replace('Z', '+00:00')) if data_preenchimento_str else datetime.now(timezone.utc)
 
-        # --- INÍCIO DA CORREÇÃO ---
-        # Converte a data UTC para o fuso de Brasília (BRT) e extrai apenas a data.
         brt_tz = timezone(timedelta(hours=-3))
         data_brt_apenas_data = data_preenchimento.astimezone(brt_tz).date()
-        # --- FIM DA CORREÇÃO ---
 
         if start_time_str:
             try:
@@ -725,10 +772,7 @@ def preencher_checklist(checklist_id):
             veiculo_id=veiculo_do_motorista.id,
             checklist_id=checklist.id,
             data_preenchimento=data_preenchimento,
-            # --- CORREÇÃO APLICADA ---
-            # Adiciona o novo campo obrigatório ao criar o registro.
             data_preenchimento_brt=data_brt_apenas_data,
-            # --- FIM DA CORREÇÃO ---
             assinatura_motorista=assinatura_motorista_data,
             assinatura_responsavel=request.form.get('assinatura_responsavel'),
             outros_problemas=request.form.get('outros_problemas'),
@@ -776,14 +820,10 @@ def preencher_checklist(checklist_id):
         db.session.flush()
 
         alguma_pendencia_registrada = False
-
         for resposta in respostas_adicionadas:
             if resposta.resposta == 'NAO CONFORME':
                 alguma_pendencia_registrada = True
-
-                pendencia_existente = Pendencia.query.filter_by(
-                    item_id=resposta.item_id, veiculo_id=veiculo_do_motorista.id, status='PENDENTE'
-                ).first()
+                pendencia_existente = Pendencia.query.filter_by(item_id=resposta.item_id, veiculo_id=veiculo_do_motorista.id, status='PENDENTE').first()
                 if not pendencia_existente:
                     nova_pendencia = Pendencia(
                         item_id=resposta.item_id,
@@ -792,9 +832,7 @@ def preencher_checklist(checklist_id):
                     )
                     db.session.add(nova_pendencia)
                 
-                if resposta.item and resposta.item.setor_responsavel and \
-                   'manutencao' in resposta.item.setor_responsavel.lower().strip():
-                    
+                if resposta.item and resposta.item.setor_responsavel and 'manutencao' in resposta.item.setor_responsavel.lower().strip():
                     secret_key = os.environ.get('SECRET_API_KEY')
                     webhook_url = g.webhook_nova
                     headers = { 'X-API-KEY': secret_key, 'Content-Type': 'application/json' }
@@ -806,43 +844,44 @@ def preencher_checklist(checklist_id):
                         "operacao_solicitante": motorista.operacao or '',
                         "id_origem_checklist": resposta.id
                     }
-
                     try:
                         if not webhook_url or not secret_key:
-                            flash(f"FALHA DE CONFIGURAÇÃO: URL ou Chave de API não definida no servidor. Pendência para '{resposta.item.texto}' não foi enviada.", 'warning')
+                            flash(f"FALHA DE CONFIGURAÇÃO: URL ou Chave de API não definida. Pendência para '{resposta.item.texto}' não enviada.", 'warning')
                         else:
                             response = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
                             response.raise_for_status()
                             flash(f"SUCESSO: Pendência do item '{resposta.item.texto}' foi comunicada à Manutenção.", 'success')
-
                     except requests.exceptions.RequestException as e:
                         flash(f"FALHA DE API: Erro ao comunicar pendência '{resposta.item.texto}'. Detalhe: {str(e)}", 'danger')
         
         db.session.commit()
-
         flash('Checklist finalizado e salvo!', 'info')
-        if alguma_pendencia_registrada and not any('manutencao' in (r.item.setor_responsavel.lower().strip() if r.item and r.item.setor_responsavel else "") for r in respostas_adicionadas if r.resposta == 'NAO CONFORME'):
+        if alguma_pendencia_registrada:
             flash('Pendências registradas para análise da equipe responsável.', 'info')
 
         return redirect(url_for('main.lista_checklists_motorista'))
 
-    # --- LÓGICA GET (inalterada) ---
+    # --- LÓGICA PARA RENDERIZAR (GET) ---
     session['checklist_start_time'] = datetime.now(timezone.utc).isoformat()
     def natural_sort_key(text): return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', str(text or '0'))]
+    
     itens_principais_query = checklist.itens.filter_by(parent_id=None).all()
     itens_principais_sorted = sorted(itens_principais_query, key=lambda i: natural_sort_key(i.ordem))
+    
     itens_com_subitens = []
     for item in itens_principais_sorted:
         sub_itens_query = item.sub_itens.all()
         sub_itens_sorted = sorted(sub_itens_query, key=lambda si: natural_sort_key(si.ordem))
         itens_com_subitens.append((item, sub_itens_sorted))
-    pendencias_abertas = set()
-    if veiculo_do_motorista:
-        lista_pendencias = Pendencia.query.filter_by(veiculo_id=veiculo_do_motorista.id, status='PENDENTE').all()
-        pendencias_abertas = {p.item_id for p in lista_pendencias}
-    return render_template('motorista_preencher_checklist.html', checklist=checklist, veiculo=veiculo_do_motorista, itens_com_subitens=itens_com_subitens, pendencias_abertas=pendencias_abertas)
 
-
+    return render_template('motorista_preencher_checklist.html', 
+                           checklist=checklist, 
+                           veiculo=veiculo_do_motorista,
+                           itens_com_subitens=itens_com_subitens,
+                           preenchimento=preenchimento_existente, 
+                           respostas_dict=respostas_dict,
+                           extintores_list=extintores_list,
+                           pendencias_abertas=pendencias_abertas)
 
 
 

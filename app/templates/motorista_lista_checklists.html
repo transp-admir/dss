@@ -113,10 +113,9 @@
                             <small>Revisão: {{ checklist.revisao }} | Data do Modelo: {{ checklist.data.strftime('%d/%m/%Y') }}</small>
                         </div>
                         
-                        <a href="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) if not preenchido else '#' }}" 
-                           class="btn {{ 'btn-secondary disabled' if preenchido else 'btn-primary' }}" 
-                           aria-disabled="{{ 'true' if preenchido else 'false' }}">
-                            {% if preenchido %}Concluído{% else %}Preencher{% endif %}
+                        <a href="{{ url_for('main.preencher_checklist', checklist_id=checklist.id) }}" 
+                           class="btn {{ 'btn-info' if preenchido else 'btn-primary' }}">
+                            {% if preenchido %}Visualizar{% else %}Preencher{% endif %}
                         </a>
                     </div>
                 {% endfor %}
